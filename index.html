@@ -4,7 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coach G">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.json">
 <title>Griette's Coach</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -140,6 +143,26 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
 .mopt.red{color:var(--red)}
 #flash{position:fixed;top:0;left:0;right:0;max-width:430px;margin:0 auto;z-index:999;background:var(--dark);padding:14px 16px;text-align:center;display:none;align-items:center;justify-content:center;gap:10px}
 #flash.show{display:flex}
+.daynav{display:flex;align-items:center;justify-content:space-between;margin-top:10px;position:relative;z-index:1}
+.daynav button{background:rgba(255,255,255,.1);border:none;border-radius:8px;color:white;font-size:18px;width:34px;height:34px;cursor:pointer;font-family:inherit}
+.daynav-lbl{font-size:12px;font-weight:700;color:white}
+.daynav button:disabled{opacity:.3;cursor:default}
+.glass-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px}
+.glass{width:34px;height:40px;border-radius:8px;border:2px solid #bfdbfe;background:#eff6ff;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.glass.full{background:#3b82f6;border-color:#1d4ed8}
+.it-box{background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:13px;padding:14px;color:white;text-align:center;margin-bottom:10px}
+.it-phase{font-size:10px;letter-spacing:2px;font-weight:700;margin-bottom:4px}
+.it-action{font-size:22px;font-weight:900;margin-bottom:4px}
+.it-count{font-size:52px;font-weight:900;line-height:1;letter-spacing:-2px}
+.it-unit{font-size:10px;color:#94a3b8;margin-top:2px}
+.it-prog{display:flex;gap:4px;justify-content:center;margin-top:8px;flex-wrap:wrap}
+.it-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.2)}
+.it-dot.done{background:var(--teal)}
+.it-dot.cur{background:var(--acc);transform:scale(1.3)}
+.garmin-box{background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:11px;padding:12px;margin-bottom:8px}
+.notearea{width:100%;border:1.5px solid var(--bdr);border-radius:9px;padding:10px;font-size:13px;font-family:inherit;background:var(--bg);resize:none;min-height:70px;color:var(--dark)}
+.notearea:focus{outline:none;border-color:var(--teal)}
+.wsumm-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--bdr);font-size:12px}
 </style>
 </head>
 <body>
@@ -162,6 +185,11 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
     <div class="qb"><div class="ql">Checks</div><div class="qv" id="qchk">0/9</div><div class="qs2" id="qchkp"></div></div>
   </div>
   <div class="hdr-q" id="hq"></div>
+  <div class="daynav">
+    <button onclick="shiftDay(-1)" id="dayPrev">‹</button>
+    <span class="daynav-lbl" id="dayNavLbl">Vandaag</span>
+    <button onclick="shiftDay(1)" id="dayNext" disabled>›</button>
+  </div>
 </div>
 
 <div class="tabs">
@@ -190,6 +218,11 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
     <div id="sladder"></div>
   </div></div>
 
+  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--blu)"></div><div class="cttl">💧 Water — 2 liter</div></div><div class="cbdy">
+    <div class="glass-row" id="glassrow"></div>
+    <div style="font-size:10px;color:var(--mut)" id="glasslbl">0 / 8 glazen · 0 ml</div>
+  </div></div>
+
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--teal)"></div><div class="cttl" id="tttl">Training vandaag</div></div><div class="cbdy" id="tbody"></div></div>
 
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--grn)"></div><div class="cttl" id="chtl">✅ Dagchecklist — 0/9</div></div><div class="cbdy" id="chwrap"></div></div>
@@ -203,6 +236,11 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
   </div></div>
 
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--acc)"></div><div class="cttl" id="httl">Gewoontes — 0/8</div></div><div class="cbdy"><div class="hgrid" id="hgrid"></div></div></div>
+
+  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--mut)"></div><div class="cttl">📝 Notitie vandaag</div></div><div class="cbdy">
+    <textarea class="notearea" id="notearea" placeholder="Hoe was je dag? Bijzonderheden, hoe je je voelt…" rows="3"></textarea>
+    <div style="font-size:10px;color:var(--teal);margin-top:4px;display:none" id="notesaved">✓ Opgeslagen</div>
+  </div></div>
 
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--pur)"></div><div class="cttl">💉 Mounjaro injectiedag?</div></div><div class="cbdy">
     <button class="mjbtn" id="mjbtn">Tik als je vandaag hebt gespoten</button>
@@ -237,6 +275,40 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
     </div>
     <div style="background:#f0fdf4;border-radius:9px;padding:9px;font-size:11px;color:#166534;margin-bottom:10px">💡 Praat-test: niet kunnen praten = te hard.</div>
     <div id="rbtn"></div>
+  </div></div>
+
+  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--acc)"></div><div class="cttl">⏱️ Interval-timer</div></div><div class="cbdy" id="itbdy">
+    <div id="it-intro">
+      <div style="font-size:11px;color:#334155;line-height:1.7;margin-bottom:10px" id="it-schema-txt">Laadt schema…</div>
+      <button class="btn full acc" id="it-start">▶ Start interval-timer</button>
+    </div>
+    <div id="it-running" style="display:none">
+      <div class="it-box">
+        <div class="it-phase" id="it-phase-lbl">VOORBEREIDING</div>
+        <div class="it-action" id="it-action-lbl">Klaar?</div>
+        <div class="it-count" id="it-count">0</div>
+        <div class="it-unit">sec</div>
+        <div class="it-prog" id="it-prog"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="btn sml" style="background:var(--bg);color:var(--mut)" id="it-stop">✕ Stop</button>
+        <button class="btn acc sml" id="it-pause">⏸ Pause</button>
+      </div>
+    </div>
+    <div id="it-done" style="display:none"><div class="done-box">🏃‍♀️ Run klaar! Goed gedaan!</div><button class="btn full acc" id="it-reset" style="margin-top:8px">↩ Opnieuw</button></div>
+  </div></div>
+
+  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--teal)"></div><div class="cttl">⌚ Garmin Connect</div></div><div class="cbdy">
+    <div class="garmin-box">
+      <div style="font-size:11px;color:#0369a1;font-weight:700;margin-bottom:4px">Stappen automatisch overnemen</div>
+      <div style="font-size:10px;color:#0c4a6e;line-height:1.6;margin-bottom:8px">Kopieer je dagelijkse stappen en activiteiten uit de Garmin Connect-app en plak ze hieronder — of typ ze handmatig in.</div>
+      <div style="display:flex;gap:7px;margin-bottom:7px">
+        <input type="number" id="garmin-steps" placeholder="bijv. 8420" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid #bae6fd;font-size:14px;font-weight:700;font-family:inherit">
+        <button class="btn blu sml" id="garmin-steps-btn">Stappen</button>
+      </div>
+      <div style="font-size:10px;color:#64748b">Hardlooptrainingen markeer je als klaar via de ✓-knop hierboven.</div>
+    </div>
+    <div style="font-size:10px;color:var(--mut);line-height:1.6">💡 <strong>Volledige Garmin-sync</strong> vereist een server-backend voor OAuth. Dit is een statische app — sync is handmatig.</div>
   </div></div>
 
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--dark)"></div><div class="cttl">📋 Schema 35 trainingen</div></div><div class="cbdy" style="max-height:240px;overflow-y:auto" id="slist"></div></div>
@@ -297,6 +369,15 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
   </div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--acc)"></div><div class="cttl">✅ Gewoontes — 7 dagen</div></div><div class="cbdy" id="hbars"></div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--blu)"></div><div class="cttl">💡 Inzichten</div></div><div class="cbdy" id="insights"></div></div>
+  <div class="card" id="wsumm-card" style="display:none"><div class="card-hdr"><div class="cbar" style="background:var(--grn)"></div><div class="cttl">📅 Weekoverzicht</div></div><div class="cbdy" id="wsummbdy"></div></div>
+  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--mut)"></div><div class="cttl">💾 Data backup</div></div><div class="cbdy">
+    <div style="font-size:11px;color:#334155;line-height:1.6;margin-bottom:10px">Download al je data als JSON-bestand. Bewaar het op een veilige plek — browser-cache kan worden gewist.</div>
+    <button class="btn full" id="exportbtn" style="background:var(--dark)">⬇ Download mijn data (JSON)</button>
+    <div style="margin-top:8px">
+      <div style="font-size:10px;color:var(--mut);margin-bottom:5px">Of importeer eerder opgeslagen backup:</div>
+      <input type="file" id="importfile" accept=".json" style="font-size:11px;width:100%">
+    </div>
+  </div></div>
 </div>
 
 <!-- 6 BADGES -->
@@ -341,19 +422,40 @@ var krachtCycle=ld("gcf_kc","A");
 var calOff=0;
 var selDay=null;
 var apIdx=0,apLeft=0,apTotal=0,apPaused=false,apTick=null;
+var itPhases=[],itPIdx=0,itLeft=0,itTotal=0,itPaused=false,itTick=null;
 var dk=today();
 function getLog(){return logs[dk]||{};}
 function setLog(p){var l=getLog();Object.assign(l,p);logs[dk]=l;sv("gcf_logs",logs);render();}
 var ftTimer=null;
 function flash(e,t){var el=document.getElementById("flash");document.getElementById("fe").textContent=e;document.getElementById("ft").textContent=t;el.classList.add("show");clearTimeout(ftTimer);ftTimer=setTimeout(function(){el.classList.remove("show");},2500);}
 
+function shiftDay(delta){
+  var d=new Date(dk);d.setDate(d.getDate()+delta);
+  var nd=td(d);if(nd>today())return;
+  dk=nd;
+  document.getElementById("dayNext").disabled=(dk===today());
+  render();
+}
+
+function parseIntervals(schemaStr){
+  var phases=[];
+  var m=schemaStr.match(/(\d+)\s*min\s*(jog|lopen|sneller)\s*[–-]\s*(\d+)\s*min\s*(wandel)\s*[×x]\s*(\d+)/i);
+  if(m){var jog=parseInt(m[1]),walk=parseInt(m[3]),reps=parseInt(m[5]);for(var i=0;i<reps;i++){phases.push({label:"🏃 JOG",dur:jog*60,type:"jog"});phases.push({label:"🚶 WANDEL",dur:walk*60,type:"walk"});}}
+  else{var m2=schemaStr.match(/(\d+)\s*min/i);if(m2){phases.push({label:"🏃 JOG",dur:parseInt(m2[1])*60,type:"jog"});}}
+  if(phases.length===0)phases.push({label:"🏃 LOPEN",dur:30*60,type:"jog"});
+  return phases;
+}
+
 window.addEventListener("load",function(){
-  initHabits();initChecklist();initSchema();initKracht();initAP();initButtons();render();
+  initHabits();initChecklist();initSchema();initKracht();initAP();initIT();initButtons();initExport();render();
+  checkWeekSummary();
 });
 
 function render(){
   try{rHeader();}catch(e){console.log(e);}
   try{rVandaag();}catch(e){console.log(e);}
+  try{rWater();}catch(e){console.log(e);}
+  try{rNote();}catch(e){console.log(e);}
   try{rKal();}catch(e){console.log(e);}
   try{rTraining();}catch(e){console.log(e);}
   try{rEten();}catch(e){console.log(e);}
@@ -394,6 +496,22 @@ function initButtons(){
   document.getElementById("mjbtn").onclick=function(){var l=getLog();setLog({mounjaro_injected:!l.mounjaro_injected});if(!l.mounjaro_injected)flash("💉","Mounjaro gelogd!");};
   document.getElementById("cprev").onclick=function(){calOff--;rKal();};
   document.getElementById("cnext").onclick=function(){calOff++;rKal();};
+  document.getElementById("garmin-steps-btn").onclick=function(){
+    var v=parseInt(document.getElementById("garmin-steps").value);
+    if(isNaN(v)||v<0)return;
+    stepsLog[dk]=v;sv("gcf_steps",stepsLog);document.getElementById("garmin-steps").value="";
+    flash("⌚","Garmin stappen: "+v.toLocaleString("nl"));render();
+  };
+  var na=document.getElementById("notearea");
+  var nst=null;
+  na.addEventListener("input",function(){
+    clearTimeout(nst);
+    nst=setTimeout(function(){
+      setLog({note:na.value});
+      var saved=document.getElementById("notesaved");saved.style.display="block";
+      setTimeout(function(){saved.style.display="none";},1500);
+    },600);
+  });
 }
 
 function initHabits(){
@@ -470,12 +588,119 @@ function upAP(){document.getElementById("apnum").textContent=apLeft;document.get
 function stopAP(){clearInterval(apTick);document.getElementById("apintro").style.display="block";document.getElementById("aptimer").style.display="none";}
 function finishAP(){clearInterval(apTick);document.getElementById("aptimer").style.display="none";document.getElementById("apdone").style.display="block";setLog({done_ap:true,trained:true});flash("🧘","Asian Pilates klaar!");}
 
+// ── INTERVAL TIMER ──────────────────────────────────────────────
+function initIT(){
+  document.getElementById("it-start").onclick=startIT;
+  document.getElementById("it-stop").onclick=stopIT;
+  document.getElementById("it-reset").onclick=function(){document.getElementById("it-done").style.display="none";document.getElementById("it-intro").style.display="block";};
+  document.getElementById("it-pause").onclick=function(){itPaused=!itPaused;document.getElementById("it-pause").textContent=itPaused?"▶ Doorgaan":"⏸ Pause";};
+  var cur=SCHEMA.find(function(s){return s.t===nextRun;})||SCHEMA[34];
+  document.getElementById("it-schema-txt").textContent="Training "+nextRun+": "+cur.s;
+}
+function startIT(){
+  var cur=SCHEMA.find(function(s){return s.t===nextRun;})||SCHEMA[34];
+  itPhases=parseIntervals(cur.s);itPIdx=0;itPaused=false;
+  document.getElementById("it-intro").style.display="none";
+  document.getElementById("it-running").style.display="block";
+  document.getElementById("it-done").style.display="none";
+  loadITPhase();clearInterval(itTick);
+  itTick=setInterval(function(){if(itPaused)return;if(itLeft<=0){itPIdx++;if(itPIdx>=itPhases.length){finishIT();}else{loadITPhase();}}else{itLeft--;upIT();}},1000);
+}
+function loadITPhase(){
+  var ph=itPhases[itPIdx];itLeft=ph.dur;itTotal=ph.dur;
+  document.getElementById("it-phase-lbl").textContent="FASE "+(itPIdx+1)+" VAN "+itPhases.length;
+  document.getElementById("it-action-lbl").textContent=ph.label;
+  document.getElementById("it-action-lbl").style.color=ph.type==="jog"?"#f97316":"#14b8a6";
+  var itbox=document.querySelector("#it-running .it-box");if(itbox)itbox.style.background=ph.type==="jog"?"linear-gradient(135deg,#7c2d12,#1e293b)":"linear-gradient(135deg,#0f766e,#1e293b)";
+  document.getElementById("it-prog").innerHTML=itPhases.map(function(_,i){return '<div class="it-dot'+(i<itPIdx?" done":i===itPIdx?" cur":"")+'"></div>';}).join("");
+  upIT();
+}
+function upIT(){document.getElementById("it-count").textContent=itLeft;}
+function stopIT(){clearInterval(itTick);document.getElementById("it-running").style.display="none";document.getElementById("it-intro").style.display="block";}
+function finishIT(){clearInterval(itTick);document.getElementById("it-running").style.display="none";document.getElementById("it-done").style.display="block";flash("🏃‍♀️","Interval klaar!");}
+
+// ── WATER ────────────────────────────────────────────────────────
+function initGlasses(){
+  var row=document.getElementById("glassrow");row.innerHTML="";
+  for(var i=0;i<8;i++){
+    var g=document.createElement("button");g.className="glass";g.id="g"+i;g.textContent="💧";
+    (function(idx){g.onclick=function(){var l=getLog();var w=l.water_glasses||0;setLog({water_glasses:w===idx+1?idx:idx+1});};
+    })(i);
+    row.appendChild(g);
+  }
+}
+function rWater(){
+  if(!document.getElementById("g0"))initGlasses();
+  var l=getLog();var w=l.water_glasses||0;
+  for(var i=0;i<8;i++){var el=document.getElementById("g"+i);if(el)el.className="glass"+(i<w?" full":"");}
+  document.getElementById("glasslbl").textContent=w+" / 8 glazen · "+(w*250)+" ml";
+  if(w>=8)document.getElementById("glasslbl").style.color="var(--teal)";
+  else document.getElementById("glasslbl").style.color="var(--mut)";
+}
+
+// ── NOTE ─────────────────────────────────────────────────────────
+function rNote(){
+  var ta=document.getElementById("notearea");
+  var l=getLog();
+  if(document.activeElement!==ta)ta.value=l.note||"";
+}
+
+// ── EXPORT / IMPORT ──────────────────────────────────────────────
+function initExport(){
+  document.getElementById("exportbtn").onclick=function(){
+    var data={gcf_logs:logs,gcf_w:weights,gcf_bp:bps,gcf_steps:stepsLog,gcf_b:badges,gcf_nr:nextRun,gcf_kc:krachtCycle,exported:new Date().toISOString()};
+    var blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="griette-coach-backup-"+today()+".json";a.click();
+    flash("💾","Data gedownload!");
+  };
+  document.getElementById("importfile").onchange=function(e){
+    var f=e.target.files[0];if(!f)return;
+    var r=new FileReader();r.onload=function(ev){
+      try{
+        var d=JSON.parse(ev.target.result);
+        if(d.gcf_logs){logs=d.gcf_logs;sv("gcf_logs",logs);}
+        if(d.gcf_w){weights=d.gcf_w;sv("gcf_w",weights);}
+        if(d.gcf_bp){bps=d.gcf_bp;sv("gcf_bp",bps);}
+        if(d.gcf_steps){stepsLog=d.gcf_steps;sv("gcf_steps",stepsLog);}
+        if(d.gcf_b){badges=d.gcf_b;sv("gcf_b",badges);}
+        if(d.gcf_nr){nextRun=d.gcf_nr;sv("gcf_nr",nextRun);}
+        if(d.gcf_kc){krachtCycle=d.gcf_kc;sv("gcf_kc",krachtCycle);}
+        flash("✅","Backup hersteld!");render();
+      }catch(err){flash("⚠️","Ongeldig bestand");}
+    };r.readAsText(f);
+  };
+}
+
+// ── WEEK SUMMARY ─────────────────────────────────────────────────
+function checkWeekSummary(){
+  if(new Date().getDay()!==1)return;
+  var card=document.getElementById("wsumm-card");
+  var bdy=document.getElementById("wsummbdy");
+  var runs=0,steps=0,wDays=0,habDays=0;
+  for(var i=1;i<=7;i++){
+    var d=ago(i);var l=logs[d]||{};
+    if(l.trained||l.done_run)runs++;
+    if(stepsLog[d])steps+=stepsLog[d];
+    if(weights[d])wDays++;
+    if(l.habits&&Object.values(l.habits).filter(Boolean).length>=4)habDays++;
+  }
+  var avgSt=Math.round(steps/7);
+  var h='<div style="font-size:11px;color:#334155;margin-bottom:8px">Resultaten van vorige week:</div>';
+  var rows=[[" Trainingen",""+runs+"×","runs"],[" Stap-gemiddelde",avgSt.toLocaleString("nl")+"/dag","steps"],[" Gewicht gelogd",wDays+"×","weight"],[" Goede gewoontes-dagen",habDays+"×","habits"]];
+  rows.forEach(function(r){h+='<div class="wsumm-row"><span>'+r[0]+'</span><span style="font-weight:700;color:var(--teal)">'+r[1]+'</span></div>';});
+  bdy.innerHTML=h;card.style.display="block";
+}
+
 function rHeader(){
   var days=["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
   var months=["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
   var n=new Date();
   document.getElementById("hdate").textContent=days[n.getDay()]+" "+n.getDate()+" "+months[n.getMonth()];
   document.getElementById("hq").textContent='"'+QUOTES[n.getDay()%QUOTES.length]+'"';
+  var dkD=new Date(dk+"T12:00:00");
+  var isToday=dk===today();
+  document.getElementById("dayNavLbl").textContent=isToday?"Vandaag":days[dkD.getDay()]+" "+dkD.getDate()+" "+months[dkD.getMonth()];
+  document.getElementById("dayNext").disabled=isToday;
   var streak=0;for(var i=0;i<90;i++){if((logs[ago(i)]||{}).trained)streak++;else break;}
   document.getElementById("slbl").textContent=streak+" streak";
   var lw=Object.entries(weights).sort().reverse()[0];var curW=lw?lw[1]:64.5;
@@ -504,7 +729,9 @@ function rVandaag(){
   var bs=document.getElementById("bpsaved");
   if(bp){var t2=bp.s+"/"+bp.d+" — ";if(bp.s>160||bp.d>100){t2+="⚠️ Bel arts";bs.style.color="var(--red)";}else if(bp.s>140||bp.d>90){t2+="Verhoogd";bs.style.color="var(--acc)";}else{t2+="✓ Goed";bs.style.color="var(--teal)";}bs.textContent=t2;}else bs.textContent="";
   var st=stepsLog[dk]||0;var sl=document.getElementById("sladder");sl.innerHTML="";var nf=false;
-  STEPS.forEach(function(r){var reached=st>=r.s;var isN=!reached&&!nf;if(isN)nf=true;var d=document.createElement("div");d.className="srung"+(reached?" r":"")+(isN?" nx":"");d.innerHTML='<div style="font-size:20px;flex-shrink:0">'+r.m+'</div><div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--dark)">'+r.s.toLocaleString("nl")+" stappen</div><div style='font-size:10px;color:var(--mut)'>"+r.l+'</div></div><div class="schk">'+(reached?"✓":"")+"</div>";sl.appendChild(d);});
+  STEPS.forEach(function(r){var reached=st>=r.s;var isN=!reached&&!nf;if(isN)nf=true;var d=document.createElement("div");d.className="srung"+(reached?" r":"")+(isN?" nx":"");d.style.cursor="pointer";d.title="Tik om "+r.s.toLocaleString("nl")+" stappen in te stellen";d.innerHTML='<div style="font-size:20px;flex-shrink:0">'+r.m+'</div><div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--dark)">'+r.s.toLocaleString("nl")+" stappen</div><div style='font-size:10px;color:var(--mut)'>"+r.l+'</div></div><div class="schk">'+(reached?"✓":"→")+"</div>";
+    (function(steps,medal,label){d.onclick=function(){stepsLog[dk]=steps;sv("gcf_steps",stepsLog);flash(medal,steps.toLocaleString("nl")+" — "+label);render();};})(r.s,r.m,r.l);
+    sl.appendChild(d);});
   var dow=new Date().getDay();var plan=DAYPLAN[dow]||[];
   var tttl=document.getElementById("tttl");var tbody=document.getElementById("tbody");
   if(plan.length===0){tttl.textContent="😴 Rustdag";tbody.innerHTML='<div style="font-size:12px;color:var(--mut)">Herstel is ook training. Wandelen mag.</div>';}
@@ -581,6 +808,8 @@ function rTraining(){
   var log=getLog();var ra=document.getElementById("rbtn");
   if(log.done_run){ra.innerHTML='<div class="done-box">🏃‍♀️ Training '+log.trainNum+' klaar!</div>';}
   else{ra.innerHTML='<button class="btn full" id="rbtnbtn">✓ Lopen klaar!</button>';document.getElementById("rbtnbtn").onclick=function(){setLog({done_run:true,trainNum:nextRun,trained:true});nextRun=Math.min(nextRun+1,35);sv("gcf_nr",nextRun);flash("🏃‍♀️","Training "+(nextRun-1)+" klaar!");rTraining();};}
+  var cur2=SCHEMA.find(function(s){return s.t===nextRun;})||SCHEMA[34];
+  var itTxt=document.getElementById("it-schema-txt");if(itTxt)itTxt.textContent="Training "+nextRun+": "+cur2.s;
   rKraftList();
 }
 
@@ -607,7 +836,26 @@ function rPatronen(){
   var data=Array.from({length:14},function(_,i){return {d:ago(13-i),v:weights[ago(13-i)]||null};});
   var svg=document.getElementById("wchart");var valid=data.filter(function(d){return d.v;});
   if(valid.length<2){svg.innerHTML='<text x="170" y="45" text-anchor="middle" font-size="11" fill="#94a3b8">Vul dagelijks gewicht in</text>';}
-  else{var ys=valid.map(function(d){return d.v;}),mn=Math.min.apply(null,ys)-.5,mx=Math.max.apply(null,ys)+.5;var W=340,H=80;var xi=function(_,i){return (data.indexOf(valid[i])/(data.length-1))*W;};var py=function(v){return H-((v-mn)/(mx-mn))*H;};var path=valid.map(function(d,i){return (i===0?"M":"L")+" "+xi(0,i)+" "+py(d.v);}).join(" ");var h='<path d="'+path+'" fill="none" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round"/>';valid.forEach(function(d,i){h+='<circle cx="'+xi(0,i)+'" cy="'+py(d.v)+'" r="3" fill="#14b8a6"/><text x="'+xi(0,i)+'" y="'+(py(d.v)-7)+'" text-anchor="middle" font-size="8" fill="#64748b">'+d.v+"</text>";});svg.innerHTML=h;var diff=(valid[valid.length-1].v-valid[0].v).toFixed(1);var te=document.getElementById("wtrend");te.textContent=diff<0?"↓ "+Math.abs(diff)+" kg afgenomen":"↑ "+diff+" kg";te.style.color=diff<0?"var(--teal)":"var(--acc)";}
+  else{
+    var ys=valid.map(function(d){return d.v;});
+    var daysToGoal=0,projTxt="";
+    if(valid.length>=2){var slope=(valid[valid.length-1].v-valid[0].v)/Math.max(1,valid.length-1);if(slope<0){daysToGoal=Math.round((valid[valid.length-1].v-53)/Math.abs(slope));projTxt="Op dit tempo: doel over ~"+daysToGoal+" dagen";}}
+    var projEnd=valid[valid.length-1].v+(daysToGoal>0?slope*7:0);
+    var mn=Math.min.apply(null,ys.concat([53]))-.5,mx=Math.max.apply(null,ys)+.5;
+    var W=340,H=80;
+    var xi=function(_,i){return (data.indexOf(valid[i])/(data.length-1))*W;};
+    var py=function(v){return H-((v-mn)/(mx-mn))*H;};
+    var path=valid.map(function(d,i){return (i===0?"M":"L")+" "+xi(0,i)+" "+py(d.v);}).join(" ");
+    var h='';
+    if(slope<0&&daysToGoal>0&&daysToGoal<730){var projX=W+(W/data.length)*7;var projY=Math.max(2,py(Math.max(53,projEnd)));h+='<line x1="'+xi(0,valid.length-1)+'" y1="'+py(valid[valid.length-1].v)+'" x2="'+Math.min(W,projX)+'" y2="'+projY+'" stroke="#f97316" stroke-width="1.5" stroke-dasharray="5" opacity="0.6"/>';}
+    h+='<path d="'+path+'" fill="none" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round"/>';
+    valid.forEach(function(d,i){h+='<circle cx="'+xi(0,i)+'" cy="'+py(d.v)+'" r="3" fill="#14b8a6"/><text x="'+xi(0,i)+'" y="'+(py(d.v)-7)+'" text-anchor="middle" font-size="8" fill="#64748b">'+d.v+"</text>";});
+    svg.innerHTML=h;
+    var diff=(valid[valid.length-1].v-valid[0].v).toFixed(1);
+    var te=document.getElementById("wtrend");
+    te.innerHTML=(diff<0?"↓ "+Math.abs(diff)+" kg afgenomen":"↑ "+diff+" kg")+(projTxt?'<br><span style="font-size:10px;color:var(--acc);font-weight:500">📉 '+projTxt+"</span>":'');
+    te.style.color=diff<0?"var(--teal)":"var(--acc)";
+  }
   // BD chart
   var bdata=Array.from({length:14},function(_,i){return {d:ago(13-i),s:(bps[ago(13-i)]||{}).s||null,dv:(bps[ago(13-i)]||{}).d||null};});
   var bsvg=document.getElementById("bpchart");var bvalid=bdata.filter(function(d){return d.s;});
@@ -663,6 +911,11 @@ function rBadges(){
 }
 
 function sw(i){document.querySelectorAll(".tab").forEach(function(t,j){t.classList.toggle("on",i===j);});document.querySelectorAll(".pane").forEach(function(p,j){p.classList.toggle("on",i===j);});render();window.scrollTo(0,0);}
+</script>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+}
 </script>
 </body>
 </html>
