@@ -242,8 +242,8 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
     <div style="font-size:10px;color:var(--teal);margin-top:4px;display:none" id="notesaved">✓ Opgeslagen</div>
   </div></div>
 
-  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--pur)"></div><div class="cttl">💉 Mounjaro injectiedag?</div></div><div class="cbdy">
-    <button class="mjbtn" id="mjbtn">Tik als je vandaag hebt gespoten</button>
+  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--pur)"></div><div class="cttl">💊 Wekelijkse prik</div></div><div class="cbdy">
+    <button class="mjbtn" id="mjbtn">Tik als je vandaag hebt gedaan</button>
     <div style="margin-top:6px;font-size:10px;color:var(--mut)" id="mjlast"></div>
   </div></div>
 </div>
@@ -341,12 +341,31 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
 
 <!-- 4 LICHAAM -->
 <div class="pane" id="p4">
-  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--pur)"></div><div class="cttl">🌸 Cyclus vandaag</div></div><div class="cbdy">
-    <div style="font-size:10px;color:var(--mut);margin-bottom:8px">Perimenopauze = onvoorspelbaar. Loggen geeft patronen.</div>
+  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--pur)"></div><div class="cttl">🌸 Cyclus</div></div><div class="cbdy">
+    <div id="cy-status" style="background:rgba(139,92,246,.08);border-radius:11px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10px;color:var(--mut);font-weight:700;letter-spacing:1px;margin-bottom:3px">CYCLUSDAG</div>
+          <div style="font-size:32px;font-weight:900;color:var(--pur);line-height:1" id="cy-day-num">—</div>
+          <div style="font-size:10px;color:var(--mut);margin-top:2px" id="cy-day-sub"></div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;color:var(--mut);font-weight:700;letter-spacing:1px;margin-bottom:3px">VOLGENDE</div>
+          <div style="font-size:13px;font-weight:800;color:var(--dark)" id="cy-next">—</div>
+          <div style="font-size:10px;color:var(--mut)" id="cy-next-sub"></div>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:6px">
+        <button class="btn sml" style="background:var(--red);flex:1;font-size:11px" id="cy-period-btn">🔴 Periode start vandaag</button>
+        <button class="btn sml" style="background:#f8fafc;color:var(--mut);border:1.5px solid var(--bdr)" id="cy-undo-btn" title="Laatste start verwijderen">↩</button>
+      </div>
+    </div>
+    <div style="font-size:9px;color:var(--mut);font-weight:700;letter-spacing:1px;margin-bottom:5px">FASE VANDAAG</div>
     <div class="cy-grid" id="cygrid">
       <button class="cy" data-cy="menstruatie">🔴<br>Menstruatie</button><button class="cy" data-cy="folliculair">🌱<br>Folliculair</button><button class="cy" data-cy="ovulatie">⚡<br>Ovulatie</button><button class="cy" data-cy="luteaal">🌙<br>Luteaal</button><button class="cy" data-cy="overgang">🌊<br>Overgang</button><button class="cy" data-cy="weet-niet">❓<br>Weet niet</button>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--pur);font-weight:600;line-height:1.5" id="cyinfo"></div>
+    <div id="cy-hist" style="margin-top:10px"></div>
   </div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--red)"></div><div class="cttl">🩺 Symptomen vandaag</div></div><div class="cbdy">
     <div class="sym-grid" id="symgrid">
@@ -362,10 +381,10 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--teal)"></div><div class="cttl">📊 Gewicht — 14 dagen</div></div><div class="cbdy"><svg style="width:100%;overflow:visible" id="wchart" viewBox="0 0 340 90" height="90"></svg><div id="wtrend" style="margin-top:6px;font-size:12px;font-weight:700"></div></div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--red)"></div><div class="cttl">❤️ Bloeddruk — 14 dagen</div></div><div class="cbdy"><svg style="width:100%;overflow:visible" id="bpchart" viewBox="0 0 340 90" height="90"></svg><div style="display:flex;gap:13px;font-size:10px;color:var(--mut);margin-top:5px"><span><span style="color:var(--red)">●</span> Sys</span><span><span style="color:var(--acc)">●</span> Dia</span><span style="color:var(--red)">— 160</span></div></div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--amb)"></div><div class="cttl">👟 Stappen — 14 dagen</div></div><div class="cbdy"><svg style="width:100%;overflow:visible" id="stchart" viewBox="0 0 340 80" height="80"></svg></div></div>
-  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--pur)"></div><div class="cttl">💉 Mounjaro</div></div><div class="cbdy">
-    <div class="mjrow"><span style="color:var(--mut)">Herstart</span><span style="font-weight:700">8 mei 2026 · 2,5 mg</span></div>
-    <div class="mjrow"><span style="color:var(--mut)">Nu</span><span style="font-weight:700" id="mjnow">64,5 kg</span></div>
-    <div class="mjrow" style="border:none"><span style="color:var(--mut)">Nog te gaan</span><span style="font-weight:700;color:var(--acc)" id="mjleft">−11,5 kg</span></div>
+  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--pur)"></div><div class="cttl" style="cursor:pointer" onclick="toggleMjCard()">💊 Medicatie <span id="mjcaret" style="font-size:10px;color:var(--mut)">▸ tik om te tonen</span></div></div><div class="cbdy" id="mjcard" style="display:none">
+    <div class="mjrow"><span style="color:var(--mut)">Herstart</span><span style="font-weight:700">8 mei 2026</span></div>
+    <div class="mjrow"><span style="color:var(--mut)">Nu</span><span style="font-weight:700" id="mjnow">—</span></div>
+    <div class="mjrow" style="border:none"><span style="color:var(--mut)">Nog te gaan</span><span style="font-weight:700;color:var(--acc)" id="mjleft">—</span></div>
   </div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--acc)"></div><div class="cttl">✅ Gewoontes — 7 dagen</div></div><div class="cbdy" id="hbars"></div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--blu)"></div><div class="cttl">💡 Inzichten</div></div><div class="cbdy" id="insights"></div></div>
@@ -397,10 +416,10 @@ var AP=[{n:"Tai Chi Ademhaling",p:"🌬️ Opwarmen",d:60,c:"#a78bfa",i:"Sta rec
 var STEPS=[{s:3000,m:"🥉",l:"Bewogen vandaag"},{s:6000,m:"🥈",l:"Goed bezig"},{s:8000,m:"🥇",l:"Dagdoel"},{s:10000,m:"⭐",l:"Sterk!"},{s:12000,m:"🌟",l:"Boven verwachting"},{s:15000,m:"🔥",l:"Geweldig"},{s:20000,m:"🏆",l:"Legendarisch"}];
 var HABITS=[{id:"water",e:"💧",l:"2L water"},{id:"eiwit",e:"🥚",l:"Eiwitten"},{id:"suiker",e:"🚫",l:"Geen zoet"},{id:"zout",e:"🧂",l:"Geen zout"},{id:"slaap",e:"🌙",l:"Voor 23u"},{id:"stress",e:"🧘",l:"Stress ok"},{id:"meds",e:"💊",l:"Medicatie"},{id:"schema",e:"✅",l:"Schema ok"}];
 var CHECKLIST=[{id:"c1",e:"📊",l:"Gewicht + BD gemeten"},{id:"c2",e:"🏋️",l:"Ochtend training gedaan"},{id:"c3",e:"🥚",l:"Ontbijt met eiwitten"},{id:"c4",e:"💧",l:"1e liter water op"},{id:"c5",e:"💊",l:"Medicatie ingenomen"},{id:"c6",e:"🏃",l:"Middag training gedaan"},{id:"c7",e:"💧",l:"2e liter water op"},{id:"c8",e:"🌙",l:"Avond routine gedaan"},{id:"c9",e:"😴",l:"Voor 23u naar bed"}];
-var BADGES=[{id:"b1",e:"👟",l:"Eerste stap",c:function(s){return s.runs>=1;}},{id:"b2",e:"🔥",l:"3 op rij",c:function(s){return s.streak>=3;}},{id:"b3",e:"💧",l:"3x water",c:function(s){return s.wStreak>=3;}},{id:"b4",e:"📊",l:"7x gewicht",c:function(s){return s.wDays>=7;}},{id:"b5",e:"⚡",l:"5 trainingen",c:function(s){return s.runs>=5;}},{id:"b6",e:"🏆",l:"10 trainingen",c:function(s){return s.runs>=10;}},{id:"b7",e:"❤️",l:"BD 7 dagen",c:function(s){return s.bpDays>=7;}},{id:"b8",e:"🌸",l:"Cyclus 3x",c:function(s){return s.cycleDays>=3;}},{id:"b9",e:"💉",l:"Mounjaro 4x",c:function(s){return s.mjDays>=4;}},{id:"b10",e:"🌙",l:"Slaap 7x",c:function(s){return s.sleepDays>=7;}},{id:"b11",e:"⭐",l:"10.000 stappen",c:function(s){return s.maxSteps>=10000;}},{id:"b12",e:"🏆",l:"20.000 stappen",c:function(s){return s.maxSteps>=20000;}},{id:"b13",e:"⭐",l:"Bonus loop",c:function(s){return s.bonusRuns>=1;}},{id:"b14",e:"💪",l:"Kracht A+B+C",c:function(s){return s.krachtABC>=3;}},{id:"b15",e:"🧘",l:"Asian Pilates 7x",c:function(s){return s.apSessions>=7;}}];
+var BADGES=[{id:"b1",e:"👟",l:"Eerste stap",c:function(s){return s.runs>=1;}},{id:"b2",e:"🔥",l:"3 op rij",c:function(s){return s.streak>=3;}},{id:"b3",e:"💧",l:"3x water",c:function(s){return s.wStreak>=3;}},{id:"b4",e:"📊",l:"7x gewicht",c:function(s){return s.wDays>=7;}},{id:"b5",e:"⚡",l:"5 trainingen",c:function(s){return s.runs>=5;}},{id:"b6",e:"🏆",l:"10 trainingen",c:function(s){return s.runs>=10;}},{id:"b7",e:"❤️",l:"BD 7 dagen",c:function(s){return s.bpDays>=7;}},{id:"b8",e:"🌸",l:"Cyclus 3x",c:function(s){return s.cycleDays>=3;}},{id:"b9",e:"💊",l:"Medicatie 4x",c:function(s){return s.mjDays>=4;}},{id:"b10",e:"🌙",l:"Slaap 7x",c:function(s){return s.sleepDays>=7;}},{id:"b11",e:"⭐",l:"10.000 stappen",c:function(s){return s.maxSteps>=10000;}},{id:"b12",e:"🏆",l:"20.000 stappen",c:function(s){return s.maxSteps>=20000;}},{id:"b13",e:"⭐",l:"Bonus loop",c:function(s){return s.bonusRuns>=1;}},{id:"b14",e:"💪",l:"Kracht A+B+C",c:function(s){return s.krachtABC>=3;}},{id:"b15",e:"🧘",l:"Asian Pilates 7x",c:function(s){return s.apSessions>=7;}}];
 var MEALS={0:[{t:"Ontbijt",n:"Scrambled eggs + spinazie + toast",x:""},{t:"Lunch",n:"Soep + ei of restjes",x:""},{t:"Avond",n:"Zalm + broccoli + zoete aardappel",x:"Omega-3 goed voor hart"},{t:"Snack",n:"Kwark of noten",x:""}],1:[{t:"Ontbijt",n:"Griekse yoghurt + bessen + walnoten",x:""},{t:"Lunch",n:"Salade + tonijn + olijfolie",x:""},{t:"Avond",n:"Kip + groenten + quinoa",x:""},{t:"Snack",n:"Komkommer + hummus",x:""}],2:[{t:"Ontbijt",n:"Havermout + kwark + fruit",x:""},{t:"Lunch",n:"Wrap met kip + avocado",x:""},{t:"Avond",n:"Linzencurry + volkorenbrood",x:""},{t:"Snack",n:"Appel + amandelboter",x:""}],3:[{t:"Ontbijt",n:"Skyr + granola + blauwe bessen",x:""},{t:"Lunch",n:"Salade + ei + avocado",x:""},{t:"Avond",n:"Tofu roerbak + wokgroenten",x:""},{t:"Snack",n:"Celery + roomkaas",x:""}],4:[{t:"Ontbijt",n:"Smoothie: spinazie + banaan + proteïne",x:""},{t:"Lunch",n:"Gegrilde groenten + mozzarella",x:""},{t:"Avond",n:"Steak of kip + salade",x:"Vrijdag mag leuker"},{t:"Snack",n:"Donkere choco 2 blokjes (85%)",x:""}],5:[{t:"Ontbijt",n:"Eggs + gerookte zalm + avocado",x:"Weekend = tijd"},{t:"Lunch",n:"Tomatensoep + brood",x:""},{t:"Avond",n:"Zelf kiezen — bewust, niet perfect",x:""},{t:"Snack",n:"Fruit of yoghurt",x:""}],6:[{t:"Ontbijt",n:"Havermeel pannenkoeken + kwark",x:""},{t:"Lunch",n:"Brood met kipfilet + groenten",x:""},{t:"Avond",n:"Geroosterde kip + quinoa",x:""},{t:"Snack",n:"Griekse yoghurt + beetje honing",x:""}]};
-var EETIPS=["Craving na 16u? Eet om 15:30 al kwark of ei.","Drop craving = mineraalbehoefte. Probeer bouillon.","Groot glas water bij elke craving. Wacht 10 min.","Geen drop in huis = niet eten.","Bord half vullen met groenten vóór de rest.","Eiwitten bij ontbijt = minder cravings die dag.","Langzaam eten — lichaam loopt 20 min achter.","Magnesium voor slaap én spierherstel.","2L water = platter in 3 dagen.","Alcohol weg = direct minder puffiness.","Minder zout = minder zwelling, snel zichtbaar.","Donkere choco 85%+ is gewoon toegestaan.","Plantaardig 2x/week goed voor cholesterol.","Omega-3 (zalm) = goed voor BD én stemming.","Kwark als avondsnack = eiwit + vulling.","Consistentie wint van perfectie.","Je weet dit al. Vandaag ook doen.","Eén dag minder goed = normaal. Morgen is nieuw.","Mounjaro doet de eetlust mee. Vertrouw dat.","Goed genoeg is perfect."];
-var QUOTES=["Jij weet alles al. Vandaag gewoon doen.","Langzaam is precies goed — jouw CPET zegt het.","Eén vinkje op een slechte dag telt ook.","Long covid overleefd én weer opgebouwd. Keihard.","ADHD: moeilijk starten, niet moeilijk volhouden.","Goed genoeg is perfect.","Zone B = vetverbranding + herstel + hart.","Mounjaro doet het werk mee. Jij ook.","Een routine die je volhoudt is beter dan een perfect plan.","Kleine stappen, elke dag.","Vandaag beter dan gisteren. Dat is de enige maatstaf.","Vertrouw het proces.","Bonus gehaald = extra badge!","Jij bent expert én uitvoerder. Beide vandaag."];
+var EETIPS=["Craving na 16u? Eet om 15:30 al kwark of ei.","Drop craving = mineraalbehoefte. Probeer bouillon.","Groot glas water bij elke craving. Wacht 10 min.","Geen drop in huis = niet eten.","Bord half vullen met groenten vóór de rest.","Eiwitten bij ontbijt = minder cravings die dag.","Langzaam eten — lichaam loopt 20 min achter.","Magnesium voor slaap én spierherstel.","2L water = platter in 3 dagen.","Alcohol weg = direct minder puffiness.","Minder zout = minder zwelling, snel zichtbaar.","Donkere choco 85%+ is gewoon toegestaan.","Plantaardig 2x/week goed voor cholesterol.","Omega-3 (zalm) = goed voor BD én stemming.","Kwark als avondsnack = eiwit + vulling.","Consistentie wint van perfectie.","Je weet dit al. Vandaag ook doen.","Eén dag minder goed = normaal. Morgen is nieuw.","Medicatie doet de eetlust mee. Vertrouw dat.","Goed genoeg is perfect."];
+var QUOTES=["Jij weet alles al. Vandaag gewoon doen.","Langzaam is precies goed — jouw CPET zegt het.","Eén vinkje op een slechte dag telt ook.","Long covid overleefd én weer opgebouwd. Keihard.","ADHD: moeilijk starten, niet moeilijk volhouden.","Goed genoeg is perfect.","Zone B = vetverbranding + herstel + hart.","Het proces werkt. Jij ook.","Een routine die je volhoudt is beter dan een perfect plan.","Kleine stappen, elke dag.","Vandaag beter dan gisteren. Dat is de enige maatstaf.","Vertrouw het proces.","Bonus gehaald = extra badge!","Jij bent expert én uitvoerder. Beide vandaag."];
 var CYINFO={menstruatie:"Energie laag is normaal. BD kan schommelen.",folliculair:"Energie stijgt. Beste trainingsweek.",ovulatie:"Piekenergie. BD kan iets stijgen.",luteaal:"Energie daalt. Rustigere training.",overgang:"Onvoorspelbaar. Loggen geeft patronen.","weet-niet":"Klopt bij perimenopauze. Blijf loggen."};
 var DAYPLAN={0:[{t:"run",l:"🏃 Lopen (verplicht)",bg:"#e0f2fe",tc:"#0369a1"}],1:[{t:"lm",l:"🎯 Les Mills Core",bg:"#fef3c7",tc:"#92400e"}],2:[{t:"kracht",l:"💪 Kracht",bg:"#fce7f3",tc:"#9d174d"},{t:"ap",l:"🧘 Asian Pilates",bg:"#ede9fe",tc:"#5b21b6"}],3:[{t:"run",l:"🏃 Lopen (verplicht)",bg:"#e0f2fe",tc:"#0369a1"}],4:[{t:"kracht",l:"💪 Kracht",bg:"#fce7f3",tc:"#9d174d"},{t:"ap",l:"🧘 Asian Pilates",bg:"#ede9fe",tc:"#5b21b6"}],5:[{t:"ap",l:"🧘 Asian Pilates",bg:"#ede9fe",tc:"#5b21b6"},{t:"bonus",l:"⭐ Bonus lopen (optioneel)",bg:"#fff7ed",tc:"#9a3412"}],6:[{t:"lm",l:"🎯 Les Mills Core",bg:"#fef3c7",tc:"#92400e"},{t:"run",l:"🏃 Lopen (verplicht)",bg:"#e0f2fe",tc:"#0369a1"}]};
 
@@ -419,6 +438,7 @@ var stepsLog=ld("gcf_steps",{});
 var badges=ld("gcf_b",[]);
 var nextRun=ld("gcf_nr",9);
 var krachtCycle=ld("gcf_kc","A");
+var cycleStarts=ld("gcf_cy",[]);
 var calOff=0;
 var selDay=null;
 var apIdx=0,apLeft=0,apTotal=0,apPaused=false,apTick=null;
@@ -493,7 +513,16 @@ function initButtons(){
   document.querySelectorAll(".sym").forEach(function(b){
     b.onclick=function(){var l=getLog();var sym=Object.assign({},(l.symptoms||{}));var v=b.dataset.s;if(v==="niks"){Object.keys(sym).forEach(function(k){delete sym[k];});sym.niks=!sym.niks;}else{delete sym.niks;sym[v]=!sym[v];}setLog({symptoms:sym});};
   });
-  document.getElementById("mjbtn").onclick=function(){var l=getLog();setLog({mounjaro_injected:!l.mounjaro_injected});if(!l.mounjaro_injected)flash("💉","Mounjaro gelogd!");};
+  document.getElementById("mjbtn").onclick=function(){var l=getLog();setLog({mounjaro_injected:!l.mounjaro_injected});if(!l.mounjaro_injected)flash("💊","Injectie gelogd!");};
+  document.getElementById("cy-period-btn").onclick=function(){
+    if(cycleStarts[cycleStarts.length-1]===dk){flash("🔴","Al gelogd vandaag");return;}
+    cycleStarts.push(dk);cycleStarts.sort();sv("gcf_cy",cycleStarts);
+    setLog({cycle:"menstruatie"});flash("🔴","Periode dag 1 gelogd!");
+  };
+  document.getElementById("cy-undo-btn").onclick=function(){
+    if(!cycleStarts.length)return;
+    cycleStarts.pop();sv("gcf_cy",cycleStarts);flash("↩","Laatste start verwijderd");render();
+  };
   document.getElementById("cprev").onclick=function(){calOff--;rKal();};
   document.getElementById("cnext").onclick=function(){calOff++;rKal();};
   document.getElementById("garmin-steps-btn").onclick=function(){
@@ -648,7 +677,7 @@ function rNote(){
 // ── EXPORT / IMPORT ──────────────────────────────────────────────
 function initExport(){
   document.getElementById("exportbtn").onclick=function(){
-    var data={gcf_logs:logs,gcf_w:weights,gcf_bp:bps,gcf_steps:stepsLog,gcf_b:badges,gcf_nr:nextRun,gcf_kc:krachtCycle,exported:new Date().toISOString()};
+    var data={gcf_logs:logs,gcf_w:weights,gcf_bp:bps,gcf_steps:stepsLog,gcf_b:badges,gcf_nr:nextRun,gcf_kc:krachtCycle,gcf_cy:cycleStarts,exported:new Date().toISOString()};
     var blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="griette-coach-backup-"+today()+".json";a.click();
     flash("💾","Data gedownload!");
@@ -665,6 +694,7 @@ function initExport(){
         if(d.gcf_b){badges=d.gcf_b;sv("gcf_b",badges);}
         if(d.gcf_nr){nextRun=d.gcf_nr;sv("gcf_nr",nextRun);}
         if(d.gcf_kc){krachtCycle=d.gcf_kc;sv("gcf_kc",krachtCycle);}
+        if(d.gcf_cy){cycleStarts=d.gcf_cy;sv("gcf_cy",cycleStarts);}
         flash("✅","Backup hersteld!");render();
       }catch(err){flash("⚠️","Ongeldig bestand");}
     };r.readAsText(f);
@@ -742,7 +772,7 @@ function rVandaag(){
   ["energy","mood","sleep"].forEach(function(type){var row=document.getElementById(type[0]==="e"?"erow":type[0]==="m"?"mrow":"srow");if(!row)return;row.querySelectorAll(".sbtn").forEach(function(btn){btn.classList.remove("e","m","s");if(log[type]===parseInt(btn.dataset.v)){btn.classList.add(type[0]==="e"?"e":type[0]==="m"?"m":"s");}});});
   HABITS.forEach(function(h){var el=document.getElementById("hb-"+h.id);if(!el)return;el.className="hbtn"+(log.habits&&log.habits[h.id]?" on":"");});
   var hDone=HABITS.filter(function(h){return log.habits&&log.habits[h.id];}).length;document.getElementById("httl").textContent="Gewoontes — "+hDone+"/8";
-  var mjb=document.getElementById("mjbtn");mjb.className="mjbtn"+(log.mounjaro_injected?" on":"");mjb.textContent=log.mounjaro_injected?"✓ Gespoten vandaag (2,5 mg)":"Tik als je vandaag hebt gespoten";
+  var mjb=document.getElementById("mjbtn");mjb.className="mjbtn"+(log.mounjaro_injected?" on":"");mjb.textContent=log.mounjaro_injected?"✓ Vandaag gedaan":"Tik als je vandaag hebt gedaan";
   var lm=Object.keys(logs).filter(function(k){return logs[k].mounjaro_injected&&k<dk;}).sort().reverse()[0];document.getElementById("mjlast").textContent=lm?"Vorige: "+lm.slice(8)+"/"+lm.slice(5,7):"";
 }
 
@@ -818,8 +848,55 @@ function rEten(){
   document.getElementById("mplan").innerHTML=plan.map(function(m){return '<div class="meal"><div class="meal-t">'+m.t.toUpperCase()+'</div><div class="meal-n">'+m.n+"</div>"+(m.x?'<div class="meal-x">'+m.x+"</div>":"")+"</div>";}).join("");
 }
 
+function toggleMjCard(){
+  var c=document.getElementById("mjcard");var open=c.style.display!=="none";
+  c.style.display=open?"none":"block";
+  document.getElementById("mjcaret").textContent=open?"▸ tik om te tonen":"▾ verberg";
+}
+
 function rLichaam(){
   var log=getLog();
+  // ── Cyclus status ─────────────────────────────
+  var months=["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+  var lastStart=cycleStarts.filter(function(d){return d<=dk;}).slice(-1)[0]||null;
+  var prevStart=cycleStarts.filter(function(d){return d<=dk;}).slice(-2)[0]||null;
+  var avgLen=28;
+  if(cycleStarts.length>=2){
+    var lens=[];for(var ci=1;ci<cycleStarts.length;ci++){var ds=new Date(cycleStarts[ci]+"T12:00:00"),dp=new Date(cycleStarts[ci-1]+"T12:00:00");lens.push(Math.round((ds-dp)/86400000));}
+    avgLen=Math.round(lens.reduce(function(a,b){return a+b;},0)/lens.length);
+  }
+  var cyDayEl=document.getElementById("cy-day-num");
+  var cySubEl=document.getElementById("cy-day-sub");
+  var cyNextEl=document.getElementById("cy-next");
+  var cyNextSub=document.getElementById("cy-next-sub");
+  if(lastStart){
+    var dkD=new Date(dk+"T12:00:00"),lsD=new Date(lastStart+"T12:00:00");
+    var dayNum=Math.round((dkD-lsD)/86400000)+1;
+    cyDayEl.textContent=dayNum;
+    cySubEl.textContent="dag "+dayNum+" van ~"+avgLen;
+    var nextD=new Date(lsD.getTime()+avgLen*86400000);
+    var daysLeft=Math.round((nextD-dkD)/86400000);
+    cyNextEl.textContent=nextD.getDate()+" "+months[nextD.getMonth()];
+    cyNextSub.textContent=daysLeft>0?"over "+daysLeft+" dag"+(daysLeft===1?"":"en"):"vandaag of over";
+  } else {
+    cyDayEl.textContent="—";cySubEl.textContent="Nog geen start gelogd";
+    cyNextEl.textContent="—";cyNextSub.textContent="";
+  }
+  // Periode start knop highlight als vandaag al gelogd
+  var pbtn=document.getElementById("cy-period-btn");
+  var alreadyToday=cycleStarts[cycleStarts.length-1]===dk;
+  pbtn.style.background=alreadyToday?"#166534":"var(--red)";
+  pbtn.textContent=alreadyToday?"✓ Periode dag 1 gelogd":"🔴 Periode start vandaag";
+  // Cyclus geschiedenis (laatste 6)
+  var hist=document.getElementById("cy-hist");
+  if(cycleStarts.length>0){
+    var recent=cycleStarts.slice(-6).reverse();
+    hist.innerHTML='<div style="font-size:9px;color:var(--mut);font-weight:700;letter-spacing:1px;margin-bottom:5px">GESCHIEDENIS</div>'+recent.map(function(d,i){
+      var len=i<recent.length-1?Math.round((new Date(recent[i-1]+"T12:00:00")-new Date(d+"T12:00:00"))/86400000):null;
+      var dD=new Date(d+"T12:00:00");
+      return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid var(--bdr)"><span>🔴 '+dD.getDate()+" "+months[dD.getMonth()]+" "+dD.getFullYear()+'</span><span style="color:var(--mut)">'+(i>0&&len?len+" dg cyclus":"laatste")+'</span></div>';
+    }).join("");
+  } else hist.innerHTML='';
   document.querySelectorAll(".cy").forEach(function(b){b.classList.toggle("on",b.dataset.cy===log.cycle);});
   document.getElementById("cyinfo").textContent=log.cycle?CYINFO[log.cycle]||"":"";
   document.querySelectorAll(".sym").forEach(function(b){b.classList.toggle("on",!!((log.symptoms||{})[b.dataset.s]));});
@@ -907,7 +984,7 @@ function rBadges(){
   var n=badges.length,total=BADGES.length;
   document.getElementById("btxt").textContent=n+" van "+total+" badges";document.getElementById("bpct").textContent=Math.round(n/total*100)+"%";document.getElementById("bfill").style.width=(n/total*100)+"%";
   var sl=document.getElementById("slist2");sl.innerHTML="";var s2=getStats();
-  [["Looptrainingen",s2.runs,"🏃‍♀️"],["Streak",s2.streak,"🔥"],["Bonus loops",s2.bonusRuns,"⭐"],["Asian Pilates",s2.apSessions,"🧘"],["Gewicht ingevoerd",s2.wDays,"📊"],["BD gemeten",s2.bpDays,"❤️"],["Max stappen",s2.maxSteps.toLocaleString("nl"),"👟"],["Mounjaro",s2.mjDays,"💉"]].forEach(function(r){var d=document.createElement("div");d.className="srow2";d.innerHTML='<span style="font-size:11px;color:#334155">'+r[2]+" "+r[0]+'</span><span style="font-size:18px;font-weight:800;color:var(--dark)">'+r[1]+"</span>";sl.appendChild(d);});
+  [["Looptrainingen",s2.runs,"🏃‍♀️"],["Streak",s2.streak,"🔥"],["Bonus loops",s2.bonusRuns,"⭐"],["Asian Pilates",s2.apSessions,"🧘"],["Gewicht ingevoerd",s2.wDays,"📊"],["BD gemeten",s2.bpDays,"❤️"],["Max stappen",s2.maxSteps.toLocaleString("nl"),"👟"],["Medicatie",s2.mjDays,"💊"]].forEach(function(r){var d=document.createElement("div");d.className="srow2";d.innerHTML='<span style="font-size:11px;color:#334155">'+r[2]+" "+r[0]+'</span><span style="font-size:18px;font-weight:800;color:var(--dark)">'+r[1]+"</span>";sl.appendChild(d);});
 }
 
 function sw(i){document.querySelectorAll(".tab").forEach(function(t,j){t.classList.toggle("on",i===j);});document.querySelectorAll(".pane").forEach(function(p,j){p.classList.toggle("on",i===j);});render();window.scrollTo(0,0);}
