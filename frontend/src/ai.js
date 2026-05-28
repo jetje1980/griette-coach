@@ -56,6 +56,32 @@ function buildContext(logs, measurements) {
     return v.length ? (v.reduce((a, l) => a + l.energy, 0) / v.length).toFixed(1) : '?';
   })();
 
+  const sleepAvg = (() => {
+    const v = recent.filter(l => l.sleep_hours != null);
+    return v.length ? (v.reduce((a, l) => a + l.sleep_hours, 0) / v.length).toFixed(1) : null;
+  })();
+
+  const stepsAvg = (() => {
+    const v = recent.filter(l => l.steps != null);
+    return v.length ? Math.round(v.reduce((a, l) => a + l.steps, 0) / v.length) : null;
+  })();
+
+  const hrRestAvg = (() => {
+    const v = recent.filter(l => l.hr_rest != null);
+    return v.length ? Math.round(v.reduce((a, l) => a + l.hr_rest, 0) / v.length) : null;
+  })();
+
+  // Symptomen: tel hoe vaak elk symptoom voorkwam
+  const symptomIds = ['symptom_brainfog', 'symptom_exhaustion', 'symptom_breathless', 'symptom_pain', 'symptom_headache', 'symptom_pem'];
+  const symptomLabels = { symptom_brainfog: 'hersenmist', symptom_exhaustion: 'zware moeheid', symptom_breathless: 'kortademig', symptom_pain: 'spier/gewrichtspijn', symptom_headache: 'hoofdpijn', symptom_pem: 'PEM-crash' };
+  const symptomSummary = symptomIds
+    .map(id => ({ label: symptomLabels[id], count: recent.filter(l => l[id]).length }))
+    .filter(s => s.count > 0)
+    .map(s => `${s.label}: ${s.count}x`)
+    .join(', ');
+
+  const pemDays = recent.filter(l => l.symptom_pem).map(l => l.date);
+
   const habitNames = ['water', 'protein', 'no_sugar', 'no_salt', 'bed_on_time', 'low_stress'];
   const habitPct = habitNames.map(h => {
     const score = recent.filter(l => l[h]).length;
@@ -84,7 +110,16 @@ Hardlopen: ${runDays}x | Zwemmen: ${swimDays}x | Fietsen: ${bikeDays}x | Core: $
 ${swimSessions.length ? `Zwemsessies: ${swimSessions.join(' | ')}` : ''}
 ${bikeSessions.length ? `Fietssessies: ${bikeSessions.join(' | ')}` : ''}
 
-GEMIDDELDE ENERGIE: ${energyAvg}/3
+HERSTELDATA:
+Gem. energie: ${energyAvg}/3
+Gem. slaapuren: ${sleepAvg ?? '?'} uur/nacht
+Gem. stappen: ${stepsAvg ? stepsAvg.toLocaleString('nl') : '?'} per dag
+Gem. rust-HS: ${hrRestAvg ?? '?'} bpm
+${pemDays.length > 0 ? `⚠️ PEM-crashes geregistreerd op: ${pemDays.join(', ')}` : 'Geen PEM-crashes geregistreerd'}
+
+LONG COVID SYMPTOMEN (afgelopen ${recent.length} dagen):
+${symptomSummary || 'geen klachten geregistreerd'}
+
 GEWOONTES SCORE: ${habitPct.join(', ')}
 
 MATEN VERLOOP (cm):
