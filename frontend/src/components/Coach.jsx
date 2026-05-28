@@ -5,6 +5,7 @@ import { USER } from '../config';
 
 const REPORT_KEY = 'gc_coach_report';
 const REPORT_DATE_KEY = 'gc_coach_report_date';
+const ANALYSIS_PREFIX = 'gc_photo_analysis_';
 const CHECK_DAYS = 3;
 
 function daysSince(dateStr) {
@@ -13,17 +14,30 @@ function daysSince(dateStr) {
 }
 
 const PHOTO_TYPES = [
-  { key: 'voor', label: 'Voorkant' },
-  { key: 'zij', label: 'Zijkant' },
+  { key: 'voor',   label: 'Voorkant' },
+  { key: 'zij',    label: 'Zijkant'  },
   { key: 'achter', label: 'Achterkant' },
 ];
 
-function PhotoCapture({ logs }) {
+function loadSavedAnalyses() {
+  const results = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(ANALYSIS_PREFIX)) {
+      const date = key.slice(ANALYSIS_PREFIX.length);
+      const text = localStorage.getItem(key);
+      if (text) results.push({ date, text });
+    }
+  }
+  return results.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function PhotoCapture({ logs, measurements }) {
   const today = new Date().toISOString().slice(0, 10);
   const [sessions, setSessions] = useState([]);
   const [todayViews, setTodayViews] = useState({});
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState(null);
+  const [analysis, setAnalysis] = useState(() => localStorage.getItem(`${ANALYSIS_PREFIX}${new Date().toISOString().slice(0,10)}`) || null);
   const [analyzeError, setAnalyzeError] = useState(null);
 
   useEffect(() => { loadPhotos(); }, []);
@@ -52,7 +66,6 @@ function PhotoCapture({ logs }) {
   async function deletePhoto(date, type) {
     await photoStore.delete(date, type);
     await loadPhotos();
-    if (date === today) setAnalysis(null);
   }
 
   async function analyzeToday() {
@@ -60,8 +73,11 @@ function PhotoCapture({ logs }) {
       setAnalyzeError('Stel eerst je API-sleutel in via ⚙️ Instellingen');
       return;
     }
-    const photoList = Object.values(todayViews);
+    const photoList = PHOTO_TYPES
+      .filter(({ key }) => todayViews[key])
+      .map(({ key }) => ({ ...todayViews[key], type: key }));
     if (photoList.length === 0) return;
+
     setAnalyzing(true);
     setAnalysis(null);
     setAnalyzeError(null);
@@ -69,8 +85,10 @@ function PhotoCapture({ logs }) {
       const weights = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
       const currentWeight = weights[0]?.weight;
       const dayNum = Math.max(1, Math.floor((new Date(today) - new Date(USER.startDate)) / 86400000) + 1);
-      const photo = photoList[0];
-      const text = await ai.analyzePhoto(photo.base64, photo.mimeType, dayNum, currentWeight, logs);
+      const previousAnalyses = loadSavedAnalyses().filter(a => a.date !== today);
+
+      const text = await ai.analyzePhoto(photoList, dayNum, currentWeight, logs, measurements, previousAnalyses);
+      localStorage.setItem(`${ANALYSIS_PREFIX}${today}`, text);
       setAnalysis(text);
     } catch (err) {
       setAnalyzeError(err.message);
@@ -86,7 +104,7 @@ function PhotoCapture({ logs }) {
     <div>
       <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', marginBottom: 8 }}>Vandaag — {today}</div>
 
-      {/* 3 slots voor vandaag */}
+      {/* 3 slots vandaag */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
         {PHOTO_TYPES.map(({ key, label }) => {
           const photo = todayViews[key];
@@ -126,7 +144,7 @@ function PhotoCapture({ logs }) {
       {hasTodayPhotos && (
         <div style={{ marginBottom: 16 }}>
           <button className="btn btn-rust btn-full" onClick={analyzeToday} disabled={analyzing}>
-            {analyzing ? '⏳ Analyseren…' : "🤖 Analyseer foto's met AI"}
+            {analyzing ? '⏳ AI analyseert alle foto\'s…' : `🤖 Analyseer ${Object.keys(todayViews).length} foto('s) met AI`}
           </button>
           {analyzeError && (
             <div style={{ marginTop: 8, fontSize: 11, color: 'var(--alert)', background: 'var(--alert-l)', padding: '8px 10px', borderRadius: 8 }}>
@@ -134,7 +152,7 @@ function PhotoCapture({ logs }) {
             </div>
           )}
           {analysis && (
-            <div style={{ marginTop: 10, background: 'var(--sage-l)', borderRadius: 10, padding: '12px 14px', fontSize: 12, lineHeight: 1.7, color: 'var(--text)', borderLeft: '3px solid var(--sage)' }}>
+            <div style={{ marginTop: 10, background: 'var(--sage-l)', borderRadius: 10, padding: '12px 14px', fontSize: 12, lineHeight: 1.8, color: 'var(--text)', borderLeft: '3px solid var(--sage)', whiteSpace: 'pre-wrap' }}>
               {analysis}
             </div>
           )}
@@ -144,38 +162,49 @@ function PhotoCapture({ logs }) {
       {/* Historische sessies */}
       {pastSessions.length > 0 && (
         <div>
-          <div className="section-title">Eerdere sessies</div>
-          {pastSessions.map(({ date, views }) => (
-            <div key={date} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', marginBottom: 5 }}>{date}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 }}>
-                {PHOTO_TYPES.map(({ key, label }) => {
-                  const photo = views[key];
-                  return (
-                    <div key={key}>
-                      {photo ? (
-                        <div style={{ position: 'relative' }}>
-                          <img
-                            src={`data:${photo.mimeType};base64,${photo.base64}`}
-                            alt={`${date} ${label}`}
-                            style={{ width: '100%', borderRadius: 7, objectFit: 'cover', height: 80 }}
-                          />
-                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(42,37,32,0.6)', borderRadius: '0 0 7px 7px', padding: '2px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 8, color: 'white' }}>{label}</span>
-                            <button onClick={() => deletePhoto(date, key)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 10, padding: 0 }}>✕</button>
+          <div className="section-title">Progressie-overzicht</div>
+          {pastSessions.map(({ date, views }) => {
+            const savedAnalysis = localStorage.getItem(`${ANALYSIS_PREFIX}${date}`);
+            return (
+              <div key={date} style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', marginBottom: 5 }}>{date}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5, marginBottom: savedAnalysis ? 8 : 0 }}>
+                  {PHOTO_TYPES.map(({ key, label }) => {
+                    const photo = views[key];
+                    return (
+                      <div key={key}>
+                        {photo ? (
+                          <div style={{ position: 'relative' }}>
+                            <img
+                              src={`data:${photo.mimeType};base64,${photo.base64}`}
+                              alt={`${date} ${label}`}
+                              style={{ width: '100%', borderRadius: 7, objectFit: 'cover', height: 80 }}
+                            />
+                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(42,37,32,0.6)', borderRadius: '0 0 7px 7px', padding: '2px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: 8, color: 'white' }}>{label}</span>
+                              <button onClick={() => deletePhoto(date, key)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 10, padding: 0 }}>✕</button>
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div style={{ height: 80, background: 'var(--bg)', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--border)', border: '1px dashed var(--border)' }}>
-                          {label}
-                        </div>
-                      )}
+                        ) : (
+                          <div style={{ height: 80, background: 'var(--bg)', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--border)', border: '1px dashed var(--border)' }}>
+                            {label}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {savedAnalysis && (
+                  <details style={{ marginTop: 4 }}>
+                    <summary style={{ fontSize: 10, color: 'var(--sage)', cursor: 'pointer', fontWeight: 700 }}>🤖 AI-analyse bekijken</summary>
+                    <div style={{ marginTop: 6, background: 'var(--sage-l)', borderRadius: 8, padding: '10px 12px', fontSize: 11, lineHeight: 1.7, color: 'var(--text)', borderLeft: '3px solid var(--sage)', whiteSpace: 'pre-wrap' }}>
+                      {savedAnalysis}
                     </div>
-                  );
-                })}
+                  </details>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -231,7 +260,8 @@ export default function Coach({ logs }) {
           </div>
           <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>
             {latestWeight ? `${latestWeight} kg · ` : ''}
-            {totalDays} dag{totalDays !== 1 ? 'en' : ''} ingelogd
+            {totalDays} dag{totalDays !== 1 ? 'en' : ''} ingelogd ·{' '}
+            {measurements.length} meting{measurements.length !== 1 ? 'en' : ''}
           </div>
 
           {needsCheck ? (
@@ -284,10 +314,10 @@ export default function Coach({ logs }) {
         </div>
         <div className="card-body">
           <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.6 }}>
-            Maak elke week een foto op hetzelfde tijdstip, in dezelfde ruimte en houding.
-            De AI geeft je direct terugkoppeling.
+            Maak elke week een foto op hetzelfde tijdstip en in dezelfde houding.
+            De AI analyseert vetdistributie, spiertonus en progressie — en geeft concrete trainings- en voedingsadviezen op basis van jouw volledige data.
           </div>
-          <PhotoCapture logs={logs} />
+          <PhotoCapture logs={logs} measurements={measurements} />
         </div>
       </div>
 
