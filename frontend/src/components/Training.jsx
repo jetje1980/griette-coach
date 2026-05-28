@@ -74,7 +74,8 @@ export default function Training({ log, saveField, currentDate, showFlash }) {
                   <span className="run-name">
                     {isDone && '✓ '}
                     {isCurrent && '▶ '}
-                    {run.title}
+                    {run.description}
+                    {run.milestone && ' 🏁'}
                     {run.nr === USER.currentRun && (
                       <span style={{ marginLeft: 6, fontSize: 9, background: 'var(--rust)', color: 'white', padding: '1px 5px', borderRadius: 99 }}>VOLGENDE</span>
                     )}
@@ -83,10 +84,11 @@ export default function Training({ log, saveField, currentDate, showFlash }) {
                 </div>
                 {isOpen && (
                   <div className="run-detail open">
-                    <strong>Week {run.week} · {run.runMin}min lopen + {run.walkMin}min wandelen</strong>
+                    <strong>Week {run.week}</strong>
                     <br />{run.description}
+                    {run.intervals && <><br /><em style={{ color: 'var(--rust)' }}>⚡ {run.intervals} (iets boven zone B mag)</em></>}
                     <br />
-                    <span style={{ fontSize: 10, color: 'var(--rust)' }}>Zone B: 106–132 bpm</span>
+                    <span style={{ fontSize: 10, color: 'var(--rust)' }}>Zone B: 106–132 bpm · hartslag leidend</span>
                   </div>
                 )}
               </div>
