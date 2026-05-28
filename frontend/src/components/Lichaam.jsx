@@ -20,6 +20,7 @@ export default function Lichaam({ log, saveField, currentDate, logs }) {
   const [measurements, setMeasurements] = useState([]);
   const [waist, setWaist] = useState('');
   const [hip, setHip] = useState('');
+  const [chest, setChest] = useState('');
   const [arm, setArm] = useState('');
   const [thigh, setThigh] = useState('');
   const [saved, setSaved] = useState(false);
@@ -32,10 +33,11 @@ export default function Lichaam({ log, saveField, currentDate, logs }) {
   }, []);
 
   const saveMeasurements = async () => {
-    if (!waist && !hip && !arm && !thigh) return;
+    if (!waist && !hip && !chest && !arm && !thigh) return;
     await store.saveMeasurements(currentDate, {
       waist: parseFloat(waist) || null,
       hip: parseFloat(hip) || null,
+      chest: parseFloat(chest) || null,
       arm: parseFloat(arm) || null,
       thigh: parseFloat(thigh) || null,
       photo_reminder: isWeeklyPrompt ? 1 : 0,
@@ -73,7 +75,7 @@ export default function Lichaam({ log, saveField, currentDate, logs }) {
         </div>
         <div className="card-body">
           <div className="measure-grid">
-            {[['waist', setWaist, waist, 'Taille'], ['hip', setHip, hip, 'Heup'], ['arm', setArm, arm, 'Arm'], ['thigh', setThigh, thigh, 'Dij']].map(([id, setter, val, label]) => (
+            {[['waist', setWaist, waist, 'Taille'], ['hip', setHip, hip, 'Heup'], ['chest', setChest, chest, 'Borst'], ['arm', setArm, arm, 'Arm'], ['thigh', setThigh, thigh, 'Dij']].map(([id, setter, val, label]) => (
               <div key={id} className="measure-field">
                 <label>{label} (cm)</label>
                 <input
@@ -106,15 +108,15 @@ export default function Lichaam({ log, saveField, currentDate, logs }) {
             <div className="card-title">📈 Maten geschiedenis</div>
           </div>
           <div className="card-body">
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto repeat(4,1fr)', gap: '4px 8px', fontSize: 11 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto repeat(5,1fr)', gap: '4px 8px', fontSize: 11 }}>
               <div style={{ color: 'var(--muted)', fontWeight: 700 }}>Datum</div>
-              {['Taille','Heup','Arm','Dij'].map(l => (
+              {['Taille','Heup','Borst','Arm','Dij'].map(l => (
                 <div key={l} style={{ color: 'var(--muted)', fontWeight: 700, textAlign: 'center' }}>{l}</div>
               ))}
               {measurements.slice(0, 8).map(m => (
                 <React.Fragment key={m.date}>
                   <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{m.date.slice(5)}</div>
-                  {[m.waist, m.hip, m.arm, m.thigh].map((v, i) => (
+                  {[m.waist, m.hip, m.chest, m.arm, m.thigh].map((v, i) => (
                     <div key={i} style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                       {v ?? '—'}
                     </div>

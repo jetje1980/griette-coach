@@ -5,13 +5,21 @@ import { USER } from '../config';
 import { api } from '../api';
 import { store } from '../store';
 
-export default function Training({ log, saveField, currentDate, showFlash }) {
+export default function Training({ log, saveField, saveFields, currentDate, showFlash, logs }) {
   const [openRun, setOpenRun] = useState(null);
   const [openEx, setOpenEx] = useState({});
   const [stravaStatus, setStravaStatus] = useState(null);
   const [activities, setActivities] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
+
+  const [swimDur, setSwimDur] = useState('');
+  const [swimDist, setSwimDist] = useState('');
+  const [swimHr, setSwimHr] = useState('');
+
+  const [bikeDur, setBikeDur] = useState('');
+  const [bikeDist, setBikeDist] = useState('');
+  const [bikeHr, setBikeHr] = useState('');
 
   const coreWeek = coreWeekFromDate(USER.startDate);
   const { phase, exercises } = getCoreForWeek(Math.min(10, Math.max(1, coreWeek)));
@@ -54,6 +62,45 @@ export default function Training({ log, saveField, currentDate, showFlash }) {
   };
 
   const coreCheckboxKey = `core_done`;
+
+  async function saveSwim() {
+    if (!swimDur) return;
+    await saveFields({
+      swim_done: 1,
+      swim_duration: parseFloat(swimDur) || null,
+      swim_distance: parseFloat(swimDist) || null,
+      swim_hr: parseFloat(swimHr) || null,
+    });
+    setSwimDur(''); setSwimDist(''); setSwimHr('');
+    showFlash('🏊', 'Zwemsessie opgeslagen!');
+  }
+
+  async function saveBike() {
+    if (!bikeDur) return;
+    await saveFields({
+      bike_done: 1,
+      bike_duration: parseFloat(bikeDur) || null,
+      bike_distance: parseFloat(bikeDist) || null,
+      bike_hr: parseFloat(bikeHr) || null,
+    });
+    setBikeDur(''); setBikeDist(''); setBikeHr('');
+    showFlash('🚴', 'Fietssessie opgeslagen!');
+  }
+
+  function hrBadge(hr) {
+    if (!hr) return null;
+    const inZone = hr >= USER.hrZone.low && hr <= USER.hrZone.high;
+    return (
+      <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: inZone ? 'var(--sage-l)' : 'var(--rust-l)', color: inZone ? 'var(--sage)' : 'var(--rust)', fontWeight: 700 }}>
+        ♥ {hr} {inZone ? '✓ zone B' : '⚡ boven'}
+      </span>
+    );
+  }
+
+  const recentSessions = (type) => Object.values(logs || {})
+    .filter(l => l[`${type}_done`] && l.date <= currentDate)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
 
   return (
     <div className="pane">
@@ -141,6 +188,96 @@ export default function Training({ log, saveField, currentDate, showFlash }) {
                       <div style={{ fontSize: 9, textAlign: 'right' }}>{a.hr_in_zone ? '✓ zone B' : '⚡ boven'}</div>
                     </div>
                   )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Zwemmen */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#3B82F6' }} />
+          <div className="card-title">🏊 Zwemmen</div>
+          {log?.swim_done && <span style={{ fontSize: 9, background: 'var(--sage-l)', color: 'var(--sage)', padding: '1px 6px', borderRadius: 99 }}>✓ vandaag</span>}
+        </div>
+        <div className="card-body">
+          <div className="measure-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+            <div className="measure-field">
+              <label>Duur (min)</label>
+              <input type="number" placeholder="—" value={swimDur} onChange={e => setSwimDur(e.target.value)} />
+            </div>
+            <div className="measure-field">
+              <label>Afstand (m)</label>
+              <input type="number" placeholder="—" value={swimDist} onChange={e => setSwimDist(e.target.value)} />
+            </div>
+            <div className="measure-field">
+              <label>Gem. HS</label>
+              <input type="number" placeholder="—" value={swimHr} onChange={e => setSwimHr(e.target.value)} />
+            </div>
+          </div>
+          <button className="btn btn-ghost btn-full" style={{ borderColor: '#3B82F6', color: '#3B82F6' }} onClick={saveSwim}>
+            💾 Sla zwemsessie op
+          </button>
+          {recentSessions('swim').length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div className="section-title">Recente zwemsessies</div>
+              {recentSessions('swim').map(l => (
+                <div key={l.date} className="strava-item">
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{l.date}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>
+                      {l.swim_duration ? `${l.swim_duration} min` : ''}
+                      {l.swim_distance ? ` · ${l.swim_distance} m` : ''}
+                    </div>
+                  </div>
+                  {hrBadge(l.swim_hr)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Wielrennen */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#F59E0B' }} />
+          <div className="card-title">🚴 Wielrennen</div>
+          {log?.bike_done && <span style={{ fontSize: 9, background: 'var(--sage-l)', color: 'var(--sage)', padding: '1px 6px', borderRadius: 99 }}>✓ vandaag</span>}
+        </div>
+        <div className="card-body">
+          <div className="measure-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+            <div className="measure-field">
+              <label>Duur (min)</label>
+              <input type="number" placeholder="—" value={bikeDur} onChange={e => setBikeDur(e.target.value)} />
+            </div>
+            <div className="measure-field">
+              <label>Afstand (km)</label>
+              <input type="number" step="0.1" placeholder="—" value={bikeDist} onChange={e => setBikeDist(e.target.value)} />
+            </div>
+            <div className="measure-field">
+              <label>Gem. HS</label>
+              <input type="number" placeholder="—" value={bikeHr} onChange={e => setBikeHr(e.target.value)} />
+            </div>
+          </div>
+          <button className="btn btn-ghost btn-full" style={{ borderColor: '#F59E0B', color: '#B45309' }} onClick={saveBike}>
+            💾 Sla fietssessie op
+          </button>
+          {recentSessions('bike').length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div className="section-title">Recente fietssessies</div>
+              {recentSessions('bike').map(l => (
+                <div key={l.date} className="strava-item">
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{l.date}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>
+                      {l.bike_duration ? `${l.bike_duration} min` : ''}
+                      {l.bike_distance ? ` · ${l.bike_distance} km` : ''}
+                    </div>
+                  </div>
+                  {hrBadge(l.bike_hr)}
                 </div>
               ))}
             </div>
