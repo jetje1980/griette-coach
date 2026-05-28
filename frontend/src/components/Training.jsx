@@ -102,8 +102,30 @@ export default function Training({ log, saveField, saveFields, currentDate, show
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5);
 
+  const aiPlan = localStorage.getItem('gc_training_plan');
+  const aiPlanDate = localStorage.getItem('gc_training_plan_date');
+
   return (
     <div className="pane">
+      {/* AI Weekplan — bovenaan als het beschikbaar is */}
+      {aiPlan && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-accent" style={{ background: 'var(--sage)' }} />
+            <div className="card-title">📅 AI Weekplan</div>
+            {aiPlanDate && <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{aiPlanDate}</div>}
+          </div>
+          <div className="card-body">
+            <div style={{ fontSize: 12, lineHeight: 1.9, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>
+              {aiPlan}
+            </div>
+            <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Bijgewerkt na elke coach-check en foto-analyse. Hardloopschema hieronder.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hardloopschema */}
       <div className="card">
         <div className="card-header">

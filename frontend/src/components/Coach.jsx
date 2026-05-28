@@ -5,6 +5,8 @@ import { USER } from '../config';
 
 const REPORT_KEY = 'gc_coach_report';
 const REPORT_DATE_KEY = 'gc_coach_report_date';
+const PLAN_KEY = 'gc_training_plan';
+const PLAN_DATE_KEY = 'gc_training_plan_date';
 const ANALYSIS_PREFIX = 'gc_photo_analysis_';
 const CHECK_DAYS = 3;
 
@@ -90,6 +92,14 @@ function PhotoCapture({ logs, measurements }) {
       const text = await ai.analyzePhoto(photoList, dayNum, currentWeight, logs, measurements, previousAnalyses);
       localStorage.setItem(`${ANALYSIS_PREFIX}${today}`, text);
       setAnalysis(text);
+      // Weekplan bijwerken met nieuwe foto-inzichten
+      const coachReport = localStorage.getItem('gc_coach_report') ?? '';
+      // Fire-and-forget — geen await, gebruiker hoeft niet te wachten
+      ai.weeklyTrainingPlan(logs, measurements, coachReport, text).then(planText => {
+        const d = new Date().toISOString().slice(0, 10);
+        localStorage.setItem('gc_training_plan', planText);
+        localStorage.setItem('gc_training_plan_date', d);
+      }).catch(() => {});
     } catch (err) {
       setAnalyzeError(err.message);
     } finally {
@@ -214,7 +224,10 @@ function PhotoCapture({ logs, measurements }) {
 export default function Coach({ logs }) {
   const [report, setReport] = useState(() => localStorage.getItem(REPORT_KEY) || null);
   const [reportDate, setReportDate] = useState(() => localStorage.getItem(REPORT_DATE_KEY) || null);
+  const [plan, setPlan] = useState(() => localStorage.getItem(PLAN_KEY) || null);
+  const [planDate, setPlanDate] = useState(() => localStorage.getItem(PLAN_DATE_KEY) || null);
   const [loading, setLoading] = useState(false);
+  const [planLoading, setPlanLoading] = useState(false);
   const [error, setError] = useState(null);
   const [measurements, setMeasurements] = useState([]);
 
@@ -224,6 +237,22 @@ export default function Coach({ logs }) {
   useEffect(() => {
     import('../store').then(({ store }) => store.getMeasurements().then(setMeasurements).catch(() => {}));
   }, []);
+
+  async function generatePlan(coachText, photoText) {
+    setPlanLoading(true);
+    try {
+      const planText = await ai.weeklyTrainingPlan(logs, measurements, coachText, photoText);
+      const today = new Date().toISOString().slice(0, 10);
+      localStorage.setItem(PLAN_KEY, planText);
+      localStorage.setItem(PLAN_DATE_KEY, today);
+      setPlan(planText);
+      setPlanDate(today);
+    } catch {
+      // weekplan is secundair — stil falen
+    } finally {
+      setPlanLoading(false);
+    }
+  }
 
   async function runCheck() {
     if (!ai.hasKey()) {
@@ -239,6 +268,9 @@ export default function Coach({ logs }) {
       localStorage.setItem(REPORT_DATE_KEY, today);
       setReport(text);
       setReportDate(today);
+      // Direct daarna weekplan bijwerken
+      const latestPhotoAnalysis = loadSavedAnalyses()[0]?.text ?? '';
+      generatePlan(text, latestPhotoAnalysis);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -303,6 +335,28 @@ export default function Coach({ logs }) {
               {report}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* AI Weekplan */}
+      {(plan || planLoading) && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-accent" style={{ background: 'var(--sage)' }} />
+            <div className="card-title">📅 AI Weekplan</div>
+            {planDate && !planLoading && <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{planDate}</div>}
+            {planLoading && <div style={{ fontSize: 10, color: 'var(--muted)' }}>⏳ bijwerken…</div>}
+          </div>
+          {plan && !planLoading && (
+            <div className="card-body">
+              <div style={{ fontSize: 12, lineHeight: 1.9, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>
+                {plan}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)', lineHeight: 1.5 }}>
+                ↑ Dit plan staat ook bovenin de Training-tab. Wordt bijgewerkt na elke coach-check en foto-analyse.
+              </div>
+            </div>
+          )}
         </div>
       )}
 

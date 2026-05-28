@@ -162,4 +162,55 @@ Op basis van vetdistributie en Mounjaro: waar liggen de kansen? Eiwitdoelen, tim
 
     return callClaude([{ role: 'user', content }], 1000);
   },
+
+  // Genereert een concreet weekplan op basis van alle beschikbare data
+  // coachReport = meest recente coach-analyse tekst
+  // photoInsight = meest recente foto-analyse tekst (optioneel)
+  async weeklyTrainingPlan(logs, measurements, coachReport = '', photoInsight = '') {
+    const context = buildContext(logs, measurements);
+
+    const allLogs = Object.values(logs).sort((a, b) => b.date.localeCompare(a.date));
+    const recent7 = allLogs.slice(0, 7);
+    const avgEnergy = (() => {
+      const v = recent7.filter(l => l.energy != null);
+      return v.length ? (v.reduce((s, l) => s + l.energy, 0) / v.length).toFixed(1) : null;
+    })();
+
+    const lastRunNr = (() => {
+      // Lees currentRun uit config — hardcoded 10 als fallback
+      return parseInt(localStorage.getItem('gc_current_run') || '10', 10);
+    })();
+
+    const prompt = `${context}
+
+MEEST RECENTE COACH-ANALYSE:
+${coachReport ? coachReport.slice(0, 500) : 'nog geen coach-check'}
+
+${photoInsight ? `MEEST RECENTE FOTO-ANALYSE:\n${photoInsight.slice(0, 400)}` : ''}
+
+HUIDIGE LOOPTRAINING: schema nr ${lastRunNr} van 35
+GEMIDDELDE ENERGIE AFGELOPEN WEEK: ${avgEnergy ?? '?'}/3
+
+Maak een CONCREET WEEKPLAN voor de komende 7 dagen als personal trainer.
+Pas het aan op haar actuele staat: long covid, energie, wat de foto en coach-analyse laten zien.
+
+Antwoord in exact dit formaat (geen extra tekst er omheen):
+
+WEEKPLAN:
+Ma: [activiteit — bijv. Hardlopen T${lastRunNr} zone B / Zwemmen 25min / Rust / Core 15min]
+Di: [activiteit]
+Wo: [activiteit]
+Do: [activiteit]
+Vr: [activiteit]
+Za: [activiteit]
+Zo: [activiteit]
+
+LOOPSCHEMA: [blijf op T${lastRunNr} / ga naar T${Math.min(35, lastRunNr + 1)} / ga terug naar T${Math.max(1, lastRunNr - 1)} — met korte reden]
+FOCUS DEZE WEEK: [1 zin: wat is de trainingsthema]
+LET OP: [1 concrete waarschuwing of aandachtspunt voor haar lichaam]
+
+Schrijf in het Nederlands. Wees specifiek en realistisch — niet ambitieuzer dan haar herstelstatus toelaat.`;
+
+    return callClaude([{ role: 'user', content: prompt }], 600);
+  },
 };
