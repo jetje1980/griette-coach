@@ -12,53 +12,64 @@ function daysSince(dateStr) {
   return Math.floor((Date.now() - new Date(dateStr)) / 86400000);
 }
 
-function PhotoCapture({ logs, onPhotoSaved }) {
-  const [photos, setPhotos] = useState([]);
+const PHOTO_TYPES = [
+  { key: 'voor', label: 'Voorkant' },
+  { key: 'zij', label: 'Zijkant' },
+  { key: 'achter', label: 'Achterkant' },
+];
+
+function PhotoCapture({ logs }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [sessions, setSessions] = useState([]);
+  const [todayViews, setTodayViews] = useState({});
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [analyzeError, setAnalyzeError] = useState(null);
-  const [previewPhoto, setPreviewPhoto] = useState(null);
 
-  useEffect(() => {
-    photoStore.getAll().then(setPhotos).catch(() => {});
-  }, []);
+  useEffect(() => { loadPhotos(); }, []);
 
-  async function handleFile(e) {
+  async function loadPhotos() {
+    const all = await photoStore.getAll().catch(() => []);
+    setSessions(all);
+    const todaySession = all.find(s => s.date === today);
+    setTodayViews(todaySession?.views ?? {});
+  }
+
+  async function handleFile(type, e) {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      const dataUrl = ev.target.result;
-      const base64 = dataUrl.split(',')[1];
+      const base64 = ev.target.result.split(',')[1];
       const mimeType = file.type || 'image/jpeg';
-      const date = new Date().toISOString().slice(0, 10);
-
-      await photoStore.save(date, base64, mimeType);
-      const updated = await photoStore.getAll();
-      setPhotos(updated);
-      setPreviewPhoto({ base64, mimeType, date });
-      onPhotoSaved?.();
+      await photoStore.save(today, type, base64, mimeType);
+      await loadPhotos();
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   }
 
-  async function analyzePhoto(photo) {
+  async function deletePhoto(date, type) {
+    await photoStore.delete(date, type);
+    await loadPhotos();
+    if (date === today) setAnalysis(null);
+  }
+
+  async function analyzeToday() {
     if (!ai.hasKey()) {
       setAnalyzeError('Stel eerst je API-sleutel in via ⚙️ Instellingen');
       return;
     }
+    const photoList = Object.values(todayViews);
+    if (photoList.length === 0) return;
     setAnalyzing(true);
     setAnalysis(null);
     setAnalyzeError(null);
     try {
       const weights = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
       const currentWeight = weights[0]?.weight;
-      const start = new Date(USER.startDate);
-      const now = new Date(photo.date);
-      const dayNum = Math.max(1, Math.floor((now - start) / 86400000) + 1);
-
+      const dayNum = Math.max(1, Math.floor((new Date(today) - new Date(USER.startDate)) / 86400000) + 1);
+      const photo = photoList[0];
       const text = await ai.analyzePhoto(photo.base64, photo.mimeType, dayNum, currentWeight, logs);
       setAnalysis(text);
     } catch (err) {
@@ -68,40 +79,54 @@ function PhotoCapture({ logs, onPhotoSaved }) {
     }
   }
 
-  async function deletePhoto(date) {
-    await photoStore.delete(date);
-    setPhotos(await photoStore.getAll());
-    if (previewPhoto?.date === date) setPreviewPhoto(null);
-  }
+  const hasTodayPhotos = Object.keys(todayViews).length > 0;
+  const pastSessions = sessions.filter(s => s.date !== today);
 
   return (
     <div>
-      {/* Camera knop */}
-      <label style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-        padding: '12px', background: 'var(--rust-l)', border: '1.5px dashed var(--rust)',
-        borderRadius: 11, cursor: 'pointer', marginBottom: 12,
-        fontSize: 13, fontWeight: 700, color: 'var(--rust)',
-      }}>
-        📸 Foto maken of uploaden
-        <input type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: 'none' }} />
-      </label>
+      <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', marginBottom: 8 }}>Vandaag — {today}</div>
 
-      {/* Preview van net genomen foto */}
-      {previewPhoto && (
-        <div style={{ marginBottom: 12 }}>
-          <img
-            src={`data:${previewPhoto.mimeType};base64,${previewPhoto.base64}`}
-            alt="progressie"
-            style={{ width: '100%', borderRadius: 11, objectFit: 'cover', maxHeight: 220 }}
-          />
-          <button
-            className="btn btn-rust btn-full"
-            style={{ marginTop: 8 }}
-            onClick={() => analyzePhoto(previewPhoto)}
-            disabled={analyzing}
-          >
-            {analyzing ? '⏳ Analyseren…' : '🤖 Analyseer met AI'}
+      {/* 3 slots voor vandaag */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+        {PHOTO_TYPES.map(({ key, label }) => {
+          const photo = todayViews[key];
+          return (
+            <div key={key}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textAlign: 'center', marginBottom: 4 }}>{label}</div>
+              {photo ? (
+                <div style={{ position: 'relative' }}>
+                  <img
+                    src={`data:${photo.mimeType};base64,${photo.base64}`}
+                    alt={label}
+                    style={{ width: '100%', borderRadius: 9, objectFit: 'cover', height: 100 }}
+                  />
+                  <button
+                    onClick={() => deletePhoto(today, key)}
+                    style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(42,37,32,0.65)', border: 'none', color: 'white', borderRadius: '50%', width: 18, height: 18, fontSize: 9, cursor: 'pointer', padding: 0, lineHeight: '18px', textAlign: 'center' }}
+                  >✕</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 4px', background: 'var(--rust-l)', border: '1.5px dashed var(--rust)', borderRadius: 9, cursor: 'pointer', fontSize: 14 }} title="Camera">
+                    📷
+                    <input type="file" accept="image/*" capture="environment" onChange={e => handleFile(key, e)} style={{ display: 'none' }} />
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 4px', background: 'var(--sage-l)', border: '1.5px dashed var(--sage)', borderRadius: 9, cursor: 'pointer', fontSize: 14 }} title="Galerij">
+                    🖼️
+                    <input type="file" accept="image/*" onChange={e => handleFile(key, e)} style={{ display: 'none' }} />
+                  </label>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Analyseer knop */}
+      {hasTodayPhotos && (
+        <div style={{ marginBottom: 16 }}>
+          <button className="btn btn-rust btn-full" onClick={analyzeToday} disabled={analyzing}>
+            {analyzing ? '⏳ Analyseren…' : "🤖 Analyseer foto's met AI"}
           </button>
           {analyzeError && (
             <div style={{ marginTop: 8, fontSize: 11, color: 'var(--alert)', background: 'var(--alert-l)', padding: '8px 10px', borderRadius: 8 }}>
@@ -116,26 +141,41 @@ function PhotoCapture({ logs, onPhotoSaved }) {
         </div>
       )}
 
-      {/* Foto galerij */}
-      {photos.length > 0 && (
+      {/* Historische sessies */}
+      {pastSessions.length > 0 && (
         <div>
-          <div className="section-title">Jouw progressiefoto's</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {photos.map(p => (
-              <div key={p.date} style={{ position: 'relative' }}>
-                <img
-                  src={`data:${p.mimeType};base64,${p.base64}`}
-                  alt={p.date}
-                  style={{ width: '100%', borderRadius: 9, objectFit: 'cover', height: 120, cursor: 'pointer' }}
-                  onClick={() => { setPreviewPhoto(p); setAnalysis(null); }}
-                />
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(42,37,32,0.6)', borderRadius: '0 0 9px 9px', padding: '4px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 9, color: 'white', fontFamily: 'var(--font-mono)' }}>{p.date}</span>
-                  <button onClick={() => deletePhoto(p.date)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 12 }}>✕</button>
-                </div>
+          <div className="section-title">Eerdere sessies</div>
+          {pastSessions.map(({ date, views }) => (
+            <div key={date} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', marginBottom: 5 }}>{date}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 }}>
+                {PHOTO_TYPES.map(({ key, label }) => {
+                  const photo = views[key];
+                  return (
+                    <div key={key}>
+                      {photo ? (
+                        <div style={{ position: 'relative' }}>
+                          <img
+                            src={`data:${photo.mimeType};base64,${photo.base64}`}
+                            alt={`${date} ${label}`}
+                            style={{ width: '100%', borderRadius: 7, objectFit: 'cover', height: 80 }}
+                          />
+                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(42,37,32,0.6)', borderRadius: '0 0 7px 7px', padding: '2px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 8, color: 'white' }}>{label}</span>
+                            <button onClick={() => deletePhoto(date, key)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 10, padding: 0 }}>✕</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ height: 80, background: 'var(--bg)', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--border)', border: '1px dashed var(--border)' }}>
+                          {label}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
