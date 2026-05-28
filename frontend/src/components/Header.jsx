@@ -9,7 +9,7 @@ function formatDate(dateStr) {
   return `${NL_DAYS[d.getDay()]} ${d.getDate()} ${NL_MONTHS[d.getMonth()]}`;
 }
 
-export default function Header({ currentDate, log, streak, latestWeight, progressPct, quote, isToday, onShiftDay, dayNum }) {
+export default function Header({ currentDate, log, streak, latestWeight, progressPct, quote, isToday, onShiftDay, dayNum, onSettings }) {
   const today = new Date().toISOString().slice(0, 10);
   const bpColor = (() => {
     if (!log?.bp_sys) return null;
@@ -26,6 +26,7 @@ export default function Header({ currentDate, log, streak, latestWeight, progres
           <div className="header-date">{formatDate(currentDate)}</div>
         </div>
         <div className="header-streak">
+          <button onClick={onSettings} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, color: '#FBF8F2', fontSize: 14, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4, marginLeft: 'auto' }}>⚙️</button>
           <div className="streak-count">🔥 {streak}</div>
           <div className="streak-label">streak</div>
         </div>

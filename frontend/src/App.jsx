@@ -13,9 +13,12 @@ import Eten from './components/Eten';
 import Lichaam from './components/Lichaam';
 import Patronen from './components/Patronen';
 import Badges from './components/Badges';
+import Coach from './components/Coach';
+import Settings from './components/Settings';
+import Onboarding from './components/Onboarding';
 import StravaCallback from './components/StravaCallback';
 
-const TABS = ['Vandaag', 'Kalender', 'Training', 'Eten', 'Lichaam', 'Patronen', '🏅'];
+const TABS = ['Vandaag', 'Kalender', 'Training', 'Eten', 'Lichaam', 'Trends', 'Coach', '🏅'];
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -34,6 +37,10 @@ export default function App() {
   const [logs, setLogs] = useState({});
   const [streak, setStreak] = useState(0);
   const [flash, setFlash] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(
+    () => !!localStorage.getItem('gc_onboarding_done')
+  );
   const flashTimer = useRef(null);
 
   const dayNum = dayNumber(currentDate);
@@ -106,9 +113,7 @@ export default function App() {
     return sorted[0]?.weight || null;
   })();
 
-  const sharedProps = { log, saveField, saveFields, currentDate, logs, dayNum, showFlash };
-
-  // Handle Strava OAuth callback
+  // Strava OAuth callback
   if (window.location.pathname.endsWith('/strava/callback')) {
     return (
       <StravaCallback onDone={(ok, msg) => {
@@ -118,12 +123,21 @@ export default function App() {
     );
   }
 
+  // Onboarding
+  if (!onboardingDone) {
+    return <Onboarding onDone={() => { setOnboardingDone(true); loadLogs(); }} />;
+  }
+
+  const sharedProps = { log, saveField, saveFields, currentDate, logs, dayNum, showFlash };
+
   return (
     <>
       <div className={`flash ${flash ? 'visible' : ''}`}>
         <span className="flash-icon">{flash?.icon}</span>
         <span className="flash-text">{flash?.text}</span>
       </div>
+
+      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
 
       <Header
         currentDate={currentDate}
@@ -135,6 +149,7 @@ export default function App() {
         isToday={isToday}
         onShiftDay={shiftDay}
         dayNum={dayNum}
+        onSettings={() => setShowSettings(true)}
       />
 
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
@@ -146,7 +161,8 @@ export default function App() {
         {tab === 3 && <Eten tip={tip} dayNum={dayNum} />}
         {tab === 4 && <Lichaam {...sharedProps} logs={logs} />}
         {tab === 5 && <Patronen logs={logs} />}
-        {tab === 6 && <Badges logs={logs} streak={streak} />}
+        {tab === 6 && <Coach logs={logs} />}
+        {tab === 7 && <Badges logs={logs} streak={streak} />}
       </div>
     </>
   );
