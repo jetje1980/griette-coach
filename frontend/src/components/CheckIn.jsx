@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { HABITS, MEDS, BP } from '../config';
 
 const SYMPTOMS = [
-  { id: 'symptom_brainfog',   label: 'Hersenmist',   emoji: '🌫️' },
-  { id: 'symptom_exhaustion', label: 'Zware moeheid', emoji: '🪫' },
-  { id: 'symptom_breathless', label: 'Kortademig',   emoji: '💨' },
-  { id: 'symptom_pain',       label: 'Spier/gewricht',emoji: '🦴' },
-  { id: 'symptom_headache',   label: 'Hoofdpijn',    emoji: '🤕' },
-  { id: 'symptom_pem',        label: 'PEM-crash',    emoji: '⚡🛑' },
+  { id: 'symptom_brainfog',   label: 'Hersenmist',    emoji: '🌫️' },
+  { id: 'symptom_exhaustion', label: 'Zware moeheid', emoji: '🪫'  },
+  { id: 'symptom_breathless', label: 'Kortademig',    emoji: '💨'  },
+  { id: 'symptom_pain',       label: 'Spier/gewricht',emoji: '🦴'  },
+  { id: 'symptom_headache',   label: 'Hoofdpijn',     emoji: '🤕'  },
+  { id: 'symptom_hayfever',   label: 'Hooikoorts',    emoji: '🌿'  },
+  { id: 'symptom_overdrive',  label: 'Overdrive/hyper',emoji: '🔴🧠'},
+  { id: 'symptom_pem',        label: 'PEM-crash',     emoji: '⚡🛑' },
 ];
 
 function BpAlert({ sys, dia }) {
@@ -61,6 +63,8 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
   const [steps, setSteps] = useState('');
   const [hrRest, setHrRest] = useState('');
   const [sleepHours, setSleepHours] = useState('');
+  const [batteryStart, setBatteryStart] = useState('');
+  const [batteryEnd, setBatteryEnd] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
   const [noteTimer, setNoteTimer] = useState(null);
 
@@ -72,6 +76,8 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
       setSteps(log.steps ?? '');
       setHrRest(log.hr_rest ?? '');
       setSleepHours(log.sleep_hours ?? '');
+      setBatteryStart(log.battery_start ?? '');
+      setBatteryEnd(log.battery_end ?? '');
     }
   }, [log, currentDate]);
 
@@ -107,6 +113,27 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
     const v = parseInt(hrRest);
     if (!isNaN(v) && v > 30 && v < 200) saveField('hr_rest', v);
   };
+
+  const saveBattery = (field, raw) => {
+    const v = parseInt(raw);
+    if (!isNaN(v) && v >= 0 && v <= 100) saveField(field, v);
+  };
+
+  function batteryColor(v) {
+    if (v == null) return 'var(--border)';
+    if (v >= 70) return 'var(--sage)';
+    if (v >= 40) return 'var(--gold)';
+    return 'var(--alert)';
+  }
+
+  function batteryLabel(v) {
+    if (v == null) return '';
+    if (v >= 80) return 'uitstekend';
+    if (v >= 60) return 'goed';
+    if (v >= 40) return 'matig';
+    if (v >= 20) return 'laag';
+    return 'uitgeput';
+  }
 
   const saveSleepHours = (v) => {
     saveField('sleep_hours', parseFloat(v));
@@ -226,6 +253,45 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
             <div className="saved-note">
               ✓ {log.hr_rest} bpm
               {log.hr_rest > 75 && <span style={{ color: 'var(--gold)', marginLeft: 6 }}>⚠️ verhoogd — neem extra rust</span>}
+            </div>
+          )}
+
+          {/* Body battery */}
+          <div className="scale-label" style={{ marginTop: 12 }}>🔋 BODY BATTERY (Garmin)</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
+            {[['Ochtend', 'battery_start', batteryStart, setBatteryStart], ['Avond', 'battery_end', batteryEnd, setBatteryEnd]].map(([label, field, val, setter]) => (
+              <div key={field}>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>{label}</div>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    min="0" max="100"
+                    placeholder="0–100"
+                    value={val}
+                    onChange={e => setter(e.target.value)}
+                    onBlur={() => saveBattery(field, val)}
+                    onKeyDown={e => e.key === 'Enter' && saveBattery(field, val)}
+                    style={{ flex: 1, textAlign: 'center' }}
+                  />
+                </div>
+                {log?.[field] != null && (
+                  <div style={{ marginTop: 4 }}>
+                    <div style={{ height: 5, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${log[field]}%`, background: batteryColor(log[field]), borderRadius: 99 }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: batteryColor(log[field]), marginTop: 2, fontWeight: 700 }}>
+                      {log[field]}% — {batteryLabel(log[field])}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {log?.battery_start != null && log?.battery_end != null && (
+            <div className="saved-note" style={{ color: log.battery_end < log.battery_start ? 'var(--alert)' : 'var(--sage)' }}>
+              {log.battery_end < log.battery_start
+                ? `⚠️ Battery daalde ${log.battery_start - log.battery_end}% vandaag — herstel prioriteit`
+                : `✓ Battery +${log.battery_end - log.battery_start}% — goed herstel vandaag`}
             </div>
           )}
         </div>

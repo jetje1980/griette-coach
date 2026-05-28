@@ -72,8 +72,8 @@ function buildContext(logs, measurements) {
   })();
 
   // Symptomen: tel hoe vaak elk symptoom voorkwam
-  const symptomIds = ['symptom_brainfog', 'symptom_exhaustion', 'symptom_breathless', 'symptom_pain', 'symptom_headache', 'symptom_pem'];
-  const symptomLabels = { symptom_brainfog: 'hersenmist', symptom_exhaustion: 'zware moeheid', symptom_breathless: 'kortademig', symptom_pain: 'spier/gewrichtspijn', symptom_headache: 'hoofdpijn', symptom_pem: 'PEM-crash' };
+  const symptomIds = ['symptom_brainfog', 'symptom_exhaustion', 'symptom_breathless', 'symptom_pain', 'symptom_headache', 'symptom_hayfever', 'symptom_overdrive', 'symptom_pem'];
+  const symptomLabels = { symptom_brainfog: 'hersenmist', symptom_exhaustion: 'zware moeheid', symptom_breathless: 'kortademig', symptom_pain: 'spier/gewrichtspijn', symptom_headache: 'hoofdpijn', symptom_hayfever: 'hooikoorts', symptom_overdrive: 'overdrive/hyper (ADHD)', symptom_pem: 'PEM-crash' };
   const symptomSummary = symptomIds
     .map(id => ({ label: symptomLabels[id], count: recent.filter(l => l[id]).length }))
     .filter(s => s.count > 0)
@@ -91,6 +91,23 @@ function buildContext(logs, measurements) {
   const measurementLines = (measurements || []).slice(0, 8).map(m =>
     `${m.date}: taille ${m.waist ?? '?'}cm, heup ${m.hip ?? '?'}cm, borst ${m.chest ?? '?'}cm, arm ${m.arm ?? '?'}cm, dij ${m.thigh ?? '?'}cm`
   );
+
+  const batteryData = recent
+    .filter(l => l.battery_start != null || l.battery_end != null)
+    .slice(0, 7)
+    .map(l => {
+      const parts = [l.date];
+      if (l.battery_start != null) parts.push(`ochtend: ${l.battery_start}%`);
+      if (l.battery_end != null) parts.push(`avond: ${l.battery_end}%`);
+      if (l.battery_start != null && l.battery_end != null) {
+        const diff = l.battery_end - l.battery_start;
+        parts.push(diff >= 0 ? `+${diff}% herstel` : `${diff}% verlies`);
+      }
+      return parts.join(' — ');
+    });
+
+  const overdriveDays = recent.filter(l => l.symptom_overdrive).length;
+  const hayfeverDays  = recent.filter(l => l.symptom_hayfever).length;
 
   return `
 GRIETTE — 46 jaar, 163 cm
@@ -115,7 +132,10 @@ Gem. energie: ${energyAvg}/3
 Gem. slaapuren: ${sleepAvg ?? '?'} uur/nacht
 Gem. stappen: ${stepsAvg ? stepsAvg.toLocaleString('nl') : '?'} per dag
 Gem. rust-HS: ${hrRestAvg ?? '?'} bpm
+${batteryData.length ? `Body battery (recent):\n${batteryData.join('\n')}` : 'Body battery: nog niet geregistreerd'}
 ${pemDays.length > 0 ? `⚠️ PEM-crashes geregistreerd op: ${pemDays.join(', ')}` : 'Geen PEM-crashes geregistreerd'}
+${overdriveDays > 0 ? `⚠️ Overdrive/ADHD-hyper: ${overdriveDays}x in laatste ${recent.length} dagen` : ''}
+${hayfeverDays > 0 ? `Hooikoorts actief: ${hayfeverDays}x (verhoogt inflammatoire belasting)` : ''}
 
 LONG COVID SYMPTOMEN (afgelopen ${recent.length} dagen):
 ${symptomSummary || 'geen klachten geregistreerd'}
