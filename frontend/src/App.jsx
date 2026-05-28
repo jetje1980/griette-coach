@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { USER } from './config';
-import { api } from './api';
+import { store } from './store';
 import { QUOTES } from './data/quotes';
 import { TIPS } from './data/tips';
 
@@ -34,7 +34,6 @@ export default function App() {
   const [logs, setLogs] = useState({});
   const [streak, setStreak] = useState(0);
   const [flash, setFlash] = useState(null);
-  const [backendOk, setBackendOk] = useState(true);
   const flashTimer = useRef(null);
 
   const dayNum = dayNumber(currentDate);
@@ -48,34 +47,25 @@ export default function App() {
   }, []);
 
   const loadLog = useCallback(async (date) => {
-    try {
-      const data = await api.getLog(date);
-      setLog(data);
-      setBackendOk(true);
-    } catch {
-      setBackendOk(false);
-      setLog(null);
-    }
+    const data = await store.getLog(date);
+    setLog(data);
   }, []);
 
   const loadLogs = useCallback(async () => {
-    try {
-      const rows = await api.getLogs();
-      const map = {};
-      for (const r of rows) map[r.date] = r;
-      setLogs(map);
-      // calculate streak
-      let s = 0;
-      for (let i = 0; i < 90; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dk = d.toISOString().slice(0, 10);
-        const l = map[dk];
-        if (l && (l.run_done || l.core_done || l.mounjaro || l.candesartan || l.adhd_meds)) s++;
-        else if (i > 0) break;
-      }
-      setStreak(s);
-    } catch {}
+    const rows = await store.getLogs();
+    const map = {};
+    for (const r of rows) map[r.date] = r;
+    setLogs(map);
+    let s = 0;
+    for (let i = 0; i < 90; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dk = d.toISOString().slice(0, 10);
+      const l = map[dk];
+      if (l && (l.run_done || l.core_done || l.mounjaro || l.candesartan || l.adhd_meds)) s++;
+      else if (i > 0) break;
+    }
+    setStreak(s);
   }, []);
 
   useEffect(() => {
@@ -84,24 +74,16 @@ export default function App() {
   }, [currentDate, loadLog, loadLogs]);
 
   const saveField = useCallback(async (field, value) => {
-    try {
-      const updated = await api.saveLog(currentDate, { [field]: value });
-      setLog(updated);
-      loadLogs();
-    } catch {
-      showFlash('❌', 'Backend niet bereikbaar');
-    }
-  }, [currentDate, loadLogs, showFlash]);
+    const updated = await store.saveLog(currentDate, { [field]: value });
+    setLog(updated);
+    loadLogs();
+  }, [currentDate, loadLogs]);
 
   const saveFields = useCallback(async (fields) => {
-    try {
-      const updated = await api.saveLog(currentDate, fields);
-      setLog(updated);
-      loadLogs();
-    } catch {
-      showFlash('❌', 'Backend niet bereikbaar');
-    }
-  }, [currentDate, loadLogs, showFlash]);
+    const updated = await store.saveLog(currentDate, fields);
+    setLog(updated);
+    loadLogs();
+  }, [currentDate, loadLogs]);
 
   const shiftDay = (delta) => {
     const d = new Date(currentDate);
@@ -112,9 +94,12 @@ export default function App() {
 
   const isToday = currentDate === today();
 
-  const progressPct = log?.weight
-    ? Math.min(100, Math.max(0, ((USER.startWeight - log.weight) / (USER.startWeight - USER.goalWeight)) * 100))
-    : 0;
+  const progressPct = (() => {
+    const sorted = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
+    const w = sorted[0]?.weight;
+    if (!w) return 0;
+    return Math.min(100, Math.max(0, ((USER.startWeight - w) / (USER.startWeight - USER.goalWeight)) * 100));
+  })();
 
   const latestWeight = (() => {
     const sorted = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
@@ -124,7 +109,7 @@ export default function App() {
   const sharedProps = { log, saveField, saveFields, currentDate, logs, dayNum, showFlash };
 
   // Handle Strava OAuth callback
-  if (window.location.pathname === '/strava/callback') {
+  if (window.location.pathname.endsWith('/strava/callback')) {
     return (
       <StravaCallback onDone={(ok, msg) => {
         if (ok) showFlash('🏃', `Strava gekoppeld: ${msg}`);
@@ -135,17 +120,10 @@ export default function App() {
 
   return (
     <>
-      {/* Flash notification */}
       <div className={`flash ${flash ? 'visible' : ''}`}>
         <span className="flash-icon">{flash?.icon}</span>
         <span className="flash-text">{flash?.text}</span>
       </div>
-
-      {!backendOk && (
-        <div style={{ background: 'var(--alert)', color: 'white', textAlign: 'center', fontSize: 11, padding: '6px 12px', fontWeight: 700 }}>
-          ⚠️ Backend niet bereikbaar — start <code>npm run dev</code>
-        </div>
-      )}
 
       <Header
         currentDate={currentDate}

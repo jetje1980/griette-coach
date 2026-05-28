@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../api';
+import { store } from '../store';
 import { USER } from '../config';
 
 function daysSinceStart(startDate) {
@@ -28,19 +28,19 @@ export default function Lichaam({ log, saveField, currentDate, logs }) {
   const isWeeklyPrompt = dayNum > 0 && dayNum % 7 === 0;
 
   useEffect(() => {
-    api.getMeasurements().then(setMeasurements).catch(() => {});
+    store.getMeasurements().then(setMeasurements).catch(() => {});
   }, []);
 
   const saveMeasurements = async () => {
     if (!waist && !hip && !arm && !thigh) return;
-    await api.saveMeasurements(currentDate, {
+    await store.saveMeasurements(currentDate, {
       waist: parseFloat(waist) || null,
       hip: parseFloat(hip) || null,
       arm: parseFloat(arm) || null,
       thigh: parseFloat(thigh) || null,
       photo_reminder: isWeeklyPrompt ? 1 : 0,
     });
-    const updated = await api.getMeasurements();
+    const updated = await store.getMeasurements();
     setMeasurements(updated);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);

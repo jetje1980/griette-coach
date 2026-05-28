@@ -3,6 +3,7 @@ import { RUNS } from '../data/runningSchema';
 import { getCoreForWeek, coreWeekFromDate } from '../data/coreProgram';
 import { USER } from '../config';
 import { api } from '../api';
+import { store } from '../store';
 
 export default function Training({ log, saveField, currentDate, showFlash }) {
   const [openRun, setOpenRun] = useState(null);
@@ -107,7 +108,12 @@ export default function Training({ log, saveField, currentDate, showFlash }) {
           </div>
         </div>
         <div className="card-body">
-          {!stravaStatus?.connected ? (
+            {store.isOnline() === false ? (
+            <div style={{ padding: '10px 12px', background: 'var(--gold-l)', borderRadius: 9, fontSize: 11, color: 'var(--gold)', lineHeight: 1.6 }}>
+              🟠 Strava werkt alleen als je de app start via je Mac (<code>npm run dev</code>).
+              Je training kun je hier wel handmatig aanvinken.
+            </div>
+          ) : !stravaStatus?.connected ? (
             <button className="btn btn-rust btn-full" onClick={connectStrava}>
               🔗 Koppel Strava
             </button>
