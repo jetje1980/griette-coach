@@ -129,6 +129,13 @@ HORMONALE VOORGESCHIEDENIS (cruciaal voor context):
 - Insulineresistentie en vetopslag rond buik/heupen typisch voor deze fase; Mounjaro adresseert dit direct via GIP/GLP-1
 - Startgewicht sept 2025: ~68–69 kg (voor Mounjaro)
 
+MOUNJARO PRIKSCHEMA T/M VAKANTIE:
+- vr 5 juni (5e prik na herstart)
+- ma 16 juni, ma 23 juni, ma 30 juni
+- ma 6 juli, vr 17 juli
+- vr 25 juli → LAATSTE PRIK VOOR VAKANTIE (vertrekdag — optimale timing)
+- Herstart bij terugkomst ~15 aug zo snel mogelijk
+
 MOUNJARO GESCHIEDENIS:
 - Gebruik sinds sept 2025 — al ~9 maanden ervaring met GLP-1
 - Jan 2026: 3 weken gestopt (Zuid-Amerika) → gewicht bleef stabiel ~60 kg (medicijn werkte nog na)
