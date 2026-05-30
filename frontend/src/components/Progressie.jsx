@@ -41,7 +41,8 @@ function WeightProgress({ logs }) {
   const current = entries[entries.length - 1].weight;
   const start   = USER.startWeight;
   const goal    = USER.goalWeight;
-  const lost    = +(start - current).toFixed(1);
+  const diff    = +(start - current).toFixed(1);
+  const gained  = diff < 0;
   const toGo    = +(current - goal).toFixed(1);
   const pct     = Math.min(100, Math.max(0, ((start - current) / (start - goal)) * 100));
 
@@ -67,10 +68,13 @@ function WeightProgress({ logs }) {
           </div>
         </div>
         <div style={{ height: 8, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--rust)', borderRadius: 99, transition: 'width 0.5s' }} />
+          <div style={{ height: '100%', width: `${pct}%`, background: gained ? 'var(--alert)' : 'var(--rust)', borderRadius: 99, transition: 'width 0.5s' }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-          <span style={{ color: 'var(--sage)', fontWeight: 700 }}>−{lost} kg afgevallen</span>
+          {gained
+            ? <span style={{ color: 'var(--alert)', fontWeight: 700 }}>+{Math.abs(diff)} kg aangekomen</span>
+            : <span style={{ color: 'var(--sage)', fontWeight: 700 }}>−{diff} kg afgevallen</span>
+          }
           <span style={{ color: 'var(--muted)' }}>nog {toGo} kg te gaan</span>
           <span style={{ color: 'var(--muted)' }}>{pct.toFixed(0)}%</span>
         </div>
