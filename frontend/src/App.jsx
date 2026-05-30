@@ -14,11 +14,12 @@ import Lichaam from './components/Lichaam';
 import Patronen from './components/Patronen';
 import Badges from './components/Badges';
 import Coach from './components/Coach';
+import Progressie from './components/Progressie';
 import Settings from './components/Settings';
 import Onboarding from './components/Onboarding';
 import StravaCallback from './components/StravaCallback';
 
-const TABS = ['Vandaag', 'Kalender', 'Training', 'Eten', 'Lichaam', 'Trends', 'Coach', '🏅'];
+const TABS = ['Vandaag', 'Kalender', 'Training', 'Eten', 'Lichaam', 'Trends', 'Coach', 'Progressie', '🏅'];
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -162,7 +163,8 @@ export default function App() {
         {tab === 4 && <Lichaam {...sharedProps} logs={logs} />}
         {tab === 5 && <Patronen logs={logs} />}
         {tab === 6 && <Coach logs={logs} />}
-        {tab === 7 && <Badges logs={logs} streak={streak} />}
+        {tab === 7 && <Progressie logs={logs} />}
+        {tab === 8 && <Badges logs={logs} streak={streak} />}
       </div>
     </>
   );
