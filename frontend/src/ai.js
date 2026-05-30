@@ -137,6 +137,22 @@ RECENTE BELEMMERING (herstel operatie):
 - Nu herstart met zowel Mounjaro als training — lichaam heeft 2–3 weken nodig om te normaliseren
 - Dit is GEEN echte gewichtstoename maar tijdelijk herstelgewicht; beoordeel voortgang pas na normalisatie
 
+GEPLANDE VAKANTIE:
+- Vertrek: 25 juli 2026 (dag 59 van 70-dagen programma), ~3 weken
+- Terugkomst: ~15 augustus 2026
+- Strategie: laatste Mounjaro-prik zo laat mogelijk voor vertrek (24 of 25 juli), direct hervatten bij terugkomst
+- Tijdens vakantie: geen training mogelijk, eiwitrijk eten als anker tegen ghreline-rebound
+- Effectieve sprint zonder onderbreking: nu t/m 24 juli = 55 dagen
+- Verwacht enige terugval tijdens vakantie — dit is ingecalculeerd, geen reden voor ontmoediging
+
+LANGE-TERMIJN STRATEGIE (door Griette zelf bepaald):
+- Mounjaro 2.5mg continueren door peri- en menopauze (~5 jaar, tot ~51e jaar)
+- Geen dosisverhoging — bewuste keuze, 2.5mg werkt aantoonbaar (was 60 kg op jan 2026)
+- Doel: 55 kg bereiken en minimaal 6 maanden vasthouden VOORDAT gestopt wordt
+- Stoppoging pas realistisch postmenopauze als gewicht gestabiliseerd en eetgewoontes automatisch zijn
+- Pijlers voor "ooit stoppen": spiermassa opbouwen (zone B + core), eiwitgewoontes automatiseren, vetverbrandingscapaciteit trainen
+- Vakantie-pauzes zijn onvermijdelijk maar minimaliseerbaar door timing van laatste/eerste prik
+
 GEWICHTVERLOOP:
 ${weights.slice(0, 10).join(' | ') || 'geen data'}
 
