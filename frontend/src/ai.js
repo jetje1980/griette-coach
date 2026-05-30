@@ -35,6 +35,28 @@ function buildContext(logs, measurements) {
   const allLogs = Object.values(logs).sort((a, b) => b.date.localeCompare(a.date));
   const recent = allLogs.slice(0, 14);
 
+  // Mounjaro injection tracker
+  const PRIK_SCHEMA = [
+    { date: '2026-06-05', nr: 5 },
+    { date: '2026-06-16', nr: 6 },
+    { date: '2026-06-23', nr: 7 },
+    { date: '2026-06-30', nr: 8 },
+    { date: '2026-07-06', nr: 9 },
+    { date: '2026-07-17', nr: 10 },
+    { date: '2026-07-25', nr: 11 },
+  ];
+  const today = new Date().toISOString().slice(0, 10);
+  const huidigePrik = (() => {
+    const geweest = PRIK_SCHEMA.filter(p => p.date <= today);
+    if (!geweest.length) return { nr: 4, date: '2026-05-23', dagenGeleden: null };
+    const laatste = geweest[geweest.length - 1];
+    const dagenGeleden = Math.floor((new Date(today) - new Date(laatste.date)) / 86400000);
+    const volgende = PRIK_SCHEMA.find(p => p.date > today);
+    return { nr: laatste.nr, date: laatste.date, dagenGeleden, volgende: volgende?.date ?? null };
+  })();
+  const prikContext = `Huidige Mounjaro-prik: #${huidigePrik.nr} (gegeven ${huidigePrik.date}, ${huidigePrik.dagenGeleden ?? '?'} dagen geleden)${huidigePrik.volgende ? ` | Volgende prik: ${huidigePrik.volgende}` : ' | Laatste prik voor vakantie'}
+Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op volle kracht' : huidigePrik.nr <= 7 ? 'opkomende volle werking — eetlust neemt merkbaar af' : 'volle therapeutische werking — optimale fase'}`;
+
   const weights = allLogs.filter(l => l.weight).slice(0, 14)
     .map(l => `${l.date}: ${l.weight}kg`);
   const bps = recent.filter(l => l.bp_sys)
@@ -129,11 +151,12 @@ HORMONALE VOORGESCHIEDENIS (cruciaal voor context):
 - Insulineresistentie en vetopslag rond buik/heupen typisch voor deze fase; Mounjaro adresseert dit direct via GIP/GLP-1
 - Startgewicht sept 2025: ~68–69 kg (voor Mounjaro)
 
+${prikContext}
+
 MOUNJARO PRIKSCHEMA T/M VAKANTIE:
-- vr 5 juni (5e prik na herstart)
-- ma 16 juni, ma 23 juni, ma 30 juni
-- ma 6 juli, vr 17 juli
-- vr 25 juli → LAATSTE PRIK VOOR VAKANTIE (vertrekdag — optimale timing)
+- vr 5 juni (#5), ma 16 juni (#6), ma 23 juni (#7), ma 30 juni (#8)
+- ma 6 juli (#9), vr 17 juli (#10)
+- vr 25 juli (#11) → LAATSTE VOOR VAKANTIE (vertrekdag — optimale timing)
 - Herstart bij terugkomst ~15 aug zo snel mogelijk
 
 MOUNJARO GESCHIEDENIS:
