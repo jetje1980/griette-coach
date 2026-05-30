@@ -130,6 +130,13 @@ MOUNJARO GESCHIEDENIS (belangrijk voor context):
 - Verwacht de komende 2–3 weken nog schommelingen/waterretentie door herstart GLP-1; eetlustremming neemt geleidelijk toe
 - Laagste gewicht ooit op Mounjaro: ~60 kg (jan 2026 na langdurig gebruik zonder pauze)
 
+RECENTE BELEMMERING (herstel operatie):
+- Ooglid-correctie (blepharoplastiek) uitgevoerd eind mei 2026
+- 2,5 week geen sport mogelijk door herstel
+- Post-operatieve inflammatie + cortisol + immobiliteit verklaren tijdelijke gewichtstoename
+- Nu herstart met zowel Mounjaro als training — lichaam heeft 2–3 weken nodig om te normaliseren
+- Dit is GEEN echte gewichtstoename maar tijdelijk herstelgewicht; beoordeel voortgang pas na normalisatie
+
 GEWICHTVERLOOP:
 ${weights.slice(0, 10).join(' | ') || 'geen data'}
 
