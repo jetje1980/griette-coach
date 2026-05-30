@@ -116,19 +116,27 @@ function buildContext(logs, measurements) {
 
   return `
 GRIETTE — 46 jaar, 163 cm
-Gezondheidsprofiel: long covid herstel, ADHD, perimenopauze
+Gezondheidsprofiel: long covid herstel, ADHD, waarschijnlijk laat-perimenopauze / vroeg menopauze
 Medicatie: Mounjaro 2.5mg/wk (GLP-1, eetlustremmer + insulinegevoeligheid), Candesartan 12mg/dag (hypertensie), ADHD-meds
-Doel: huidige weging → 55 kg in 70 dagen (herstart 2026-05-27)
+Doel: huidige weging → 55 kg (herstart 70-dagen traject 2026-05-27)
 Zone B hartslag: 106–132 bpm (alle aerobe training hierin houden)
 
-MOUNJARO GESCHIEDENIS (belangrijk voor context):
-- Gebruik sinds sept 2025 — al ~8 maanden ervaring met GLP-1
-- Jan 2026: 3 weken gestopt (Zuid-Amerika reis) → gewicht bleef stabiel op ~60 kg, medicijn werkte nog na
-- Feb 2026: 2 weken gestopt → al iets meer gewichtstoename merkbaar
-- Apr–mei 2026: ~2,5 week gestopt door vakantie → gewicht steeg richting 64 kg
-- 2026-05-27: herstart Mounjaro, nu op 4e injectie (dag 4 van nieuwe cyclus)
-- Verwacht de komende 2–3 weken nog schommelingen/waterretentie door herstart GLP-1; eetlustremming neemt geleidelijk toe
-- Laagste gewicht ooit op Mounjaro: ~60 kg (jan 2026 na langdurig gebruik zonder pauze)
+HORMONALE VOORGESCHIEDENIS (cruciaal voor context):
+- Eerste menstruatie op 12-jarige leeftijd (vroege menarche → geassocieerd met eerder begin perimenopauze)
+- Vanaf ~38e jaar progressief zwaarder + overgangsklachten → nu ~8 jaar in perimenopauze-transitie
+- Waarschijnlijk in late perimenopauze; menopauze (12 mnd geen menstruatie) verwacht tussen ~48–51e jaar
+- Gewichtstoename van 38–46 is hormonaal gedreven: dalend progesteron → slechter slapen → cortisol → insulineresistentie → abdominaal vet — NIET veroorzaakt door meer eten
+- Insulineresistentie en vetopslag rond buik/heupen typisch voor deze fase; Mounjaro adresseert dit direct via GIP/GLP-1
+- Startgewicht sept 2025: ~68–69 kg (voor Mounjaro)
+
+MOUNJARO GESCHIEDENIS:
+- Gebruik sinds sept 2025 — al ~9 maanden ervaring met GLP-1
+- Jan 2026: 3 weken gestopt (Zuid-Amerika) → gewicht bleef stabiel ~60 kg (medicijn werkte nog na)
+- Feb 2026: 2 weken gestopt → lichte toename
+- Apr–mei 2026: ~2,5 week gestopt (vakantie) + 2,5 week geen sport (ooglidcorrectie) → gewicht naar ~64 kg
+- 2026-05-27: herstart; nu opbouwend naar therapeutisch niveau (volle eetlustremming na ~4-5 weken)
+- Laagste gewicht op Mounjaro: ~60 kg (jan 2026, langste ononderbroken periode)
+- Geen dosisverhoging mogelijk (bewuste keuze); 2.5mg werkt aantoonbaar bij consistente inname
 
 RECENTE BELEMMERING (herstel operatie):
 - Ooglid-correctie (blepharoplastiek) uitgevoerd eind mei 2026
