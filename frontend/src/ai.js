@@ -168,46 +168,61 @@ Toon: warm, motiverend, direct en concreet. Geen medische diagnoses. Schrijf in 
   },
 
   // photos = array van { base64, mimeType, type ('voor'|'zij'|'achter') }
-  // previousAnalyses = array van { date, text } — eerdere analyses voor continuïteit
-  async analyzePhoto(photos, dayNum, currentWeight, logs, measurements, previousAnalyses = []) {
+  // previousAnalyses = array van { date, text }
+  // prevPhotos = array van { base64, mimeType, type, sessionDate } — vorige sessie voor visuele vergelijking
+  async analyzePhoto(photos, dayNum, currentWeight, logs, measurements, previousAnalyses = [], prevPhotos = []) {
     const context = buildContext(logs, measurements);
 
     const typeNL = { voor: 'voorkant', zij: 'zijkant', achter: 'achterkant' };
     const availableViews = photos.map(p => typeNL[p.type] || p.type).join(', ');
+    const prevDate = prevPhotos[0]?.sessionDate ?? null;
+    const prevViews = prevPhotos.map(p => typeNL[p.type] || p.type).join(', ');
 
     const prevContext = previousAnalyses.length > 0
-      ? `\nEERDERE FOTO-ANALYSES (meest recent eerst):\n${
+      ? `\nEERDERE FOTO-ANALYSES (tekst, meest recent eerst):\n${
           previousAnalyses.slice(0, 3).map(a => `[${a.date}]:\n${a.text.slice(0, 400)}`).join('\n\n---\n\n')
         }\n`
       : '';
 
+    const hasPrevPhotos = prevPhotos.length > 0;
+
     const prompt = `${context}
 ${prevContext}
-FOTO-SESSIE: dag ${dayNum} van 70 | aanzichten: ${availableViews}
+HUIDIGE FOTO-SESSIE: dag ${dayNum} van 70 | aanzichten: ${availableViews}
 Huidig gewicht: ${currentWeight ?? '?'} kg | doel: 55 kg | start: 62.7 kg
+${hasPrevPhotos ? `VERGELIJKINGSFOTO'S: sessie ${prevDate} | aanzichten: ${prevViews} (staan VÓÓR de huidige foto's hierboven)` : ''}
+
+${hasPrevPhotos
+  ? `De EERSTE ${prevPhotos.length} afbeelding(en) zijn van sessie ${prevDate} (referentie).
+De LAATSTE ${photos.length} afbeelding(en) zijn van vandaag (dag ${dayNum}).
+Vergelijk ze VISUEEL en concreet.`
+  : 'Dit is de eerste foto-sessie — geen eerdere foto\'s beschikbaar voor vergelijking.'}
 
 Analyseer als gecombineerde expert: personal trainer + lichaamscompositie specialist + voedingscoach.
-Schrijf max 350 woorden in het Nederlands. Wees eerlijk en concreet — geen holle complimenten.
+Schrijf max 380 woorden in het Nederlands. Wees eerlijk en concreet.
 
 Gebruik exact deze structuur:
 
-📸 LICHAAMSCOMPOSITIE
-Beschrijf waar je vetopslag ziet (abdomen/flanken/heupen/dijen/armen) en hoeveel spierdefinitie zichtbaar is. Vergelijk expliciet met eerdere analyses indien beschikbaar.
+📸 LICHAAMSCOMPOSITIE (vandaag)
+Beschrijf vetopslag per zone (abdomen/flanken/heupen/dijen/armen) en spierdefinitie.
 
-🔄 PROGRESSIE & LICHAAMSSIGNALEN
-Wat vertelt het lichaamspatroon over haar stofwisseling, hormonale vetopslag (perimenopauze), en long covid herstelstatus? Is de vetverdeling verschoven?
+🔄 VISUELE PROGRESSIE ${hasPrevPhotos ? `(${prevDate} → dag ${dayNum})` : ''}
+${hasPrevPhotos
+  ? 'Vergelijk de referentiefoto\'s met vandaag: wat is er zichtbaar veranderd? Wees specifiek over welke zones.'
+  : 'Eerste meting — beschrijf het startpunt als baseline voor toekomstige vergelijkingen.'}
 
 🏋️ TRAININGSAANPASSING
-Concrete focus op basis van wat je ziet. Bijv: als buikvet dominant → meer anti-inflammatoir + core stabiliteit. Als dijen/heupen → meer compound bewegingen. Zwemmen/fietsen/hardlopen — welke mix past nu het best? Zone B altijd leidend.
+Concrete aanbeveling op basis van wat je nu ziet. Welke zones vragen aandacht? Lopen/zwemmen/fietsen/core — welke mix past nu het best? Zone B altijd leidend.
 
 🥗 VOEDINGSFOCUS
-Op basis van vetdistributie en Mounjaro: waar liggen de kansen? Eiwitdoelen, timing, specifieke keuzes die passen bij haar patroon.
+Op basis van vetdistributie en Mounjaro: eiwitdoelen, timing, specifieke kansen.
 
-💡 INZICHT
-1–2 zinnen: wat heeft haar lichaam nu het meest nodig op basis van alle data + foto's gecombineerd?`;
+💡 KERNBOODSCHAP
+1–2 zinnen: wat heeft haar lichaam nu het meest nodig?`;
 
     const content = [];
-    for (const photo of photos) {
+    // Eerst de vorige sessie foto's (als referentie), dan de huidige
+    for (const photo of [...prevPhotos, ...photos]) {
       content.push({
         type: 'image',
         source: { type: 'base64', media_type: photo.mimeType, data: photo.base64 },
@@ -215,7 +230,7 @@ Op basis van vetdistributie en Mounjaro: waar liggen de kansen? Eiwitdoelen, tim
     }
     content.push({ type: 'text', text: prompt });
 
-    return callClaude([{ role: 'user', content }], 1000);
+    return callClaude([{ role: 'user', content }], 1100);
   },
 
   // Genereert een concreet weekplan op basis van alle beschikbare data

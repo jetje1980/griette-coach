@@ -34,10 +34,35 @@ function loadSavedAnalyses() {
   return results.sort((a, b) => b.date.localeCompare(a.date));
 }
 
+// Canvas-compressie: verkleint foto naar max 900px, JPEG 78% → ~50-150KB ipv 3-5MB
+async function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Foto laden mislukt')); };
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 900;
+      const ratio = Math.min(1, MAX / Math.max(img.width, img.height));
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+      resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+    };
+    img.src = url;
+  });
+}
+
 function PhotoCapture({ logs, measurements }) {
   const today = new Date().toISOString().slice(0, 10);
   const [sessions, setSessions] = useState([]);
   const [todayViews, setTodayViews] = useState({});
+  const [saving, setSaving] = useState({});   // { voor: true/false, ... }
+  const [saveError, setSaveError] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(() => localStorage.getItem(`${ANALYSIS_PREFIX}${new Date().toISOString().slice(0,10)}`) || null);
   const [analyzeError, setAnalyzeError] = useState(null);
@@ -54,15 +79,18 @@ function PhotoCapture({ logs, measurements }) {
   async function handleFile(type, e) {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = ev.target.result.split(',')[1];
-      const mimeType = file.type || 'image/jpeg';
+    e.target.value = '';
+    setSaving(prev => ({ ...prev, [type]: true }));
+    setSaveError(null);
+    try {
+      const { base64, mimeType } = await compressImage(file);
       await photoStore.save(today, type, base64, mimeType);
       await loadPhotos();
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    } catch (err) {
+      setSaveError(`${type}: ${err.message}`);
+    } finally {
+      setSaving(prev => ({ ...prev, [type]: false }));
+    }
   }
 
   async function deletePhoto(date, type) {
@@ -89,12 +117,16 @@ function PhotoCapture({ logs, measurements }) {
       const dayNum = Math.max(1, Math.floor((new Date(today) - new Date(USER.startDate)) / 86400000) + 1);
       const previousAnalyses = loadSavedAnalyses().filter(a => a.date !== today);
 
-      const text = await ai.analyzePhoto(photoList, dayNum, currentWeight, logs, measurements, previousAnalyses);
+      // Vorige sessie foto's meesturen voor visuele vergelijking
+      const prevSession = sessions.find(s => s.date !== today);
+      const prevPhotos = prevSession
+        ? PHOTO_TYPES.filter(({ key }) => prevSession.views[key]).map(({ key }) => ({ ...prevSession.views[key], type: key, sessionDate: prevSession.date }))
+        : [];
+
+      const text = await ai.analyzePhoto(photoList, dayNum, currentWeight, logs, measurements, previousAnalyses, prevPhotos);
       localStorage.setItem(`${ANALYSIS_PREFIX}${today}`, text);
       setAnalysis(text);
-      // Weekplan bijwerken met nieuwe foto-inzichten
       const coachReport = localStorage.getItem('gc_coach_report') ?? '';
-      // Fire-and-forget — geen await, gebruiker hoeft niet te wachten
       ai.weeklyTrainingPlan(logs, measurements, coachReport, text).then(planText => {
         const d = new Date().toISOString().slice(0, 10);
         localStorage.setItem('gc_training_plan', planText);
@@ -108,20 +140,32 @@ function PhotoCapture({ logs, measurements }) {
   }
 
   const hasTodayPhotos = Object.keys(todayViews).length > 0;
+  const isSavingAny = Object.values(saving).some(Boolean);
   const pastSessions = sessions.filter(s => s.date !== today);
 
   return (
     <div>
       <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', marginBottom: 8 }}>Vandaag — {today}</div>
 
+      {saveError && (
+        <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--alert)', background: 'var(--alert-l)', padding: '8px 10px', borderRadius: 8 }}>
+          ⚠️ Opslaan mislukt: {saveError}
+        </div>
+      )}
+
       {/* 3 slots vandaag */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
         {PHOTO_TYPES.map(({ key, label }) => {
           const photo = todayViews[key];
+          const isSavingThis = saving[key];
           return (
             <div key={key}>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textAlign: 'center', marginBottom: 4 }}>{label}</div>
-              {photo ? (
+              {isSavingThis ? (
+                <div style={{ height: 100, borderRadius: 9, background: 'var(--bg)', border: '1.5px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--muted)' }}>
+                  ⏳ Opslaan…
+                </div>
+              ) : photo ? (
                 <div style={{ position: 'relative' }}>
                   <img
                     src={`data:${photo.mimeType};base64,${photo.base64}`}
@@ -153,9 +197,14 @@ function PhotoCapture({ logs, measurements }) {
       {/* Analyseer knop */}
       {hasTodayPhotos && (
         <div style={{ marginBottom: 16 }}>
-          <button className="btn btn-rust btn-full" onClick={analyzeToday} disabled={analyzing}>
-            {analyzing ? '⏳ AI analyseert alle foto\'s…' : `🤖 Analyseer ${Object.keys(todayViews).length} foto('s) met AI`}
+          <button className="btn btn-rust btn-full" onClick={analyzeToday} disabled={analyzing || isSavingAny}>
+            {analyzing ? '⏳ AI analyseert + vergelijkt…' : `🤖 Analyseer ${Object.keys(todayViews).length} foto('s) met AI`}
           </button>
+          {sessions.filter(s => s.date !== today).length > 0 && !analyzing && (
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'center' }}>
+              ↑ AI vergelijkt visueel met vorige sessie ({sessions.find(s => s.date !== today)?.date})
+            </div>
+          )}
           {analyzeError && (
             <div style={{ marginTop: 8, fontSize: 11, color: 'var(--alert)', background: 'var(--alert-l)', padding: '8px 10px', borderRadius: 8 }}>
               {analyzeError}
@@ -172,7 +221,7 @@ function PhotoCapture({ logs, measurements }) {
       {/* Historische sessies */}
       {pastSessions.length > 0 && (
         <div>
-          <div className="section-title">Progressie-overzicht</div>
+          <div className="section-title">Progressie-overzicht ({pastSessions.length} sessie{pastSessions.length !== 1 ? 's' : ''})</div>
           {pastSessions.map(({ date, views }) => {
             const savedAnalysis = localStorage.getItem(`${ANALYSIS_PREFIX}${date}`);
             return (
