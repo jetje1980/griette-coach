@@ -38,7 +38,12 @@ function buildContext(logs, measurements) {
   const weights = allLogs.filter(l => l.weight).slice(0, 14)
     .map(l => `${l.date}: ${l.weight}kg`);
   const bps = recent.filter(l => l.bp_sys)
-    .map(l => `${l.date}: ${l.bp_sys}/${l.bp_dia}`);
+    .map(l => {
+      let s = `${l.date}: ${l.bp_sys}/${l.bp_dia} mmHg`;
+      if (l.bp_hr) s += ` ${l.bp_hr}bpm`;
+      if (l.bp_time) s += ` (${l.bp_time})`;
+      return s;
+    });
 
   const runDays  = recent.filter(l => l.run_done).length;
   const swimDays = recent.filter(l => l.swim_done).length;

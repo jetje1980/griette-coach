@@ -60,6 +60,8 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
   const [weight, setWeight] = useState('');
   const [bpSys, setBpSys] = useState('');
   const [bpDia, setBpDia] = useState('');
+  const [bpHr, setBpHr] = useState('');
+  const [bpTime, setBpTime] = useState('');
   const [steps, setSteps] = useState('');
   const [hrRest, setHrRest] = useState('');
   const [sleepHours, setSleepHours] = useState('');
@@ -73,6 +75,8 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
       setWeight(log.weight ?? '');
       setBpSys(log.bp_sys ?? '');
       setBpDia(log.bp_dia ?? '');
+      setBpHr(log.bp_hr ?? '');
+      setBpTime(log.bp_time ?? '');
       setSteps(log.steps ?? '');
       setHrRest(log.hr_rest ?? '');
       setSleepHours(log.sleep_hours ?? '');
@@ -88,7 +92,15 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
 
   const saveBP = () => {
     const s = parseInt(bpSys), d = parseInt(bpDia);
-    if (!isNaN(s) && !isNaN(d) && s > 50 && d > 30) saveFields({ bp_sys: s, bp_dia: d });
+    if (!isNaN(s) && !isNaN(d) && s > 50 && d > 30) {
+      const hr = parseInt(bpHr);
+      saveFields({
+        bp_sys: s,
+        bp_dia: d,
+        bp_hr: !isNaN(hr) && hr > 30 ? hr : null,
+        bp_time: bpTime || null,
+      });
+    }
   };
 
   const saveNote = (val) => {
@@ -184,14 +196,27 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
           <div className="card-title">❤️ Bloeddruk</div>
         </div>
         <div className="card-body">
+          {/* Sys / Dia */}
           <div className="input-row">
             <input type="number" placeholder="120" value={bpSys} onChange={e => setBpSys(e.target.value)} style={{ flex: 1, textAlign: 'center' }} />
             <span className="unit" style={{ fontSize: 18, fontWeight: 800 }}>/</span>
             <input type="number" placeholder="80" value={bpDia} onChange={e => setBpDia(e.target.value)} style={{ flex: 1, textAlign: 'center' }} />
             <span className="unit">mmHg</span>
+          </div>
+          {/* Hartslag + tijdstip */}
+          <div className="input-row" style={{ marginTop: 6 }}>
+            <input type="number" placeholder="HS bijv. 68" value={bpHr} onChange={e => setBpHr(e.target.value)} style={{ flex: 1, textAlign: 'center' }} />
+            <span className="unit">bpm</span>
+            <input type="time" value={bpTime} onChange={e => setBpTime(e.target.value)} style={{ flex: 1, textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 13 }} />
             <button className="btn btn-rust btn-sm" onClick={saveBP}>✓</button>
           </div>
-          {log?.bp_sys && <div className="saved-note">✓ {log.bp_sys}/{log.bp_dia} opgeslagen</div>}
+          {log?.bp_sys && (
+            <div className="saved-note">
+              ✓ {log.bp_sys}/{log.bp_dia} mmHg
+              {log.bp_hr ? ` · ${log.bp_hr} bpm` : ''}
+              {log.bp_time ? ` · ${log.bp_time}` : ''}
+            </div>
+          )}
           <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)' }}>
             ⚠️ Direct arts: sys &gt;160 · dia &gt;100 · hoge BD + hoofdpijn
           </div>
