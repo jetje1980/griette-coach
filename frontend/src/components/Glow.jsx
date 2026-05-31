@@ -10,14 +10,15 @@ const BODY_VITAL_ITEMS = [
 ];
 
 const INTERVAL_OPTIONS = [
-  { days: 14,  label: '2 weken' },
-  { days: 21,  label: '3 weken' },
-  { days: 28,  label: '4 weken' },
-  { days: 42,  label: '6 weken' },
-  { days: 56,  label: '8 weken' },
-  { days: 84,  label: '12 weken' },
+  { days: 7,   label: '1 week'    },
+  { days: 14,  label: '2 weken'   },
+  { days: 21,  label: '3 weken'   },
+  { days: 28,  label: '4 weken'   },
+  { days: 42,  label: '6 weken'   },
+  { days: 56,  label: '8 weken'   },
+  { days: 84,  label: '12 weken'  },
   { days: 182, label: '6 maanden' },
-  { days: 365, label: '1 jaar' },
+  { days: 365, label: '1 jaar'    },
 ];
 
 const BOTOX_ZONES = [
@@ -29,8 +30,10 @@ const BOTOX_ZONES = [
 ];
 
 const GLOW_TYPES = [
+  { id: 'lpg',            emoji: '💪',  label: 'LPG',              hasNotes: true,  notesLabel: 'Bijzonderheden?', defaultInterval: 7,   weeklyNote: 'Wekelijks · versteviging + lymfedrainage' },
   { id: 'kapper',         emoji: '✂️',  label: 'Kapper',           hasNotes: true,  notesLabel: 'Wat gedaan? (knippen, kleur...)' },
   { id: 'botox',          emoji: '✨',  label: 'Botox',            hasNotes: true,  notesLabel: 'Bijzonderheden / units?', subItems: BOTOX_ZONES, defaultInterval: 182 },
+  { id: 'microneedling',  emoji: '🪡',  label: 'Microneedling',    hasNotes: true,  notesLabel: 'Diepte / zone?', defaultInterval: 28 },
   { id: 'body_vital',     emoji: '🪒',  label: 'Body & Vital',     hasNotes: false, subItems: BODY_VITAL_ITEMS },
   { id: 'skinbooster',    emoji: '💉',  label: 'Skinbooster',      hasNotes: true,  notesLabel: 'Type / locatie' },
   { id: 'gezichtsbeh',    emoji: '💆',  label: 'Gezichtsbehandeling', hasNotes: true, notesLabel: 'Behandeling / salon?' },
@@ -131,7 +134,22 @@ export default function Glow({ log, saveField, currentDate }) {
     setEvents(updated);
   }
 
+  // LPG streak: consecutive weeks with an LPG session
+  const lpgStreak = (() => {
+    const lpgDates = events.filter(e => e.type === 'lpg').map(e => e.date).sort((a, b) => b.localeCompare(a));
+    if (!lpgDates.length) return 0;
+    let streak = 0;
+    let ref = today;
+    for (const d of lpgDates) {
+      const diff = Math.floor((new Date(ref) - new Date(d)) / 86400000);
+      if (diff <= 10) { streak++; ref = d; }
+      else break;
+    }
+    return streak;
+  })();
+
   // Upcoming reminders: events with nextDate set
+  // Weekly items (intervalDays <= 7) always show; others show within 14 days
   const upcoming = events
     .filter(e => e.nextDate)
     .map(e => {
@@ -139,7 +157,7 @@ export default function Glow({ log, saveField, currentDate }) {
       return { ...e, daysTo };
     })
     .sort((a, b) => a.daysTo - b.daysTo)
-    .filter(e => e.daysTo <= 14); // show within 2 weeks or overdue
+    .filter(e => e.daysTo <= (e.intervalDays <= 7 ? 9 : 14));
 
   // Last per category
   const statsByType = GLOW_TYPES.map(t => {
@@ -184,7 +202,11 @@ export default function Glow({ log, saveField, currentDate }) {
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                       Gepland: {e.nextDate}
                       {e.intervalDays && <span> · elke {INTERVAL_OPTIONS.find(o => o.days === e.intervalDays)?.label || `${e.intervalDays}d`}</span>}
+                      {e.type === 'lpg' && <span> · 💉 bij prik</span>}
                     </div>
+                    {e.type === 'lpg' && lpgStreak > 0 && (
+                      <div style={{ fontSize: 10, color: '#EC4899', fontWeight: 600 }}>🔥 {lpgStreak} weken streak</div>
+                    )}
                   </div>
                   <span style={{
                     fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 99,
@@ -362,7 +384,9 @@ export default function Glow({ log, saveField, currentDate }) {
                       {tp.last.subItems.map(id => allSubItems(tp.last.type).find(s => s.id === id)?.label).filter(Boolean).join(' · ')}
                     </div>
                   )}
-                  {tp.last?.notes && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{tp.last.notes}</div>}
+                  {tp.id === 'lpg' && <div style={{ fontSize: 10, color: 'var(--muted)' }}>Versteviging + lymfedrainage · bij Mounjaro-prik</div>}
+                  {tp.id === 'lpg' && lpgStreak > 1 && <div style={{ fontSize: 10, color: '#EC4899', fontWeight: 600 }}>🔥 {lpgStreak} weken op rij</div>}
+                  {tp.last?.notes && tp.id !== 'lpg' && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{tp.last.notes}</div>}
                   {tp.nextDate && (
                     <div style={{ fontSize: 10, marginTop: 2 }}>
                       <span style={{
