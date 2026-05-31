@@ -769,6 +769,77 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         </div>
       </div>
 
+      {/* ADHD & pacing */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#6366F1' }} />
+          <div className="card-title">🧩 ADHD & pacing</div>
+          {log?.adhd_overwhelmed ? (
+            <span style={{ fontSize: 10, background: 'var(--alert-l)', color: 'var(--alert)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>overprikkeld</span>
+          ) : log?.adhd_task_load === 2 ? (
+            <span style={{ fontSize: 10, background: '#EEF2FF', color: '#4338CA', padding: '1px 6px', borderRadius: 99 }}>veel acties</span>
+          ) : null}
+        </div>
+        <div className="card-body">
+          <div className="scale-label">HOEVEEL ACTIES VANDAAG?</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, marginBottom: 12 }}>
+            {[
+              { v: 0, label: '1–2', sub: 'Rustig' },
+              { v: 1, label: '3–4', sub: 'Normaal' },
+              { v: 2, label: '5+',  sub: 'Veel' },
+            ].map(opt => (
+              <button key={opt.v} className="btn" style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                padding: '8px 4px', gap: 2,
+                background: log?.adhd_task_load === opt.v ? '#EEF2FF' : 'var(--bg)',
+                borderColor: log?.adhd_task_load === opt.v ? '#6366F1' : 'var(--border)',
+                color: log?.adhd_task_load === opt.v ? '#4338CA' : 'var(--text)',
+              }} onClick={() => saveField('adhd_task_load', log?.adhd_task_load === opt.v ? null : opt.v)}>
+                <span style={{ fontWeight: 800, fontSize: 15 }}>{opt.label}</span>
+                <span style={{ fontSize: 10, opacity: 0.7 }}>{opt.sub}</span>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { id: 'adhd_break',       label: 'Bewust pauzemoment genomen', emoji: '☕', warn: false },
+              { id: 'adhd_one_focus',   label: 'Één ding tegelijk gedaan',   emoji: '🎯', warn: false },
+              { id: 'adhd_overwhelmed', label: 'Overprikkeld / verlamd gevoel', emoji: '😵', warn: true  },
+            ].map(item => (
+              <div key={item.id}
+                className={`habit-btn ${log?.[item.id] ? 'on' : ''}`}
+                style={{
+                  width: '100%', justifyContent: 'flex-start', gap: 10,
+                  ...(item.warn && log?.[item.id]
+                    ? { background: 'var(--alert-l)', borderColor: 'var(--alert)', color: 'var(--alert)' }
+                    : log?.[item.id]
+                    ? { background: '#EEF2FF', borderColor: '#6366F1', color: '#4338CA' }
+                    : {}),
+                }}
+                onClick={() => saveField(item.id, log?.[item.id] ? 0 : 1)}
+              >
+                <div className="habit-emoji">{item.emoji}</div>
+                <div className="habit-label">{item.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {log?.adhd_overwhelmed ? (
+            <div className="alert-box orange" style={{ marginTop: 10 }}>
+              <span className="alert-icon">🧩</span>
+              <div className="alert-text">
+                <strong>Overprikkeld gemarkeerd</strong> — morgen bewust minder acties. Eén stap is genoeg. Serie kijken is ook herstel.
+              </div>
+            </div>
+          ) : log?.adhd_task_load === 2 ? (
+            <div style={{ fontSize: 10, color: '#4338CA', marginTop: 8, background: '#EEF2FF', padding: '8px 10px', borderRadius: 8, lineHeight: 1.6 }}>
+              💡 Veel acties = risico op verlammend gevoel. Morgen: max. 2–3 bewuste keuzes plannen.
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       {/* Migraine */}
       <div className="card">
         <div className="card-header">
@@ -988,6 +1059,52 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Alcohol */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: log?.alcohol_had ? 'var(--gold)' : 'var(--border)' }} />
+          <div className="card-title">🍷 Alcohol</div>
+          {log?.alcohol_had && log?.alcohol_units > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 700, background: 'var(--gold-l)', padding: '2px 8px', borderRadius: 99 }}>
+              {log.alcohol_units} glas{log.alcohol_units !== 1 ? 'zen' : ''}
+            </span>
+          )}
+        </div>
+        <div className="card-body">
+          <div
+            className={`habit-btn ${log?.alcohol_had ? 'on' : ''}`}
+            style={{
+              width: '100%', justifyContent: 'flex-start', gap: 10,
+              ...(log?.alcohol_had ? { background: 'var(--gold-l)', borderColor: 'var(--gold)', color: '#92400E' } : {}),
+            }}
+            onClick={() => { saveField('alcohol_had', log?.alcohol_had ? 0 : 1); if (log?.alcohol_had) saveField('alcohol_units', 0); }}
+          >
+            <div className="habit-emoji">🍷</div>
+            <div className="habit-label">Vandaag alcohol gedronken</div>
+          </div>
+          {log?.alcohol_had ? (
+            <div style={{ marginTop: 10 }}>
+              <div className="scale-label">AANTAL GLAZEN</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                {[1, 2, 3, 4, 5, 6].map(n => (
+                  <button key={n} className="btn" style={{
+                    padding: '6px 12px', fontSize: 13, minWidth: 40,
+                    background: log?.alcohol_units === n ? 'var(--gold)' : 'var(--bg)',
+                    color: log?.alcohol_units === n ? 'white' : 'var(--text)',
+                    border: `1.5px solid ${log?.alcohol_units === n ? 'var(--gold)' : 'var(--border)'}`,
+                  }} onClick={() => saveField('alcohol_units', n)}>{n}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
+                Coach gebruikt dit om slaap, energie en huidkwaliteit te correleren met alcoholgebruik.
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Geen alcohol vandaag — tik aan als je iets drinkt</div>
+          )}
         </div>
       </div>
 

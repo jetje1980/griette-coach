@@ -43,6 +43,7 @@ export const SUPPLEMENTS = [
   { id: 'zink',       label: 'Zink',        detail: 'dagelijks' },
   { id: 'inositol',   label: 'Inositol',    detail: 'dagelijks' },
   { id: 'probiotica', label: 'Probiotica',  detail: 'dagelijks' },
+  { id: 'visolie',    label: 'Visolie',     detail: 'dagelijks' },
 ];
 
 export const PERSONAL_EVENTS = [

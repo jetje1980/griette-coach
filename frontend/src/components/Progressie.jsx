@@ -146,6 +146,74 @@ function WeightProgress({ logs }) {
   );
 }
 
+function WhrProgress({ measurements }) {
+  const entries = (measurements || [])
+    .filter(m => m.waist && m.hip)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!entries.length) return null;
+
+  const whr = e => +(e.waist / e.hip).toFixed(3);
+  const latest = entries[entries.length - 1];
+  const first  = entries[0];
+  const latestWhr = whr(latest);
+  const trend = entries.length > 1 ? +(latestWhr - whr(first)).toFixed(3) : null;
+  const color = latestWhr < 0.80 ? 'var(--sage)' : latestWhr < 0.85 ? 'var(--gold)' : 'var(--rust)';
+  const label = latestWhr < 0.80 ? 'Ideaal' : latestWhr < 0.85 ? 'Goed' : 'Aandacht';
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-accent" style={{ background: color }} />
+        <div className="card-title">📐 Taille-heup ratio (WHR)</div>
+        <span style={{ fontSize: 11, fontWeight: 700, color, background: color + '22', padding: '2px 8px', borderRadius: 99 }}>
+          {label}
+        </span>
+      </div>
+      <div className="card-body">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Taille</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>{latest.waist} cm</div>
+          </div>
+          <div style={{ fontSize: 14, color: 'var(--muted)' }}>÷</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)' }}>Heup</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>{latest.hip} cm</div>
+          </div>
+          <div style={{ fontSize: 14, color: 'var(--muted)' }}>=</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)' }}>WHR</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color }}>{latestWhr}</div>
+          </div>
+        </div>
+
+        {/* Reference bar */}
+        <div style={{ position: 'relative', height: 10, background: 'var(--border)', borderRadius: 99, marginBottom: 6, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', left: 0, width: '80%', height: '100%', background: 'var(--sage)', opacity: 0.3, borderRadius: '99px 0 0 99px' }} />
+          <div style={{ position: 'absolute', left: '80%', width: '5%', height: '100%', background: 'var(--gold)', opacity: 0.4 }} />
+          <div style={{ position: 'absolute', left: '85%', right: 0, height: '100%', background: 'var(--rust)', opacity: 0.3 }} />
+          <div style={{
+            position: 'absolute', top: 0, width: 3, height: '100%', background: color, borderRadius: 99,
+            left: `${Math.min(98, Math.max(2, (latestWhr - 0.7) / (1.0 - 0.7) * 100))}%`,
+          }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--muted)', marginBottom: 8 }}>
+          <span>0.70 ideaal</span><span>0.80</span><span>0.85</span><span>0.90+</span>
+        </div>
+
+        {trend !== null && (
+          <div style={{ fontSize: 11, color: trend < 0 ? 'var(--sage)' : trend > 0 ? 'var(--alert)' : 'var(--muted)', fontWeight: 600 }}>
+            {trend < 0 ? `↓ ${Math.abs(trend)} verbeterd` : trend > 0 ? `↑ +${trend} gestegen` : '→ gelijk gebleven'} t.o.v. eerste meting ({first.date})
+          </div>
+        )}
+        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
+          WHR daalt sneller zichtbaar dan het weegschaalgewicht — abdominaal vet neemt af door zone B training + eiwitten.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MeasurementRow({ meas, label }) {
   if (!meas) return null;
   const fields = [
@@ -530,6 +598,7 @@ export default function Progressie({ logs }) {
   return (
     <div className="pane">
       <WeightProgress logs={logs} />
+      <WhrProgress measurements={measurements} />
       <GedragGevolg logs={logs} />
       <MigraineOverview logs={logs} />
 

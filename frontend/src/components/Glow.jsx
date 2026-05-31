@@ -29,11 +29,22 @@ const BOTOX_ZONES = [
   { id: 'lippen',      label: 'Lippen (lip flip)' },
 ];
 
+const LPG_ZONES = [
+  { id: 'buik',      label: 'Buik' },
+  { id: 'flanken',   label: 'Flanken/taille' },
+  { id: 'benen',     label: 'Benen/dijen' },
+  { id: 'billen',    label: 'Billen' },
+  { id: 'armen',     label: 'Armen' },
+  { id: 'rug',       label: 'Rug' },
+  { id: 'decollete', label: 'Décolleté' },
+  { id: 'gezicht_hals', label: 'Gezicht/hals' },
+];
+
 const GLOW_TYPES = [
-  { id: 'lpg',            emoji: '💪',  label: 'LPG',              hasNotes: true,  notesLabel: 'Bijzonderheden?', defaultInterval: 7,   weeklyNote: 'Wekelijks · versteviging + lymfedrainage' },
+  { id: 'lpg',            emoji: '💪',  label: 'LPG',              hasNotes: true,  notesLabel: 'Bijzonderheden?',         subItems: LPG_ZONES,   hasDuration: true },
   { id: 'kapper',         emoji: '✂️',  label: 'Kapper',           hasNotes: true,  notesLabel: 'Wat gedaan? (knippen, kleur...)' },
   { id: 'botox',          emoji: '✨',  label: 'Botox',            hasNotes: true,  notesLabel: 'Bijzonderheden / units?', subItems: BOTOX_ZONES, defaultInterval: 182 },
-  { id: 'microneedling',  emoji: '🪡',  label: 'Microneedling',    hasNotes: true,  notesLabel: 'Diepte / zone?', defaultInterval: 28 },
+  { id: 'microneedling',  emoji: '🪡',  label: 'Microneedling',    hasNotes: true,  notesLabel: 'Diepte / zone?',          defaultInterval: 28 },
   { id: 'body_vital',     emoji: '🪒',  label: 'Body & Vital',     hasNotes: false, subItems: BODY_VITAL_ITEMS },
   { id: 'skinbooster',    emoji: '💉',  label: 'Skinbooster',      hasNotes: true,  notesLabel: 'Type / locatie' },
   { id: 'gezichtsbeh',    emoji: '💆',  label: 'Gezichtsbehandeling', hasNotes: true, notesLabel: 'Behandeling / salon?' },
@@ -72,15 +83,16 @@ const typeMap = Object.fromEntries(GLOW_TYPES.map(t => [t.id, t]));
 
 export default function Glow({ log, saveField, currentDate }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [events, setEvents]         = useState(loadEvents);
-  const [addType, setAddType]       = useState(null);
-  const [addDate, setAddDate]       = useState(currentDate);
-  const [addNotes, setAddNotes]     = useState('');
-  const [subSel, setSubSel]         = useState([]);      // selected body_vital sub-items
-  const [planNext, setPlanNext]     = useState(false);
-  const [nextDate, setNextDate]     = useState('');
+  const [events, setEvents]             = useState(loadEvents);
+  const [addType, setAddType]           = useState(null);
+  const [addDate, setAddDate]           = useState(currentDate);
+  const [addNotes, setAddNotes]         = useState('');
+  const [addDuration, setAddDuration]   = useState(null);  // minutes
+  const [subSel, setSubSel]             = useState([]);
+  const [planNext, setPlanNext]         = useState(false);
+  const [nextDate, setNextDate]         = useState('');
   const [intervalDays, setIntervalDays] = useState(null);
-  const [saved, setSaved]           = useState(false);
+  const [saved, setSaved]               = useState(false);
 
   function toggleSub(id) {
     setSubSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -91,6 +103,7 @@ export default function Glow({ log, saveField, currentDate }) {
     setAddType(id);
     setAddNotes('');
     setSubSel([]);
+    setAddDuration(null);
     const tp = typeMap[id];
     if (tp?.defaultInterval) {
       setPlanNext(true);
@@ -115,6 +128,7 @@ export default function Glow({ log, saveField, currentDate }) {
       type: addType,
       date: addDate,
       notes: addNotes.trim(),
+      duration: addDuration || undefined,
       subItems: subSel.length ? subSel : undefined,
       nextDate: planNext && nextDate ? nextDate : undefined,
       intervalDays: planNext && intervalDays ? intervalDays : undefined,
@@ -123,6 +137,7 @@ export default function Glow({ log, saveField, currentDate }) {
     saveEvents(updated);
     setEvents(updated);
     setAddType(null); setAddNotes(''); setSubSel([]);
+    setAddDuration(null);
     setPlanNext(false); setNextDate(''); setIntervalDays(null);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -134,22 +149,7 @@ export default function Glow({ log, saveField, currentDate }) {
     setEvents(updated);
   }
 
-  // LPG streak: consecutive weeks with an LPG session
-  const lpgStreak = (() => {
-    const lpgDates = events.filter(e => e.type === 'lpg').map(e => e.date).sort((a, b) => b.localeCompare(a));
-    if (!lpgDates.length) return 0;
-    let streak = 0;
-    let ref = today;
-    for (const d of lpgDates) {
-      const diff = Math.floor((new Date(ref) - new Date(d)) / 86400000);
-      if (diff <= 10) { streak++; ref = d; }
-      else break;
-    }
-    return streak;
-  })();
-
   // Upcoming reminders: events with nextDate set
-  // Weekly items (intervalDays <= 7) always show; others show within 14 days
   const upcoming = events
     .filter(e => e.nextDate)
     .map(e => {
@@ -157,14 +157,14 @@ export default function Glow({ log, saveField, currentDate }) {
       return { ...e, daysTo };
     })
     .sort((a, b) => a.daysTo - b.daysTo)
-    .filter(e => e.daysTo <= (e.intervalDays <= 7 ? 9 : 14));
+    .filter(e => e.daysTo <= 21);
 
-  // Last per category
+  // Last per category (most recent past or today event)
   const statsByType = GLOW_TYPES.map(t => {
     const evs = events.filter(e => e.type === t.id);
-    const last = evs[0];
+    const pastEvs = evs.filter(e => e.date <= today);
+    const last = pastEvs[0];
     const daysSince = last ? Math.floor((new Date(today) - new Date(last.date)) / 86400000) : null;
-    // Find the active nextDate (most recent event with nextDate for this type)
     const withNext = evs.find(e => e.nextDate);
     const daysToNext = withNext ? Math.floor((new Date(withNext.nextDate) - new Date(today)) / 86400000) : null;
     return { ...t, count: evs.length, last, daysSince, nextDate: withNext?.nextDate, daysToNext };
@@ -186,13 +186,14 @@ export default function Glow({ log, saveField, currentDate }) {
             {upcoming.map(e => {
               const tp = typeMap[e.type];
               const overdue = e.daysTo < 0;
-              const today_ = e.daysTo === 0;
+              const isToday = e.daysTo === 0;
+              const isFuture = e.daysTo > 0;
               return (
                 <div key={`r-${e.id}`} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '8px 10px', borderRadius: 10,
-                  background: overdue ? 'var(--alert-l)' : today_ ? '#FDF2F8' : 'var(--bg)',
-                  border: `1.5px solid ${overdue ? 'var(--alert)' : today_ ? '#EC4899' : 'var(--border)'}`,
+                  background: overdue ? 'var(--alert-l)' : isToday ? '#FDF2F8' : 'var(--bg)',
+                  border: `1.5px solid ${overdue ? 'var(--alert)' : isToday ? '#EC4899' : 'var(--border)'}`,
                 }}>
                   <span style={{ fontSize: 18 }}>{tp?.emoji}</span>
                   <div style={{ flex: 1 }}>
@@ -202,18 +203,14 @@ export default function Glow({ log, saveField, currentDate }) {
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                       Gepland: {e.nextDate}
                       {e.intervalDays && <span> · elke {INTERVAL_OPTIONS.find(o => o.days === e.intervalDays)?.label || `${e.intervalDays}d`}</span>}
-                      {e.type === 'lpg' && <span> · 💉 bij prik</span>}
                     </div>
-                    {e.type === 'lpg' && lpgStreak > 0 && (
-                      <div style={{ fontSize: 10, color: '#EC4899', fontWeight: 600 }}>🔥 {lpgStreak} weken streak</div>
-                    )}
                   </div>
                   <span style={{
                     fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 99,
-                    background: overdue ? 'var(--alert)' : today_ ? '#EC4899' : 'var(--border)',
-                    color: overdue || today_ ? 'white' : 'var(--muted)',
+                    background: overdue ? 'var(--alert)' : isToday ? '#EC4899' : 'var(--border)',
+                    color: overdue || isToday ? 'white' : 'var(--muted)',
                   }}>
-                    {overdue ? `${Math.abs(e.daysTo)}d te laat` : today_ ? 'vandaag!' : `over ${e.daysTo}d`}
+                    {overdue ? `${Math.abs(e.daysTo)}d te laat` : isToday ? 'vandaag!' : `over ${e.daysTo}d`}
                   </span>
                 </div>
               );
@@ -232,8 +229,10 @@ export default function Glow({ log, saveField, currentDate }) {
           <div className="scale-label">DAGELIJKS RITUAL</div>
           <div className="habit-grid" style={{ marginTop: 6 }}>
             {[
-              { id: 'moisturizer',   emoji: '🧴', label: 'Ingesmeerd' },
+              { id: 'moisturizer',   emoji: '🧴', label: 'Ingesmeerd (dag)' },
               { id: 'spf',           emoji: '☀️', label: 'SPF gebruikt' },
+              { id: 'retinol',       emoji: '🌙', label: 'Retinol/serum (avond)' },
+              { id: 'oogcreme',      emoji: '👁️', label: 'Oogcrème' },
               { id: 'glow_vitamins', emoji: '💊', label: 'Vitamines' },
               { id: 'glow_water',    emoji: '💧', label: 'Genoeg water' },
             ].map(h => (
@@ -254,9 +253,12 @@ export default function Glow({ log, saveField, currentDate }) {
       <div className="card">
         <div className="card-header">
           <div className="card-accent" style={{ background: '#8B5CF6' }} />
-          <div className="card-title">➕ Log een behandeling</div>
+          <div className="card-title">➕ Log behandeling / plan afspraak</div>
         </div>
         <div className="card-body">
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 8 }}>
+            Toekomstige datum = afspraak plannen · verleden = behandeling loggen
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
             {GLOW_TYPES.map(tp => (
               <button key={tp.id} className="btn" style={{
@@ -274,10 +276,12 @@ export default function Glow({ log, saveField, currentDate }) {
             <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 12, border: '1px solid var(--border)' }}>
               <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{t?.emoji} {t?.label}</div>
 
-              {/* Sub-items for body_vital */}
+              {/* Sub-items */}
               {t?.subItems && (
                 <div style={{ marginBottom: 10 }}>
-                  <div className="scale-label" style={{ marginBottom: 6 }}>WAT IS GEDAAN?</div>
+                  <div className="scale-label" style={{ marginBottom: 6 }}>
+                    {t.id === 'lpg' ? 'WELKE ZONES?' : 'WAT IS GEDAAN?'}
+                  </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {t.subItems.map(s => (
                       <button key={s.id} className="btn" style={{
@@ -293,12 +297,34 @@ export default function Glow({ log, saveField, currentDate }) {
                 </div>
               )}
 
-              {/* Date */}
+              {/* Duration (LPG etc.) */}
+              {t?.hasDuration && (
+                <div style={{ marginBottom: 10 }}>
+                  <div className="scale-label" style={{ marginBottom: 6 }}>SESSIEDUUR (MINUTEN)</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[30, 45, 60, 75, 90].map(min => (
+                      <button key={min} className="btn" style={{
+                        padding: '5px 12px', fontSize: 12,
+                        background: addDuration === min ? '#8B5CF6' : 'var(--bg)',
+                        color: addDuration === min ? 'white' : 'var(--text)',
+                        border: `1.5px solid ${addDuration === min ? '#8B5CF6' : 'var(--border)'}`,
+                      }} onClick={() => setAddDuration(addDuration === min ? null : min)}>
+                        {min}min
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Date — no max, allows future planning */}
               <div className="input-row" style={{ marginBottom: 8 }}>
                 <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 50 }}>Datum</span>
-                <input type="date" value={addDate} max={today}
+                <input type="date" value={addDate}
                   onChange={e => { setAddDate(e.target.value); if (planNext && intervalDays) setNextDate(addDays(e.target.value, intervalDays)); }}
                   style={{ flex: 1, fontSize: 13 }} />
+                {addDate > today && (
+                  <span style={{ fontSize: 10, color: '#8B5CF6', fontWeight: 700 }}>📅 gepland</span>
+                )}
               </div>
 
               {/* Notes */}
@@ -343,7 +369,7 @@ export default function Glow({ log, saveField, currentDate }) {
                     </div>
                     <div className="input-row">
                       <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 50 }}>Of datum</span>
-                      <input type="date" value={nextDate} min={today}
+                      <input type="date" value={nextDate}
                         onChange={e => { setNextDate(e.target.value); setIntervalDays(null); }}
                         style={{ flex: 1, fontSize: 13 }} />
                     </div>
@@ -384,9 +410,10 @@ export default function Glow({ log, saveField, currentDate }) {
                       {tp.last.subItems.map(id => allSubItems(tp.last.type).find(s => s.id === id)?.label).filter(Boolean).join(' · ')}
                     </div>
                   )}
-                  {tp.id === 'lpg' && <div style={{ fontSize: 10, color: 'var(--muted)' }}>Versteviging + lymfedrainage · bij Mounjaro-prik</div>}
-                  {tp.id === 'lpg' && lpgStreak > 1 && <div style={{ fontSize: 10, color: '#EC4899', fontWeight: 600 }}>🔥 {lpgStreak} weken op rij</div>}
-                  {tp.last?.notes && tp.id !== 'lpg' && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{tp.last.notes}</div>}
+                  {tp.last?.duration && (
+                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{tp.last.duration} minuten</div>
+                  )}
+                  {tp.last?.notes && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{tp.last.notes}</div>}
                   {tp.nextDate && (
                     <div style={{ fontSize: 10, marginTop: 2 }}>
                       <span style={{
@@ -404,9 +431,13 @@ export default function Glow({ log, saveField, currentDate }) {
                   )}
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    {tp.last.date === today ? 'vandaag' : tp.daysSince === 1 ? 'gisteren' : `${tp.daysSince}d geleden`}
-                  </div>
+                  {tp.last && (
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      {tp.last.date > today ? `📅 ${tp.last.date}` :
+                       tp.last.date === today ? 'vandaag' :
+                       tp.daysSince === 1 ? 'gisteren' : `${tp.daysSince}d geleden`}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -422,18 +453,27 @@ export default function Glow({ log, saveField, currentDate }) {
             <div className="card-title">📅 Geschiedenis</div>
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {events.slice(0, 25).map(e => {
+            {events.slice(0, 30).map(e => {
               const tp = typeMap[e.type];
+              const isFuture = e.date > today;
               return (
-                <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                <div key={e.id} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 0',
+                  borderBottom: '1px solid var(--border)',
+                  opacity: isFuture ? 0.8 : 1,
+                }}>
                   <span style={{ fontSize: 15, marginTop: 1 }}>{tp?.emoji}</span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>{tp?.label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {tp?.label}
+                      {isFuture && <span style={{ fontSize: 9, background: '#EDE9FE', color: '#7C3AED', padding: '1px 5px', borderRadius: 99, fontWeight: 700 }}>gepland</span>}
+                    </div>
                     {e.subItems?.length > 0 && (
                       <div style={{ fontSize: 10, color: 'var(--muted)' }}>
                         {e.subItems.map(id => allSubItems(e.type).find(s => s.id === id)?.label).filter(Boolean).join(' · ')}
                       </div>
                     )}
+                    {e.duration && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{e.duration} min</div>}
                     {e.notes && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{e.notes}</div>}
                     {e.nextDate && <div style={{ fontSize: 10, color: '#8B5CF6' }}>📅 Volgende: {e.nextDate}</div>}
                   </div>
