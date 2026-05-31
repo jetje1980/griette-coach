@@ -119,6 +119,18 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
     `${m.date}: taille ${m.waist ?? '?'}cm, heup ${m.hip ?? '?'}cm, borst ${m.chest ?? '?'}cm, arm ${m.arm ?? '?'}cm, dij ${m.thigh ?? '?'}cm`
   );
 
+  // Cyclus context
+  const cycleStart = localStorage.getItem('gc_cycle_start');
+  const cycleContext = (() => {
+    if (!cycleStart) return 'Cyclus: niet bijgehouden';
+    const daysSince = Math.floor((new Date(today) - new Date(cycleStart)) / 86400000) + 1;
+    if (daysSince <= 5)  return `Cyclus: dag ${daysSince} — menstruatie`;
+    if (daysSince <= 13) return `Cyclus: dag ${daysSince} — folliculaire fase (meer energie verwacht)`;
+    if (daysSince <= 16) return `Cyclus: dag ${daysSince} — mogelijk ovulatie`;
+    if (daysSince <= 28) return `Cyclus: dag ${daysSince} — luteale fase`;
+    return `Cyclus: dag ${daysSince} — verlengde/onregelmatige cyclus (perimenopauzaal)`;
+  })();
+
   const batteryData = recent
     .filter(l => l.battery_start != null || l.battery_end != null)
     .slice(0, 7)
@@ -216,6 +228,8 @@ LONG COVID SYMPTOMEN (afgelopen ${recent.length} dagen):
 ${symptomSummary || 'geen klachten geregistreerd'}
 
 GEWOONTES SCORE: ${habitPct.join(', ')}
+
+${cycleContext}
 
 MATEN VERLOOP (cm):
 ${measurementLines.join('\n') || 'nog geen maten geregistreerd'}

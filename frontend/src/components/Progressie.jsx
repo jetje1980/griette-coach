@@ -32,6 +32,68 @@ function dayNum(date) {
   return Math.max(1, Math.floor((new Date(date) - new Date(USER.startDate)) / 86400000) + 1);
 }
 
+function WeightGraph({ logs }) {
+  const entries = Object.values(logs)
+    .filter(l => l.weight)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (entries.length < 2) return null;
+
+  const START_DATE    = '2026-05-27';
+  const VACATION_DATE = '2026-07-25';
+  const GOAL          = 55;
+
+  const startMs   = new Date(START_DATE).getTime();
+  const endMs     = new Date(VACATION_DATE).getTime();
+  const totalDays = (endMs - startMs) / 86400000;
+
+  const weights  = entries.map(e => e.weight);
+  const maxW     = Math.max(...weights, 65);
+  const minW     = Math.min(GOAL - 1, ...weights);
+  const rangeW   = maxW - minW;
+
+  const W = 300, H = 80;
+  const PL = 10, PR = 10, PT = 12, PB = 8;
+  const cW = W - PL - PR, cH = H - PT - PB;
+
+  const xFor = (date) => PL + (Math.max(0, (new Date(date).getTime() - startMs) / 86400000) / totalDays) * cW;
+  const yFor = (w)    => PT + (1 - (w - minW) / rangeW) * cH;
+
+  const points   = entries.map(e => ({ x: xFor(e.date), y: yFor(e.weight), w: e.weight }));
+  const polyline = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const goalY    = yFor(GOAL);
+  const todayX   = Math.min(xFor(new Date().toISOString().slice(0, 10)), W - PR);
+  const vacX     = xFor(VACATION_DATE);
+  const last     = points[points.length - 1];
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>📈 Gewichtsverloop t/m vakantie</div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 80, display: 'block' }}>
+        {/* Doel lijn */}
+        <line x1={PL} y1={goalY} x2={W - PR} y2={goalY} stroke="var(--sage)" strokeWidth="1" strokeDasharray="4,3" />
+        <text x={W - PR - 1} y={goalY - 2} fontSize="7" fill="var(--sage)" textAnchor="end">55 kg</text>
+        {/* Vakantie marker */}
+        <line x1={vacX} y1={PT} x2={vacX} y2={H - PB} stroke="var(--gold)" strokeWidth="1" strokeDasharray="3,3" />
+        <text x={vacX + 2} y={PT + 7} fontSize="7" fill="var(--gold)">🏖️</text>
+        {/* Vandaag marker */}
+        {todayX < vacX - 5 && (
+          <line x1={todayX} y1={PT} x2={todayX} y2={H - PB} stroke="var(--rust)" strokeWidth="0.8" strokeDasharray="2,3" opacity="0.6" />
+        )}
+        {/* Gewichtslijn */}
+        <polyline points={polyline} fill="none" stroke="var(--rust)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {/* Punten */}
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="var(--rust)" />
+        ))}
+        {/* Laatste gewicht label */}
+        {last && (
+          <text x={last.x} y={last.y - 5} fontSize="8" fill="var(--rust)" textAnchor="middle" fontWeight="bold">{last.w}</text>
+        )}
+      </svg>
+    </div>
+  );
+}
+
 function WeightProgress({ logs }) {
   const entries = Object.values(logs)
     .filter(l => l.weight)
@@ -67,6 +129,7 @@ function WeightProgress({ logs }) {
             <div style={{ fontWeight: 700 }}>{goal} kg</div>
           </div>
         </div>
+        <WeightGraph logs={logs} />
         <div style={{ height: 8, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
           <div style={{ height: '100%', width: `${pct}%`, background: gained ? 'var(--alert)' : 'var(--rust)', borderRadius: 99, transition: 'width 0.5s' }} />
         </div>

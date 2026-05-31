@@ -12,6 +12,18 @@ const SYMPTOMS = [
   { id: 'symptom_pem',        label: 'PEM-crash',     emoji: '⚡🛑' },
 ];
 
+const PRIK_SCHEMA = [
+  { date: '2026-06-05', nr: 5,  label: 'vr 5 jun'  },
+  { date: '2026-06-16', nr: 6,  label: 'ma 16 jun' },
+  { date: '2026-06-23', nr: 7,  label: 'ma 23 jun' },
+  { date: '2026-06-30', nr: 8,  label: 'ma 30 jun' },
+  { date: '2026-07-06', nr: 9,  label: 'ma 6 jul'  },
+  { date: '2026-07-17', nr: 10, label: 'vr 17 jul' },
+  { date: '2026-07-25', nr: 11, label: 'vr 25 jul' },
+];
+const VACATION_DATE = '2026-07-25';
+const GOAL_WEIGHT   = 55;
+
 function BpAlert({ sys, dia }) {
   if (!sys) return null;
   if (sys >= BP.red_sys || dia >= BP.red_dia) return (
@@ -56,7 +68,7 @@ function GlassTracker({ glasses, onChange }) {
   );
 }
 
-export default function CheckIn({ log, saveField, saveFields, currentDate, tip }) {
+export default function CheckIn({ log, saveField, saveFields, currentDate, logs, tip }) {
   const [weight, setWeight] = useState('');
   const [bpSys, setBpSys] = useState('');
   const [bpDia, setBpDia] = useState('');
@@ -69,6 +81,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
   const [batteryEnd, setBatteryEnd] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
   const [noteTimer, setNoteTimer] = useState(null);
+  const [cycleStart, setCycleStart] = useState(() => localStorage.getItem('gc_cycle_start') || null);
 
   useEffect(() => {
     if (log) {
@@ -84,6 +97,44 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
       setBatteryEnd(log.battery_end ?? '');
     }
   }, [log, currentDate]);
+
+  // Sprint calculations
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const daysToVacation = Math.max(0, Math.floor((new Date(VACATION_DATE) - new Date(todayStr)) / 86400000));
+  const weeksToVacation = (daysToVacation / 7).toFixed(1);
+
+  const weightEntries = Object.values(logs || {})
+    .filter(l => l.weight)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const latestWeight = weightEntries.length ? weightEntries[weightEntries.length - 1].weight : null;
+
+  const projectedWeight = (() => {
+    if (weightEntries.length < 2) return null;
+    const first = weightEntries[0], last = weightEntries[weightEntries.length - 1];
+    const days = Math.max(1, Math.floor((new Date(last.date) - new Date(first.date)) / 86400000));
+    const dailyChange = (last.weight - first.weight) / days;
+    return +(last.weight + dailyChange * daysToVacation).toFixed(1);
+  })();
+
+  const weeklyNeeded = latestWeight && daysToVacation > 0
+    ? +(((latestWeight - GOAL_WEIGHT) / daysToVacation) * 7).toFixed(2)
+    : null;
+
+  // Prik calculations
+  const volgendePrik = PRIK_SCHEMA.find(p => p.date > todayStr);
+  const huidigePrikNr = PRIK_SCHEMA.filter(p => p.date <= todayStr).slice(-1)[0]?.nr ?? 4;
+  const dagenTotPrik = volgendePrik
+    ? Math.floor((new Date(volgendePrik.date) - new Date(todayStr)) / 86400000)
+    : null;
+
+  // Cycle calculations
+  const cycleDay = cycleStart
+    ? Math.floor((new Date(todayStr) - new Date(cycleStart)) / 86400000) + 1
+    : null;
+  const startMenstruatie = () => {
+    localStorage.setItem('gc_cycle_start', todayStr);
+    setCycleStart(todayStr);
+  };
 
   const saveWeight = () => {
     const w = parseFloat(weight);
@@ -113,8 +164,10 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
     setNoteTimer(t);
   };
 
-  const toggleHabit = (id) => saveField(id, log?.[id] ? 0 : 1);
-  const toggleMed = (id) => saveField(id, log?.[id] ? 0 : 1);
+  const toggleHabit   = (id) => saveField(id, log?.[id] ? 0 : 1);
+  const toggleMed     = (id) => saveField(id, log?.[id] ? 0 : 1);
+  const toggleSymptom = (id) => saveField(id, log?.[id] ? 0 : 1);
+  const toggleEiwit   = (id) => saveField(id, log?.[id] ? 0 : 1);
 
   const saveSteps = () => {
     const v = parseInt(steps);
@@ -130,6 +183,8 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
     const v = parseInt(raw);
     if (!isNaN(v) && v >= 0 && v <= 100) saveField(field, v);
   };
+
+  const saveSleepHours = (v) => saveField('sleep_hours', parseFloat(v));
 
   function batteryColor(v) {
     if (v == null) return 'var(--border)';
@@ -147,22 +202,89 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
     return 'uitgeput';
   }
 
-  const saveSleepHours = (v) => {
-    saveField('sleep_hours', parseFloat(v));
-  };
-
-  const toggleSymptom = (id) => saveField(id, log?.[id] ? 0 : 1);
-
-  const checkedHabits = HABITS.filter(h => log?.[h.id]).length;
-  const checkedMeds = MEDS.filter(m => !m.weekly && log?.[m.id]).length;
+  const checkedHabits  = HABITS.filter(h => log?.[h.id]).length;
+  const checkedMeds    = MEDS.filter(m => !m.weekly && log?.[m.id]).length;
   const activeSymptoms = SYMPTOMS.filter(s => log?.[s.id]).length;
 
-  const stepGoal = 8000;
-  const stepPct = Math.min(100, Math.round(((log?.steps || 0) / stepGoal) * 100));
+  const stepGoal  = 8000;
+  const stepPct   = Math.min(100, Math.round(((log?.steps || 0) / stepGoal) * 100));
   const stepColor = stepPct >= 100 ? 'var(--sage)' : stepPct >= 60 ? 'var(--gold)' : 'var(--rust)';
+
+  const eiwitItems = [
+    { id: 'protein_breakfast', emoji: '🥚', label: 'Eiwitrijk ontbeten' },
+    { id: 'protein_lunch',     emoji: '🍗', label: 'Eiwitrijke lunch'   },
+    { id: 'protein_day',       emoji: '🫙', label: 'Dagdoel gehaald'    },
+  ];
+  const checkedEiwit = eiwitItems.filter(e => log?.[e.id]).length;
 
   return (
     <div className="pane">
+
+      {/* Sprint-widget */}
+      {daysToVacation > 0 && (
+        <div className="card" style={{ background: 'linear-gradient(135deg, var(--card) 0%, var(--gold-l) 100%)' }}>
+          <div className="card-header">
+            <div className="card-accent" style={{ background: 'var(--gold)' }} />
+            <div className="card-title">🏖️ Sprint naar vakantie</div>
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--gold)' }}>{daysToVacation} dagen</span>
+          </div>
+          <div className="card-body">
+            {/* Gewicht rij */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Nu</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--rust)' }}>{latestWeight ?? '—'} kg</div>
+              </div>
+              <div style={{ textAlign: 'center', alignSelf: 'center', color: 'var(--muted)', fontSize: 16 }}>→</div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Doel</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--sage)' }}>{GOAL_WEIGHT} kg</div>
+              </div>
+              {projectedWeight && (
+                <>
+                  <div style={{ textAlign: 'center', alignSelf: 'center', color: 'var(--muted)', fontSize: 16 }}>→</div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>Prognose 25/7</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: projectedWeight <= 55 ? 'var(--sage)' : 'var(--gold)' }}>{projectedWeight} kg</div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {weeklyNeeded != null && (
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+                Voor doel 55 kg: <strong style={{ color: 'var(--rust)' }}>−{weeklyNeeded} kg/week</strong> nodig · {weeksToVacation} weken te gaan
+                {weightEntries.length < 7 && <span style={{ color: 'var(--muted)', fontSize: 10 }}> (prognose accurater na meer wegingen)</span>}
+              </div>
+            )}
+
+            {/* Prik-reminder */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 11 }}>
+                💉 Prik <strong>#{huidigePrikNr}</strong> huidig
+                {volgendePrik && (
+                  <span style={{ color: 'var(--muted)', marginLeft: 6 }}>
+                    · #{volgendePrik.nr} op {volgendePrik.label}
+                  </span>
+                )}
+              </div>
+              {dagenTotPrik != null && (
+                <span style={{
+                  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                  background: dagenTotPrik <= 2 ? 'var(--rust-l)' : 'var(--border)',
+                  color: dagenTotPrik <= 2 ? 'var(--rust)' : 'var(--muted)',
+                }}>
+                  over {dagenTotPrik} dag{dagenTotPrik !== 1 ? 'en' : ''}
+                </span>
+              )}
+              {!volgendePrik && (
+                <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 700 }}>laatste prik voor vakantie!</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <BpAlert sys={log?.bp_sys} dia={log?.bp_dia} />
 
       {/* Gewicht */}
@@ -189,6 +311,46 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
         </div>
       </div>
 
+      {/* Cyclus */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#C084FC' }} />
+          <div className="card-title">🌙 Cyclus</div>
+          {cycleDay != null && (
+            <span style={{ fontSize: 11, color: '#9333EA', fontWeight: 700, background: '#F3E8FF', padding: '2px 8px', borderRadius: 99 }}>
+              {cycleDay <= 5 ? `🩸 Dag ${cycleDay}` : cycleDay > 45 ? `${cycleDay} dagen — peri` : `Dag ${cycleDay}`}
+            </span>
+          )}
+        </div>
+        <div className="card-body">
+          {cycleStart && (
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+              Laatste menstruatie: <strong>{cycleStart}</strong>
+              {cycleDay > 45 && <span style={{ color: '#9333EA', marginLeft: 6 }}>· langere cyclus (perimenopauzaal)</span>}
+              {cycleDay <= 5 && <span style={{ color: 'var(--alert)', marginLeft: 6 }}>· ongesteld</span>}
+              {cycleDay > 5 && cycleDay <= 13 && <span style={{ color: 'var(--sage)', marginLeft: 6 }}>· folliculaire fase — meer energie verwacht</span>}
+              {cycleDay >= 14 && cycleDay <= 16 && <span style={{ color: 'var(--gold)', marginLeft: 6 }}>· mogelijke ovulatie</span>}
+              {cycleDay > 16 && cycleDay <= 28 && <span style={{ color: 'var(--muted)', marginLeft: 6 }}>· luteale fase</span>}
+            </div>
+          )}
+          <button
+            className="btn btn-full"
+            style={{
+              background: '#F3E8FF', color: '#7C3AED', border: '1.5px solid #C084FC',
+              fontWeight: 700, fontSize: 13,
+            }}
+            onClick={startMenstruatie}
+          >
+            🩸 Ongesteld geworden vandaag
+          </button>
+          {!cycleStart && (
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
+              Tik als je ongesteld bent geworden — de app bijhoudt dan je cyclusdag automatisch.
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Bloeddruk */}
       <div className="card">
         <div className="card-header">
@@ -196,14 +358,12 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
           <div className="card-title">❤️ Bloeddruk</div>
         </div>
         <div className="card-body">
-          {/* Sys / Dia */}
           <div className="input-row">
             <input type="number" placeholder="120" value={bpSys} onChange={e => setBpSys(e.target.value)} style={{ flex: 1, textAlign: 'center' }} />
             <span className="unit" style={{ fontSize: 18, fontWeight: 800 }}>/</span>
             <input type="number" placeholder="80" value={bpDia} onChange={e => setBpDia(e.target.value)} style={{ flex: 1, textAlign: 'center' }} />
             <span className="unit">mmHg</span>
           </div>
-          {/* Hartslag + tijdstip */}
           <div className="input-row" style={{ marginTop: 6 }}>
             <input type="number" placeholder="HS bijv. 68" value={bpHr} onChange={e => setBpHr(e.target.value)} style={{ flex: 1, textAlign: 'center' }} />
             <span className="unit">bpm</span>
@@ -230,7 +390,6 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
           <div className="card-title">👣 Activiteit & herstel</div>
         </div>
         <div className="card-body">
-          {/* Stappen */}
           <div className="scale-label">STAPPEN VANDAAG</div>
           <div className="input-row" style={{ marginBottom: 6 }}>
             <input
@@ -260,7 +419,6 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
             </div>
           )}
 
-          {/* Rust-HS */}
           <div className="scale-label" style={{ marginTop: 4 }}>RUST-HARTSLAG (ochtend)</div>
           <div className="input-row">
             <input
@@ -281,7 +439,6 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
             </div>
           )}
 
-          {/* Body battery */}
           <div className="scale-label" style={{ marginTop: 12 }}>🔋 BODY BATTERY (Garmin)</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
             {[['Ochtend', 'battery_start', batteryStart, setBatteryStart], ['Avond', 'battery_end', batteryEnd, setBatteryEnd]].map(([label, field, val, setter]) => (
@@ -438,6 +595,31 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, tip }
         </div>
         <div className="card-body">
           <GlassTracker glasses={log?.glasses} onChange={(v) => saveField('glasses', v)} />
+        </div>
+      </div>
+
+      {/* Eiwitfocus */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#F97316' }} />
+          <div className="card-title">🥩 Eiwitfocus — {checkedEiwit}/3</div>
+        </div>
+        <div className="card-body">
+          <div className="habit-grid">
+            {eiwitItems.map(e => (
+              <div key={e.id}
+                className={`habit-btn ${log?.[e.id] ? 'on' : ''}`}
+                style={log?.[e.id] ? { background: '#FFF7ED', borderColor: '#F97316', color: '#C2410C' } : {}}
+                onClick={() => toggleEiwit(e.id)}
+              >
+                <div className="habit-emoji">{e.emoji}</div>
+                <div className="habit-label">{e.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
+            Eiwitgewoontes zijn je anker — ook op vakantie zonder Mounjaro op volle kracht.
+          </div>
         </div>
       </div>
 
