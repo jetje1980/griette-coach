@@ -1,6 +1,134 @@
 import React, { useState, useEffect } from 'react';
 import { store } from '../store';
 
+const FOOD_PREF_KEY = 'gc_food_prefs';
+
+const EXCLUDE_OPTIONS = [
+  { key: 'bonen',      emoji: '🫘', label: 'Bonen' },
+  { key: 'banaan',     emoji: '🍌', label: 'Banaan' },
+  { key: 'ei_veel',   emoji: '🥚', label: '>2 eieren/dag' },
+  { key: 'rood_vlees', emoji: '🥩', label: 'Rood vlees' },
+  { key: 'vis',        emoji: '🐟', label: 'Vis' },
+  { key: 'lactose',   emoji: '🥛', label: 'Lactose/zuivel' },
+  { key: 'gluten',    emoji: '🌾', label: 'Gluten' },
+  { key: 'noten',     emoji: '🥜', label: 'Noten' },
+];
+
+const PREFER_OPTIONS = [
+  { key: 'smoothies',  emoji: '🥤', label: 'Smoothies' },
+  { key: 'shakes',    emoji: '🧃', label: 'Eiwitshakes' },
+  { key: 'soep',      emoji: '🍲', label: 'Soep' },
+  { key: 'salades',   emoji: '🥗', label: 'Salades' },
+  { key: 'kip',       emoji: '🍗', label: 'Kip' },
+  { key: 'vis_zee',   emoji: '🐟', label: 'Vis/zeevruchten' },
+  { key: 'pasta',     emoji: '🍝', label: 'Pasta' },
+  { key: 'rijst_wok', emoji: '🍚', label: 'Rijst/wok' },
+];
+
+function loadPrefs() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(FOOD_PREF_KEY) || 'null');
+    if (stored) return stored;
+    // Eerste keer: bekende voorkeuren als startpunt
+    const defaults = {
+      excluded: ['bonen', 'banaan', 'ei_veel'],
+      preferred: ['smoothies', 'shakes', 'soep', 'salades'],
+      notes: '',
+    };
+    localStorage.setItem(FOOD_PREF_KEY, JSON.stringify(defaults));
+    return defaults;
+  } catch { return {}; }
+}
+
+function FoodPrefs() {
+  const [prefs, setPrefs] = useState(loadPrefs);
+  const [flash, setFlash] = useState(false);
+
+  const excluded  = new Set(prefs.excluded  || []);
+  const preferred = new Set(prefs.preferred || []);
+
+  function save(updated) {
+    setPrefs(updated);
+    localStorage.setItem(FOOD_PREF_KEY, JSON.stringify(updated));
+    setFlash(true);
+    setTimeout(() => setFlash(false), 1200);
+  }
+
+  function toggleExclude(key) {
+    const next = new Set(excluded);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    save({ ...prefs, excluded: [...next] });
+  }
+
+  function togglePrefer(key) {
+    const next = new Set(preferred);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    save({ ...prefs, preferred: [...next] });
+  }
+
+  const chipStyle = (active, activeColor) => ({
+    fontSize: 11, padding: '5px 10px', borderRadius: 99, border: '1.5px solid',
+    background: active ? activeColor : 'var(--bg)',
+    color: active ? 'white' : 'var(--muted)',
+    borderColor: active ? activeColor : 'var(--border)',
+    cursor: 'pointer', fontWeight: active ? 700 : 400,
+  });
+
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div className="card-header">
+        <div className="card-accent" style={{ background: 'var(--rust)' }} />
+        <div className="card-title">🍽️ Voedingsvoorkuren</div>
+        {flash && <span style={{ fontSize: 10, color: 'var(--sage)', fontWeight: 700 }}>✓ opgeslagen</span>}
+      </div>
+      <div className="card-body">
+        <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
+          Tik aan wat je niet lekker vindt of graag meer wilt. De AI-coach en menu-checks passen zich hierop aan.
+        </div>
+
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--alert)', letterSpacing: 1, marginBottom: 7 }}>
+          🚫 VERMIJDEN / NIET LEKKER
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+          {EXCLUDE_OPTIONS.map(opt => (
+            <button key={opt.key} onClick={() => toggleExclude(opt.key)}
+              style={chipStyle(excluded.has(opt.key), 'var(--alert)')}>
+              {opt.emoji} {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--sage)', letterSpacing: 1, marginBottom: 7 }}>
+          ✅ GRAAG MEER VAN
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+          {PREFER_OPTIONS.map(opt => (
+            <button key={opt.key} onClick={() => togglePrefer(opt.key)}
+              style={chipStyle(preferred.has(opt.key), 'var(--sage)')}>
+              {opt.emoji} {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1, marginBottom: 6 }}>
+          📝 EXTRA OPMERKINGEN
+        </div>
+        <textarea
+          placeholder="Bijv. hou van Aziatisch, niet van scherp, etc."
+          value={prefs.notes || ''}
+          onChange={e => save({ ...prefs, notes: e.target.value })}
+          style={{
+            width: '100%', minHeight: 56, fontSize: 11, padding: '8px 10px',
+            borderRadius: 8, border: '1.5px solid var(--border)',
+            background: 'var(--bg)', color: 'var(--text)', resize: 'vertical',
+            fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function Settings({ onClose }) {
   const [apiKey, setApiKey] = useState('');
   const [saved, setSaved] = useState(false);
@@ -127,6 +255,9 @@ export default function Settings({ onClose }) {
             {backupResult && <div className="saved-note" style={{ marginTop: 6 }}>{backupResult}</div>}
           </div>
         </div>
+
+        {/* Voedingsvoorkuren */}
+        <FoodPrefs />
 
         {/* Reset */}
         <div className="card">

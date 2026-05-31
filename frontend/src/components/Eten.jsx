@@ -11,11 +11,35 @@ function cyclePhaseFromDay(cycleDay) {
   return null;
 }
 
+const EXCLUDE_KEYWORDS = {
+  bonen:      ['bonen', 'kikkererwten', 'edamame', 'linzen'],
+  banaan:     ['banaan'],
+  ei_veel:    ['3 eieren', '3-eieren', 'scrambled eggs (3)', 'omelet (3'],
+  rood_vlees: ['biefstuk', 'rund', 'gehakt'],
+  vis:        ['zalm', 'tonijn', 'makreel', 'haring', 'garnalen', 'ansjovis'],
+  lactose:    ['room', 'kaas', 'yoghurt', 'kwark'],
+  gluten:     ['pasta', 'brood', 'toast', 'naan'],
+  noten:      ['noten', 'amandelen', 'walnoten', 'cashews', 'pindaboter', 'amandelboter'],
+};
+const EXCLUDE_LABELS = {
+  bonen: 'bonen', banaan: 'banaan', ei_veel: 'veel eieren',
+  rood_vlees: 'rood vlees', vis: 'vis', lactose: 'lactose',
+  gluten: 'gluten', noten: 'noten',
+};
+
 export default function Eten({ tip, dayNum, log }) {
   const [showAllTips, setShowAllTips] = useState(false);
   const [vitaminTab, setVitaminTab] = useState('altijd');
 
   const menu = DAILY_MENUS[(dayNum - 1) % DAILY_MENUS.length];
+
+  // Voedingsvoorkuren
+  const foodPrefs = (() => { try { return JSON.parse(localStorage.getItem('gc_food_prefs') || '{}'); } catch { return {}; } })();
+  const excludedKeys = foodPrefs.excluded || [];
+  const menuText = menu ? [menu.ontbijt, menu.lunch, menu.avond, menu.snack].join(' ').toLowerCase() : '';
+  const menuWarnings = excludedKeys.filter(key =>
+    (EXCLUDE_KEYWORDS[key] || [key]).some(kw => menuText.includes(kw.toLowerCase()))
+  ).map(key => EXCLUDE_LABELS[key] || key);
 
   const cycleStart = localStorage.getItem('gc_cycle_start');
   const cycleDay = cycleStart
@@ -48,6 +72,11 @@ export default function Eten({ tip, dayNum, log }) {
         <div className="card-body">
           {menu && (
             <>
+              {menuWarnings.length > 0 && (
+                <div style={{ fontSize: 10, color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '6px 10px', marginBottom: 10, lineHeight: 1.5 }}>
+                  ⚠️ Bevat: <strong>{menuWarnings.join(', ')}</strong> — pas aan via ⚙️ Instellingen → Voedingsvoorkuren
+                </div>
+              )}
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gold)', letterSpacing: 1, marginBottom: 10 }}>
                 ✨ {menu.focus}
               </div>

@@ -239,10 +239,23 @@ GEWOONTES SCORE: ${habitPct.join(', ')}
 
 ${cycleContext}
 
-VOEDINGSVOORKEUREN (altijd rekening mee houden):
-- NIET: bonen (zwarte/witte/sperzje/edamame), bananen
-- MATIG: eieren (max 2× per dag, liever niet elke dag)
-- WEL: smoothies, eiwitshakes, soepen, salades, vis, kip, havermout, avocado, noten
+VOEDINGSVOORKUREN (door gebruiker ingesteld in app):
+${(() => {
+  const LABELS = {
+    bonen: 'bonen/kikkererwten/edamame', banaan: 'banaan', ei_veel: 'meer dan 2 eieren/dag',
+    rood_vlees: 'rood vlees/biefstuk', vis: 'vis', lactose: 'lactose/zuivel',
+    gluten: 'gluten/tarwe', noten: 'noten/pindaboter',
+    smoothies: 'smoothies', shakes: 'eiwitshakes', soep: 'soep',
+    salades: 'salades', kip: 'kip', vis_zee: 'vis/zeevruchten', pasta: 'pasta', rijst_wok: 'rijst/wok',
+  };
+  try {
+    const p = JSON.parse(localStorage.getItem('gc_food_prefs') || '{}');
+    const excl = (p.excluded  || ['bonen', 'banaan', 'ei_veel']).map(k => LABELS[k] || k);
+    const pref = (p.preferred || ['smoothies', 'shakes', 'soep', 'salades']).map(k => LABELS[k] || k);
+    return `VERMIJDEN: ${excl.join(', ')}
+GRAAG MEER: ${pref.join(', ')}${p.notes ? '\nExtra: ' + p.notes : ''}`;
+  } catch { return 'VERMIJDEN: bonen, banaan, veel eieren\nGRAAG MEER: smoothies, soep, salades'; }
+})()}
 
 ${recentReports ? `RECENTE COACH-RAPPORTEN (patroonherkenning — gebruik voor trends):\n${recentReports}\n` : ''}
 MATEN VERLOOP (cm):
