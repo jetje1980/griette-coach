@@ -354,6 +354,151 @@ function GedragGevolg({ logs }) {
 
 // ────────────────────────────────────────────────────────────────────────────
 
+const TRIGGER_LABELS = {
+  hormonen: '🌙 Hormonen/cyclus', slaap: '😴 Slaap', inspanning: '🏃 Inspanning',
+  stress: '😤 Stress', weer: '🌩️ Weer', voeding: '🍷 Voeding', onbekend: '❓ Onbekend',
+};
+
+function MigraineOverview({ logs }) {
+  const AJOVI_HIST = 'gc_ajovi_history';
+  const ajovi = (() => { try { return JSON.parse(localStorage.getItem(AJOVI_HIST) || '[]'); } catch { return []; } })();
+
+  const migraineDays = Object.values(logs)
+    .filter(l => l.migraine)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!migraineDays.length) return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-accent" style={{ background: '#7C3AED' }} />
+        <div className="card-title">🧠 Migraine patroon</div>
+      </div>
+      <div className="card-body" style={{ fontSize: 12, color: 'var(--muted)' }}>
+        Nog geen migraine geregistreerd. Log migraine-dagen via de Vandaag-tab voor patroonanalyse.
+      </div>
+    </div>
+  );
+
+  // Group by month
+  const byMonth = {};
+  for (const d of migraineDays) {
+    const month = d.date.slice(0, 7);
+    if (!byMonth[month]) byMonth[month] = [];
+    byMonth[month].push(d);
+  }
+
+  // Trigger tally
+  const triggerCount = {};
+  for (const d of migraineDays) {
+    const t = d.migraine_trigger || 'onbekend';
+    triggerCount[t] = (triggerCount[t] || 0) + 1;
+  }
+  const topTriggers = Object.entries(triggerCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  // Correlate with cycle
+  const cycleStart = localStorage.getItem('gc_cycle_start');
+  const cycleCorr = cycleStart ? (() => {
+    const hormoonDays = migraineDays.filter(d => d.migraine_trigger === 'hormonen').length;
+    return hormoonDays > 0 ? `${hormoonDays} van ${migraineDays.length} migrainedagen zijn gemarkeerd als hormoon-gerelateerd.` : null;
+  })() : null;
+
+  // Days since last ajovi per migraine day
+  const ajoviCorr = ajovi.length > 0 ? migraineDays.map(d => {
+    const prev = ajovi.filter(a => a.date <= d.date).sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (!prev) return null;
+    return Math.floor((new Date(d.date) - new Date(prev.date)) / 86400000);
+  }).filter(Boolean) : [];
+  const avgDaysSinceAjovi = ajoviCorr.length
+    ? Math.round(ajoviCorr.reduce((a, b) => a + b, 0) / ajoviCorr.length)
+    : null;
+
+  const NL_MONTHS_SHORT = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-accent" style={{ background: '#7C3AED' }} />
+        <div className="card-title">🧠 Migraine patroon</div>
+        <span style={{ fontSize: 11, color: '#7C3AED', fontWeight: 700, background: '#F3E8FF', padding: '2px 8px', borderRadius: 99 }}>
+          {migraineDays.length} dag{migraineDays.length !== 1 ? 'en' : ''}
+        </span>
+      </div>
+      <div className="card-body">
+
+        {/* Monthly overview */}
+        <div className="scale-label">PER MAAND</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, marginBottom: 12 }}>
+          {Object.entries(byMonth).map(([month, days]) => {
+            const [y, m] = month.split('-');
+            return (
+              <div key={month} style={{
+                background: '#F3E8FF', borderRadius: 8, padding: '6px 10px', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 10, color: '#7C3AED', fontWeight: 700 }}>
+                  {NL_MONTHS_SHORT[parseInt(m) - 1]} {y}
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: '#7C3AED', lineHeight: 1.2 }}>{days.length}</div>
+                <div style={{ fontSize: 9, color: 'var(--muted)' }}>dag{days.length !== 1 ? 'en' : ''}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Top triggers */}
+        {topTriggers.length > 0 && (
+          <>
+            <div className="scale-label">MEEST VOORKOMENDE TRIGGERS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, marginBottom: 12 }}>
+              {topTriggers.map(([t, n]) => (
+                <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, fontSize: 12 }}>{TRIGGER_LABELS[t] || t}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#7C3AED' }}>{n}×</div>
+                  <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${(n / migraineDays.length) * 100}%`, background: '#7C3AED', borderRadius: 99 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Ajovi correlation */}
+        {avgDaysSinceAjovi != null && (
+          <div style={{ background: '#F3E8FF', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#7C3AED', marginBottom: 2 }}>💜 Ajovi correlatie</div>
+            <div style={{ fontSize: 11, color: 'var(--text)' }}>
+              Gemiddeld <strong>{avgDaysSinceAjovi} dagen</strong> na de laatste Ajovi-prik treedt er migraine op.
+              {avgDaysSinceAjovi > 25 && <span style={{ color: 'var(--alert)', marginLeft: 4 }}>⚠️ Mogelijk uitgewerkt aan einde maand.</span>}
+            </div>
+          </div>
+        )}
+
+        {/* Cycle correlation */}
+        {cycleCorr && (
+          <div style={{ background: '#F3E8FF', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--text)' }}>🌙 {cycleCorr}</div>
+          </div>
+        )}
+
+        {/* Recent migraine days */}
+        <div className="scale-label">RECENTE MIGRAINE-DAGEN</div>
+        <div style={{ marginTop: 6 }}>
+          {migraineDays.slice(-8).reverse().map(d => (
+            <div key={d.date} style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 11 }}>
+              <span style={{ color: 'var(--muted)', minWidth: 80 }}>{d.date}</span>
+              {d.migraine_severity && <span>{'🟣'.repeat(d.migraine_severity)}</span>}
+              {d.migraine_hours && <span>{d.migraine_hours}u</span>}
+              {d.migraine_trigger && <span style={{ color: '#7C3AED' }}>{TRIGGER_LABELS[d.migraine_trigger]}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 export default function Progressie({ logs }) {
   const [sessions, setSessions] = useState([]);
   const [measurements, setMeasurements] = useState([]);
@@ -386,6 +531,7 @@ export default function Progressie({ logs }) {
     <div className="pane">
       <WeightProgress logs={logs} />
       <GedragGevolg logs={logs} />
+      <MigraineOverview logs={logs} />
 
       {/* Foto-tijdlijn */}
       {photoSessions.length === 0 ? (

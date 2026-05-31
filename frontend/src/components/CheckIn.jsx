@@ -1,5 +1,113 @@
 import React, { useState, useEffect } from 'react';
-import { HABITS, MEDS, BP, PERSONAL_EVENTS } from '../config';
+import { HABITS, MEDS, BP, PERSONAL_EVENTS, PRN_MEDS, SUPPLEMENTS } from '../config';
+
+const AJOVI_KEY    = 'gc_ajovi_next';
+const AJOVI_HIST   = 'gc_ajovi_history';
+const MIGRAINE_TRIGGERS = [
+  { id: 'hormonen',  label: 'Hormonen/cyclus', emoji: '🌙' },
+  { id: 'slaap',     label: 'Slaap',            emoji: '😴' },
+  { id: 'inspanning',label: 'Inspanning',        emoji: '🏃' },
+  { id: 'stress',    label: 'Stress',            emoji: '😤' },
+  { id: 'weer',      label: 'Weer/barometer',    emoji: '🌩️' },
+  { id: 'voeding',   label: 'Voeding',           emoji: '🍷' },
+  { id: 'onbekend',  label: 'Onbekend',          emoji: '❓' },
+];
+
+function nextFirstOfMonth(from) {
+  const d = new Date(from);
+  return new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().slice(0, 10);
+}
+
+function AjoviTracker() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [nextDate, setNextDate] = useState(() => localStorage.getItem(AJOVI_KEY) || '2026-06-01');
+  const [history, setHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(AJOVI_HIST) || '[]'); } catch { return []; }
+  });
+  const [editing, setEditing] = useState(false);
+  const [editVal, setEditVal] = useState(nextDate);
+  const [confirmed, setConfirmed] = useState(false);
+
+  const daysTo = Math.floor((new Date(nextDate) - new Date(today)) / 86400000);
+  const lastGiven = history[0];
+  const daysSinceLast = lastGiven ? Math.floor((new Date(today) - new Date(lastGiven.date)) / 86400000) : null;
+
+  function markGiven() {
+    const updated = [{ date: today }, ...history].slice(0, 24);
+    const nxt = nextFirstOfMonth(today);
+    localStorage.setItem(AJOVI_HIST, JSON.stringify(updated));
+    localStorage.setItem(AJOVI_KEY, nxt);
+    setHistory(updated);
+    setNextDate(nxt);
+    setConfirmed(true);
+    setTimeout(() => setConfirmed(false), 3000);
+  }
+
+  function saveDate() {
+    localStorage.setItem(AJOVI_KEY, editVal);
+    setNextDate(editVal);
+    setEditing(false);
+  }
+
+  const urgent = daysTo >= -2 && daysTo <= 2;
+  const overdue = daysTo < -2;
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-accent" style={{ background: '#7C3AED' }} />
+        <div className="card-title">💜 Ajovi (migrainepreventie)</div>
+        <span style={{
+          fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+          background: overdue ? 'var(--alert-l)' : urgent ? '#F3E8FF' : 'var(--border)',
+          color: overdue ? 'var(--alert)' : urgent ? '#7C3AED' : 'var(--muted)',
+        }}>
+          {overdue ? `${Math.abs(daysTo)}d te laat` : daysTo === 0 ? 'vandaag!' : `over ${daysTo}d`}
+        </span>
+      </div>
+      <div className="card-body">
+        {!editing ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 12 }}>
+                Volgende prik: <strong style={{ color: urgent || overdue ? '#7C3AED' : 'var(--text)' }}>{nextDate}</strong>
+              </div>
+              {daysSinceLast != null && (
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                  Laatste: {lastGiven.date} ({daysSinceLast} dagen geleden)
+                </div>
+              )}
+            </div>
+            <button className="btn" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { setEditVal(nextDate); setEditing(true); }}>
+              ✏️ Aanpassen
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10 }}>
+            <input type="date" value={editVal} onChange={e => setEditVal(e.target.value)} style={{ flex: 1 }} />
+            <button className="btn btn-rust btn-sm" onClick={saveDate}>✓</button>
+            <button className="btn btn-sm" onClick={() => setEditing(false)}>✕</button>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            className="btn btn-full"
+            style={{ background: '#7C3AED', color: 'white', fontWeight: 700, fontSize: 12 }}
+            onClick={markGiven}
+          >
+            💜 Ajovi vandaag gegeven
+          </button>
+        </div>
+        {confirmed && <div className="saved-note">✓ Geregistreerd! Volgende: {nextDate}</div>}
+        {history.length > 0 && (
+          <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)' }}>
+            Eerdere prikken: {history.slice(0, 6).map(h => h.date).join(', ')}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const SYMPTOMS = [
   { id: 'symptom_brainfog',   label: 'Hersenmist',    emoji: '🌫️' },
@@ -306,41 +414,78 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
               <div className="card-title">🗓️ Aankomende events</div>
             </div>
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {upcoming.map(e => (
+              {upcoming.map(e => {
+                // Strategy calculation per event
+                const eventWeightEntries = Object.values(logs || {})
+                  .filter(l => l.weight && l.date >= START_DATE)
+                  .sort((a, b) => a.date.localeCompare(b.date));
+                const lastW = eventWeightEntries.length ? eventWeightEntries[eventWeightEntries.length - 1].weight : null;
+                const projAtEvent = (() => {
+                  if (eventWeightEntries.length < 2 || !e.daysTo) return null;
+                  const first = eventWeightEntries[0], last2 = eventWeightEntries[eventWeightEntries.length - 1];
+                  const days = Math.max(1, Math.floor((new Date(last2.date) - new Date(first.date)) / 86400000));
+                  const rate = Math.max((last2.weight - first.weight) / days, -0.143);
+                  return +(last2.weight + rate * e.daysTo).toFixed(1);
+                })();
+                const wkNeeded = lastW && e.daysTo > 0 ? +(((lastW - GOAL_WEIGHT) / e.daysTo) * 7).toFixed(2) : null;
+                const strategy = (() => {
+                  if (!e.daysTo || e.active) return null;
+                  if (e.daysTo <= 7) return 'Focus: herstel, lichte beweging, voldoende slaap en eiwitten.';
+                  if (e.daysTo <= 14) return 'Bouw training af de laatste week. Prioriteit: goed slapen, eiwitten, hydratatie.';
+                  return 'Regulier schema. 3×/week zone B training, dagelijks eiwitdoel halen.';
+                })();
+                return (
                 <div key={e.id} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 10,
-                  padding: '8px 10px', borderRadius: 10,
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                  padding: '10px', borderRadius: 10,
                   background: e.active ? `${e.color}18` : 'var(--bg)',
                   border: `1.5px solid ${e.active ? e.color : 'var(--border)'}`,
                 }}>
-                  <div style={{ fontSize: 22, lineHeight: 1 }}>{e.emoji}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: e.color }}>{e.title}</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                      {e.startDate === e.endDate
-                        ? new Date(e.startDate).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
-                        : `${new Date(e.startDate).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'long' })} – ${new Date(e.endDate).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'long' })}`
-                      }
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{ fontSize: 22, lineHeight: 1 }}>{e.emoji}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: e.color }}>{e.title}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                        {e.startDate === e.endDate
+                          ? new Date(e.startDate).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
+                          : `${new Date(e.startDate).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'long' })} – ${new Date(e.endDate).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'long' })}`
+                        }
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text)', marginTop: 2 }}>{e.description}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>🎯 {e.goal}</div>
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text)', marginTop: 2 }}>{e.description}</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>Doel: {e.goal}</div>
+                    <div style={{ textAlign: 'center', minWidth: 44 }}>
+                      {e.active ? (
+                        <span style={{ fontSize: 10, fontWeight: 800, color: e.color, background: `${e.color}20`, padding: '3px 7px', borderRadius: 99 }}>NU!</span>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: e.color, lineHeight: 1 }}>{e.daysTo}</div>
+                          <div style={{ fontSize: 9, color: 'var(--muted)' }}>dag{e.daysTo !== 1 ? 'en' : ''}</div>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'center', minWidth: 44 }}>
-                    {e.active ? (
-                      <span style={{ fontSize: 10, fontWeight: 800, color: e.color, background: `${e.color}20`, padding: '3px 7px', borderRadius: 99 }}>NU!</span>
-                    ) : (
-                      <>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: e.color, lineHeight: 1 }}>{e.daysTo}</div>
-                        <div style={{ fontSize: 9, color: 'var(--muted)' }}>dag{e.daysTo !== 1 ? 'en' : ''}</div>
-                      </>
-                    )}
-                  </div>
+                  {/* Strategy strip */}
+                  {(projAtEvent || strategy) && !e.active && (
+                    <div style={{ background: `${e.color}10`, borderRadius: 7, padding: '6px 8px', fontSize: 11 }}>
+                      {projAtEvent && (
+                        <div style={{ marginBottom: strategy ? 4 : 0 }}>
+                          📊 Prognose op {e.startDate.slice(5).replace('-', '/')}: <strong style={{ color: e.color }}>{projAtEvent} kg</strong>
+                          {wkNeeded > 0 && <span style={{ color: 'var(--muted)' }}> · nodig: −{wkNeeded} kg/wk</span>}
+                        </div>
+                      )}
+                      {strategy && <div style={{ color: 'var(--muted)' }}>💡 {strategy}</div>}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
       })()}
+
+      <AjoviTracker />
 
       <BpAlert sys={log?.bp_sys} dia={log?.bp_dia} />
 
@@ -624,6 +769,73 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         </div>
       </div>
 
+      {/* Migraine */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#7C3AED' }} />
+          <div className="card-title">
+            🧠 Migraine
+            {log?.migraine && <span style={{ marginLeft: 6, fontSize: 10, background: '#F3E8FF', color: '#7C3AED', padding: '1px 6px', borderRadius: 99 }}>actief</span>}
+          </div>
+        </div>
+        <div className="card-body">
+          <div
+            className={`habit-btn ${log?.migraine ? 'on' : ''}`}
+            style={{
+              width: '100%', justifyContent: 'flex-start', gap: 10,
+              ...(log?.migraine ? { background: '#F3E8FF', borderColor: '#7C3AED', color: '#7C3AED' } : {}),
+            }}
+            onClick={() => saveField('migraine', log?.migraine ? 0 : 1)}
+          >
+            <div className="habit-emoji">🧠</div>
+            <div className="habit-label">Vandaag migraine gehad</div>
+          </div>
+
+          {log?.migraine ? (
+            <div style={{ marginTop: 10 }}>
+              <div className="scale-label">ERNST</div>
+              <div className="scale-row">
+                {['😬 Licht', '😣 Matig', '🤯 Zwaar'].map((l, i) => (
+                  <button key={i}
+                    className={`scale-btn ${log?.migraine_severity === i + 1 ? 'selected-m' : ''}`}
+                    style={{ fontSize: 11, padding: '6px 8px' }}
+                    onClick={() => saveField('migraine_severity', i + 1)}
+                  >{l}</button>
+                ))}
+              </div>
+
+              <div className="scale-label" style={{ marginTop: 8 }}>DUUR (uren)</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                {[1, 2, 4, 6, 8, 12, 24, 48].map(h => (
+                  <button key={h} className="btn" style={{
+                    padding: '5px 10px', fontSize: 12,
+                    background: log?.migraine_hours === h ? '#7C3AED' : 'var(--bg)',
+                    color: log?.migraine_hours === h ? 'white' : 'var(--text)',
+                    border: `1.5px solid ${log?.migraine_hours === h ? '#7C3AED' : 'var(--border)'}`,
+                  }} onClick={() => saveField('migraine_hours', h)}>{h}u</button>
+                ))}
+              </div>
+
+              <div className="scale-label" style={{ marginTop: 8 }}>MOGELIJKE TRIGGER</div>
+              <div className="habit-grid" style={{ marginTop: 4 }}>
+                {MIGRAINE_TRIGGERS.map(t => (
+                  <div key={t.id}
+                    className={`habit-btn ${log?.migraine_trigger === t.id ? 'on' : ''}`}
+                    style={log?.migraine_trigger === t.id ? { background: '#F3E8FF', borderColor: '#7C3AED', color: '#7C3AED' } : {}}
+                    onClick={() => saveField('migraine_trigger', log?.migraine_trigger === t.id ? null : t.id)}
+                  >
+                    <div className="habit-emoji">{t.emoji}</div>
+                    <div className="habit-label">{t.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Geen migraine vandaag — tik aan als je er last van hebt</div>
+          )}
+        </div>
+      </div>
+
       {/* Medicatie */}
       <div className="card">
         <div className="card-header">
@@ -639,6 +851,87 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
                 <div className="med-detail">{med.detail}</div>
               </div>
               {med.weekly && <span style={{ fontSize: 10, color: 'var(--muted)', background: 'var(--border)', padding: '2px 6px', borderRadius: 99 }}>wekelijks</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* PRN Medicatie */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: 'var(--alert)' }} />
+          <div className="card-title">💊 Zo-nodig medicatie</div>
+        </div>
+        <div className="card-body">
+          {PRN_MEDS.map(med => (
+            <div key={med.id} style={{ marginBottom: 10 }}>
+              <div
+                className={`med-item ${log?.[`${med.id}_taken`] ? 'checked' : ''}`}
+                onClick={() => saveField(`${med.id}_taken`, log?.[`${med.id}_taken`] ? 0 : 1)}
+              >
+                <div className={`checkbox`}>{log?.[`${med.id}_taken`] ? '✓' : ''}</div>
+                <div style={{ flex: 1 }}>
+                  <div className="med-label">{med.label}</div>
+                  <div className="med-detail">{med.detail}</div>
+                </div>
+              </div>
+              {log?.[`${med.id}_taken`] ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, paddingLeft: 36 }}>
+                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>Tijdstip:</span>
+                  <input
+                    type="time"
+                    defaultValue={log?.[`${med.id}_time`] || ''}
+                    key={`${currentDate}-${med.id}-time`}
+                    onBlur={e => e.target.value && saveField(`${med.id}_time`, e.target.value)}
+                    style={{ fontSize: 12, fontFamily: 'var(--font-mono)', width: 90 }}
+                  />
+                  {log?.[`${med.id}_time`] && (
+                    <span style={{ fontSize: 10, color: 'var(--sage)' }}>✓ {log[`${med.id}_time`]}</span>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ))}
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
+            Tijdstip helpt de coach correlaties zien (bijv. preventief paracetamol 's ochtends vs spierpijn/migraine later).
+          </div>
+        </div>
+      </div>
+
+      {/* Supplementen */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#10B981' }} />
+          <div className="card-title">🌿 Supplementen</div>
+        </div>
+        <div className="card-body">
+          {SUPPLEMENTS.map(sup => (
+            <div key={sup.id} style={{ marginBottom: 8 }}>
+              <div
+                className={`med-item ${log?.[`${sup.id}_taken`] ? 'checked' : ''}`}
+                onClick={() => saveField(`${sup.id}_taken`, log?.[`${sup.id}_taken`] ? 0 : 1)}
+              >
+                <div className="checkbox">{log?.[`${sup.id}_taken`] ? '✓' : ''}</div>
+                <div style={{ flex: 1 }}>
+                  <div className="med-label">{sup.label}</div>
+                  <div className="med-detail">{sup.detail}</div>
+                </div>
+              </div>
+              {log?.[`${sup.id}_taken`] ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2, paddingLeft: 36 }}>
+                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>Tijdstip:</span>
+                  <input
+                    type="time"
+                    defaultValue={log?.[`${sup.id}_time`] || ''}
+                    key={`${currentDate}-${sup.id}-time`}
+                    onBlur={e => e.target.value && saveField(`${sup.id}_time`, e.target.value)}
+                    style={{ fontSize: 12, fontFamily: 'var(--font-mono)', width: 90 }}
+                  />
+                  {log?.[`${sup.id}_time`] && (
+                    <span style={{ fontSize: 10, color: 'var(--sage)' }}>✓ {log[`${sup.id}_time`]}</span>
+                  )}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

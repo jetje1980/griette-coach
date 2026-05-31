@@ -15,11 +15,12 @@ import Patronen from './components/Patronen';
 import Badges from './components/Badges';
 import Coach from './components/Coach';
 import Progressie from './components/Progressie';
+import Glow from './components/Glow';
 import Settings from './components/Settings';
 import Onboarding from './components/Onboarding';
 import StravaCallback from './components/StravaCallback';
 
-const TABS = ['Vandaag', 'Kalender', 'Training', 'Eten', 'Lichaam', 'Trends', 'Coach', 'Progressie', '🏅'];
+const TABS = ['Vandaag', 'Kalender', 'Training', 'Eten', 'Lichaam', 'Trends', 'Coach', 'Progressie', '✨ Glow', '🏅'];
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -164,7 +165,8 @@ export default function App() {
         {tab === 5 && <Patronen logs={logs} />}
         {tab === 6 && <Coach logs={logs} />}
         {tab === 7 && <Progressie logs={logs} />}
-        {tab === 8 && <Badges logs={logs} streak={streak} />}
+        {tab === 8 && <Glow log={log} saveField={saveField} currentDate={currentDate} logs={logs} />}
+        {tab === 9 && <Badges logs={logs} streak={streak} />}
       </div>
     </>
   );

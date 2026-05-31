@@ -156,6 +156,31 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
   const overdriveDays = recent.filter(l => l.symptom_overdrive).length;
   const hayfeverDays  = recent.filter(l => l.symptom_hayfever).length;
 
+  // Migraine context
+  const migraineContext = (() => {
+    const mdays = allLogs.filter(l => l.migraine);
+    if (!mdays.length) return 'Geen migraine geregistreerd.';
+    const recent14 = mdays.filter(l => new Date(l.date) >= new Date(Date.now() - 14 * 86400000));
+    const triggerMap = {};
+    for (const d of mdays) { const t = d.migraine_trigger || 'onbekend'; triggerMap[t] = (triggerMap[t] || 0) + 1; }
+    const topTrigger = Object.entries(triggerMap).sort((a, b) => b[1] - a[1])[0];
+    const ajovi = (() => { try { return JSON.parse(localStorage.getItem('gc_ajovi_history') || '[]'); } catch { return []; } })();
+    return [
+      `Migraine-dagen totaal: ${mdays.length} (laatste 14d: ${recent14.length})`,
+      topTrigger ? `Meest voorkomende trigger: ${topTrigger[0]} (${topTrigger[1]}×)` : '',
+      ajovi.length ? `Laatste Ajovi: ${ajovi[0].date} | Volgende: ${localStorage.getItem('gc_ajovi_next') || '?'}` : 'Nog geen Ajovi geregistreerd',
+    ].filter(Boolean).join('\n');
+  })();
+
+  // Supplements & PRN meds consistency (last 7 days)
+  const r7 = recent.slice(0, 7);
+  const suppContext = ['vit_c', 'zink', 'inositol', 'probiotica']
+    .map(id => { const n = r7.filter(l => l[`${id}_taken`]).length; return n > 0 ? `${id}: ${n}/7d` : null; })
+    .filter(Boolean).join(', ') || 'geen data';
+  const prnContext = ['paracetamol', 'cetrizine', 'imigran', 'naproxen']
+    .map(id => { const n = r7.filter(l => l[`${id}_taken`]).length; return n > 0 ? `${id}: ${n}× (7d)` : null; })
+    .filter(Boolean).join(', ') || 'geen PRN-meds afgelopen week';
+
   const eventsContext = (() => {
     const EVENTS = [
       { emoji: '🚴', title: 'Fietsweekend', startDate: '2026-06-12', endDate: '2026-06-13', description: '35–40 km heen + 35–40 km terug met groep', goal: 'Goed presteren en genieten met de groep' },
@@ -272,6 +297,12 @@ ${(() => {
 GRAAG MEER: ${pref.join(', ')}${p.notes ? '\nExtra: ' + p.notes : ''}`;
   } catch { return 'VERMIJDEN: bonen, banaan, veel eieren\nGRAAG MEER: smoothies, soep, salades'; }
 })()}
+
+MIGRAINE & AJOVI:
+${migraineContext}
+
+SUPPLEMENTEN (afgelopen 7 dagen): ${suppContext}
+ZO-NODIG MEDICATIE (afgelopen 7 dagen): ${prnContext}
 
 ${recentReports ? `RECENTE COACH-RAPPORTEN (patroonherkenning — gebruik voor trends):\n${recentReports}\n` : ''}
 MATEN VERLOOP (cm):

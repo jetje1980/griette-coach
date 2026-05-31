@@ -31,6 +31,20 @@ export const BP = {
   orange_sys: 145, orange_dia: 90,
 };
 
+export const PRN_MEDS = [
+  { id: 'paracetamol', label: 'Paracetamol', detail: '500–1000mg, pijn/koorts' },
+  { id: 'cetrizine',   label: 'Cetirizine',  detail: 'antihistamine hooikoorts' },
+  { id: 'imigran',     label: 'Imigran',     detail: 'triptan — migraine' },
+  { id: 'naproxen',    label: 'Naproxen',    detail: '500mg NSAID' },
+];
+
+export const SUPPLEMENTS = [
+  { id: 'vit_c',      label: 'Vitamine C',  detail: 'dagelijks' },
+  { id: 'zink',       label: 'Zink',        detail: 'dagelijks' },
+  { id: 'inositol',   label: 'Inositol',    detail: 'dagelijks' },
+  { id: 'probiotica', label: 'Probiotica',  detail: 'dagelijks' },
+];
+
 export const PERSONAL_EVENTS = [
   {
     id: 'fietsweekend',
