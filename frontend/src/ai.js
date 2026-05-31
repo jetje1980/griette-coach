@@ -33,7 +33,8 @@ async function callClaude(messages, maxTokens = 1024) {
 
 function buildContext(logs, measurements) {
   const allLogs = Object.values(logs).sort((a, b) => b.date.localeCompare(a.date));
-  const recent = allLogs.slice(0, 14);
+  const recent  = allLogs.slice(0, 30);   // 30 dagen voor dagelijkse details
+  const allTime = allLogs;                 // alle gelogde data incl. retroactief
 
   // Mounjaro injection tracker
   const PRIK_SCHEMA = [
@@ -57,7 +58,7 @@ function buildContext(logs, measurements) {
   const prikContext = `Huidige Mounjaro-prik: #${huidigePrik.nr} (gegeven ${huidigePrik.date}, ${huidigePrik.dagenGeleden ?? '?'} dagen geleden)${huidigePrik.volgende ? ` | Volgende prik: ${huidigePrik.volgende}` : ' | Laatste prik voor vakantie'}
 Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op volle kracht' : huidigePrik.nr <= 7 ? 'opkomende volle werking — eetlust neemt merkbaar af' : 'volle therapeutische werking — optimale fase'}`;
 
-  const weights = allLogs.filter(l => l.weight).slice(0, 14)
+  const weights = allTime.filter(l => l.weight).slice(0, 20)
     .map(l => `${l.date}: ${l.weight}kg`);
   const bps = recent.filter(l => l.bp_sys)
     .map(l => {
@@ -98,13 +99,19 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
     return v.length ? Math.round(v.reduce((a, l) => a + l.hr_rest, 0) / v.length) : null;
   })();
 
-  // Symptomen: tel hoe vaak elk symptoom voorkwam
+  // Symptomen: recente 30 dagen + alle tijd totaal
   const symptomIds = ['symptom_brainfog', 'symptom_exhaustion', 'symptom_breathless', 'symptom_pain', 'symptom_headache', 'symptom_hayfever', 'symptom_overdrive', 'symptom_pem'];
   const symptomLabels = { symptom_brainfog: 'hersenmist', symptom_exhaustion: 'zware moeheid', symptom_breathless: 'kortademig', symptom_pain: 'spier/gewrichtspijn', symptom_headache: 'hoofdpijn', symptom_hayfever: 'hooikoorts', symptom_overdrive: 'overdrive/hyper (ADHD)', symptom_pem: 'PEM-crash' };
   const symptomSummary = symptomIds
-    .map(id => ({ label: symptomLabels[id], count: recent.filter(l => l[id]).length }))
-    .filter(s => s.count > 0)
-    .map(s => `${s.label}: ${s.count}x`)
+    .map(id => {
+      const recentCount = recent.filter(l => l[id]).length;
+      const allCount    = allTime.filter(l => l[id]).length;
+      if (!recentCount && !allCount) return null;
+      return allCount > recentCount
+        ? `${symptomLabels[id]}: ${recentCount}× (30d) / ${allCount}× totaal`
+        : `${symptomLabels[id]}: ${recentCount}×`;
+    })
+    .filter(Boolean)
     .join(', ');
 
   const pemDays = recent.filter(l => l.symptom_pem).map(l => l.date);
@@ -118,6 +125,41 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
   const measurementLines = (measurements || []).slice(0, 8).map(m =>
     `${m.date}: taille ${m.waist ?? '?'}cm, heup ${m.hip ?? '?'}cm, borst ${m.chest ?? '?'}cm, arm ${m.arm ?? '?'}cm, dij ${m.thigh ?? '?'}cm`
   );
+
+  // All-time historical patterns (uses ALL logs including retroactive entries)
+  const historicalPatterns = (() => {
+    if (allTime.length < 5) return '';
+    const withEnergy = allTime.filter(l => l.energy != null);
+    const withSleep  = allTime.filter(l => l.sleep_hours != null);
+    const withWeight = allTime.filter(l => l.weight);
+    const avgEnergyAll = withEnergy.length
+      ? (withEnergy.reduce((s, l) => s + l.energy, 0) / withEnergy.length).toFixed(2)
+      : null;
+    const avgSleepAll = withSleep.length
+      ? (withSleep.reduce((s, l) => s + l.sleep_hours, 0) / withSleep.length).toFixed(1)
+      : null;
+    // Best energy days (energy === 3) — what habits did they have?
+    const bestDays = withEnergy.filter(l => l.energy === 3);
+    const worstDays = withEnergy.filter(l => l.energy === 0);
+    const habitIds = ['water', 'protein', 'no_sugar', 'no_salt', 'bed_on_time', 'low_stress'];
+    const habitOnBest  = habitIds.map(h => ({ h, pct: bestDays.length  ? (bestDays.filter(l => l[h]).length  / bestDays.length  * 100).toFixed(0) : 0 }));
+    const habitOnWorst = habitIds.map(h => ({ h, pct: worstDays.length ? (worstDays.filter(l => l[h]).length / worstDays.length * 100).toFixed(0) : 0 }));
+    const bestHabits  = habitOnBest.filter(x => x.pct >= 60).map(x => `${x.h}(${x.pct}%)`).join(', ');
+    const worstMissed = habitOnWorst.filter(x => x.pct < 30).map(x => `${x.h}(${x.pct}%)`).join(', ');
+    // Weight trend over all time
+    const sortedWeights = withWeight.sort((a, b) => a.date.localeCompare(b.date));
+    const weightTrend = sortedWeights.length >= 2
+      ? `${sortedWeights[0].date}: ${sortedWeights[0].weight}kg → ${sortedWeights[sortedWeights.length-1].date}: ${sortedWeights[sortedWeights.length-1].weight}kg (${((sortedWeights[sortedWeights.length-1].weight - sortedWeights[0].weight) >= 0 ? '+' : '') + (sortedWeights[sortedWeights.length-1].weight - sortedWeights[0].weight).toFixed(1)}kg totaal)`
+      : '';
+    return [
+      `Totaal gelogde dagen: ${allTime.length}`,
+      avgEnergyAll ? `Gem. energie alle tijd: ${avgEnergyAll}/3` : '',
+      avgSleepAll  ? `Gem. slaap alle tijd: ${avgSleepAll}u` : '',
+      weightTrend  ? `Gewichtstrend: ${weightTrend}` : '',
+      bestHabits   ? `Gewoontes bij top-energie dagen: ${bestHabits}` : '',
+      worstMissed  ? `Gewoontes die ontbreken bij lage-energie dagen: ${worstMissed}` : '',
+    ].filter(Boolean).join('\n');
+  })();
 
   // Recent coach reports for pattern recognition
   const recentReports = (() => {
@@ -156,30 +198,63 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
   const overdriveDays = recent.filter(l => l.symptom_overdrive).length;
   const hayfeverDays  = recent.filter(l => l.symptom_hayfever).length;
 
-  // Migraine context
+  // Migraine context — uses all-time data, handles both single and array triggers
   const migraineContext = (() => {
-    const mdays = allLogs.filter(l => l.migraine);
+    const mdays = allTime.filter(l => l.migraine).sort((a, b) => a.date.localeCompare(b.date));
     if (!mdays.length) return 'Geen migraine geregistreerd.';
-    const recent14 = mdays.filter(l => new Date(l.date) >= new Date(Date.now() - 14 * 86400000));
+    const recent30 = mdays.filter(l => new Date(l.date) >= new Date(Date.now() - 30 * 86400000));
     const triggerMap = {};
-    for (const d of mdays) { const t = d.migraine_trigger || 'onbekend'; triggerMap[t] = (triggerMap[t] || 0) + 1; }
-    const topTrigger = Object.entries(triggerMap).sort((a, b) => b[1] - a[1])[0];
+    for (const d of mdays) {
+      const triggers = d.migraine_triggers || (d.migraine_trigger ? [d.migraine_trigger] : ['onbekend']);
+      for (const t of triggers) triggerMap[t] = (triggerMap[t] || 0) + 1;
+    }
+    const topTriggers = Object.entries(triggerMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const ajovi = (() => { try { return JSON.parse(localStorage.getItem('gc_ajovi_history') || '[]'); } catch { return []; } })();
+    // Severity distribution
+    const sevMap = { 1: 0, 2: 0, 3: 0 };
+    mdays.forEach(d => { if (d.migraine_severity) sevMap[d.migraine_severity]++; });
+    const sevLine = `ernst: licht ${sevMap[1]}× / matig ${sevMap[2]}× / zwaar ${sevMap[3]}×`;
+    // Avg duration
+    const withHours = mdays.filter(d => d.migraine_hours);
+    const avgHours = withHours.length ? (withHours.reduce((s, d) => s + d.migraine_hours, 0) / withHours.length).toFixed(1) : null;
     return [
-      `Migraine-dagen totaal: ${mdays.length} (laatste 14d: ${recent14.length})`,
-      topTrigger ? `Meest voorkomende trigger: ${topTrigger[0]} (${topTrigger[1]}×)` : '',
+      `Migraine-dagen totaal: ${mdays.length} (laatste 30d: ${recent30.length})`,
+      sevLine,
+      avgHours ? `Gemiddelde duur: ${avgHours} uur` : '',
+      topTriggers.length ? `Top triggers: ${topTriggers.map(([t, n]) => `${t} (${n}×)`).join(', ')}` : '',
       ajovi.length ? `Laatste Ajovi: ${ajovi[0].date} | Volgende: ${localStorage.getItem('gc_ajovi_next') || '?'}` : 'Nog geen Ajovi geregistreerd',
     ].filter(Boolean).join('\n');
   })();
 
-  // Supplements & PRN meds consistency (last 7 days)
-  const r7 = recent.slice(0, 7);
-  const suppContext = ['vit_c', 'zink', 'inositol', 'probiotica']
-    .map(id => { const n = r7.filter(l => l[`${id}_taken`]).length; return n > 0 ? `${id}: ${n}/7d` : null; })
+  // Supplements & PRN meds consistency (last 14 days)
+  const r14 = recent.slice(0, 14);
+  const suppContext = ['vit_c', 'zink', 'inositol', 'probiotica', 'visolie']
+    .map(id => { const n = r14.filter(l => l[`${id}_taken`]).length; return n > 0 ? `${id}: ${n}/14d` : null; })
     .filter(Boolean).join(', ') || 'geen data';
   const prnContext = ['paracetamol', 'cetrizine', 'imigran', 'naproxen']
-    .map(id => { const n = r7.filter(l => l[`${id}_taken`]).length; return n > 0 ? `${id}: ${n}× (7d)` : null; })
-    .filter(Boolean).join(', ') || 'geen PRN-meds afgelopen week';
+    .map(id => {
+      const entries = r14.filter(l => l[`${id}_taken`]);
+      if (!entries.length) return null;
+      const times = entries.filter(l => l[`${id}_time`]).map(l => l[`${id}_time`]);
+      return `${id}: ${entries.length}× (14d)${times.length ? ` — tijdstippen: ${times.slice(0,4).join(', ')}` : ''}`;
+    })
+    .filter(Boolean).join(' | ') || 'geen PRN-meds afgelopen 2 weken';
+
+  // Alcohol context
+  const alcoholDays = r14.filter(l => l.alcohol_had);
+  const alcoholContext = alcoholDays.length
+    ? `Alcohol: ${alcoholDays.length} dag(en) in 14d | gem. ${(alcoholDays.reduce((s, l) => s + (l.alcohol_units || 1), 0) / alcoholDays.length).toFixed(1)} glazen/keer | datums: ${alcoholDays.map(l => l.date.slice(5)).join(', ')}`
+    : 'Alcohol: geen in laatste 14 dagen';
+
+  // ADHD pacing context
+  const adhdOverwhelmed = r14.filter(l => l.adhd_overwhelmed).length;
+  const adhdHighLoad    = r14.filter(l => l.adhd_task_load === 2).length;
+  const adhdBreaks      = r14.filter(l => l.adhd_break).length;
+  const adhdContext = [
+    adhdOverwhelmed > 0 ? `⚠️ Overprikkeld gemarkeerd: ${adhdOverwhelmed}× (14d)` : '',
+    adhdHighLoad > 0    ? `Hoog actie-load (5+): ${adhdHighLoad}× (14d)` : '',
+    adhdBreaks > 0      ? `Bewuste pauzes genomen: ${adhdBreaks}× (14d)` : '',
+  ].filter(Boolean).join(' | ') || 'ADHD pacing: nog niet bijgehouden';
 
   const eventsContext = (() => {
     const EVENTS = [
@@ -301,9 +376,12 @@ GRAAG MEER: ${pref.join(', ')}${p.notes ? '\nExtra: ' + p.notes : ''}`;
 MIGRAINE & AJOVI:
 ${migraineContext}
 
-SUPPLEMENTEN (afgelopen 7 dagen): ${suppContext}
-ZO-NODIG MEDICATIE (afgelopen 7 dagen): ${prnContext}
+SUPPLEMENTEN (afgelopen 14 dagen): ${suppContext}
+ZO-NODIG MEDICATIE (afgelopen 14 dagen): ${prnContext}
+${alcoholContext}
+ADHD PACING: ${adhdContext}
 
+${historicalPatterns ? `HISTORISCHE PATRONEN (alle gelogde data inclusief retroactief ingevoerd):\n${historicalPatterns}\n` : ''}
 ${recentReports ? `RECENTE COACH-RAPPORTEN (patroonherkenning — gebruik voor trends):\n${recentReports}\n` : ''}
 MATEN VERLOOP (cm):
 ${measurementLines.join('\n') || 'nog geen maten geregistreerd'}
