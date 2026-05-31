@@ -159,7 +159,7 @@ export default function App() {
         {tab === 0 && <CheckIn {...sharedProps} tip={tip} />}
         {tab === 1 && <Calendar currentDate={currentDate} logs={logs} onSelectDate={(d) => { setCurrentDate(d); setTab(0); }} />}
         {tab === 2 && <Training {...sharedProps} />}
-        {tab === 3 && <Eten tip={tip} dayNum={dayNum} />}
+        {tab === 3 && <Eten tip={tip} dayNum={dayNum} log={log} />}
         {tab === 4 && <Lichaam {...sharedProps} logs={logs} />}
         {tab === 5 && <Patronen logs={logs} />}
         {tab === 6 && <Coach logs={logs} />}

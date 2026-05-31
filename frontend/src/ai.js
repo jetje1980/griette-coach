@@ -372,4 +372,53 @@ Schrijf in het Nederlands. Wees specifiek en realistisch — niet ambitieuzer da
 
     return callClaude([{ role: 'user', content: prompt }], 600);
   },
+
+  // Analyseert een Garmin/Strava screenshot van een sportsessie
+  // screenshot = { base64, mimeType }
+  // sessionType = 'swim' | 'bike' | 'run'
+  // recentSessions = array van recente sessies van dit type
+  async analyzeSession(screenshot, sessionType, recentSessions, logs) {
+    const typeNL = { swim: 'zwemsessie', bike: 'fietssessie', run: 'hardloopsessie' };
+    const context = buildContext(logs, []);
+
+    const sessionsContext = recentSessions.length > 0
+      ? `RECENTE ${typeNL[sessionType].toUpperCase()}S:\n${
+          recentSessions.slice(0, 5).map(s => {
+            const parts = [s.date];
+            if (s[`${sessionType}_duration`]) parts.push(`${s[`${sessionType}_duration`]} min`);
+            if (s[`${sessionType}_distance`]) parts.push(sessionType === 'swim' ? `${s[`${sessionType}_distance`]} m` : `${s[`${sessionType}_distance`]} km`);
+            if (s[`${sessionType}_hr`]) parts.push(`gem. ${s[`${sessionType}_hr`]} bpm`);
+            return parts.join(' · ');
+          }).join('\n')
+        }`
+      : 'Eerste sessie van dit type geregistreerd.';
+
+    const prompt = `${context}
+
+${sessionsContext}
+
+Je analyseert een Garmin / Strava screenshot van een ${typeNL[sessionType]}.
+Schrijf max 200 woorden in het Nederlands. Wees concreet en persoonlijk.
+
+Gebruik exact deze structuur:
+
+🎯 PRESTATIE
+Beoordeel hartslag zones, duur, afstand/snelheid — zit dit in zone B? Past dit bij haar herstelstatus?
+
+📈 PROGRESSIE
+Vergelijk met recente sessies (zie boven). Gaat het vooruit, stabiel of terugval?
+
+💡 VOLGENDE SESSIE
+Één concrete aanbeveling: meer/minder intensiteit, anders qua duur, focus op zone B of juist interval?
+
+⚡ HERSTEL
+Hoe zwaar was dit voor haar lichaam (long covid, energiestatus)? Hoeveel rust vóór volgende sessie?`;
+
+    return callClaude([
+      { role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: screenshot.mimeType, data: screenshot.base64 } },
+        { type: 'text', text: prompt },
+      ]},
+    ], 500);
+  },
 };
