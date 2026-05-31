@@ -20,15 +20,30 @@ const INTERVAL_OPTIONS = [
   { days: 365, label: '1 jaar' },
 ];
 
+const BOTOX_ZONES = [
+  { id: 'voorhoofd',   label: 'Voorhoofd' },
+  { id: 'glabella',    label: 'Glabella (fronsrimpel)' },
+  { id: 'kraaienpoot', label: 'Kraaienpootjes' },
+  { id: 'kin_botox',   label: 'Kin/jaw' },
+  { id: 'lippen',      label: 'Lippen (lip flip)' },
+];
+
 const GLOW_TYPES = [
   { id: 'kapper',         emoji: '✂️',  label: 'Kapper',           hasNotes: true,  notesLabel: 'Wat gedaan? (knippen, kleur...)' },
+  { id: 'botox',          emoji: '✨',  label: 'Botox',            hasNotes: true,  notesLabel: 'Bijzonderheden / units?', subItems: BOTOX_ZONES, defaultInterval: 182 },
   { id: 'body_vital',     emoji: '🪒',  label: 'Body & Vital',     hasNotes: false, subItems: BODY_VITAL_ITEMS },
   { id: 'skinbooster',    emoji: '💉',  label: 'Skinbooster',      hasNotes: true,  notesLabel: 'Type / locatie' },
+  { id: 'gezichtsbeh',    emoji: '💆',  label: 'Gezichtsbehandeling', hasNotes: true, notesLabel: 'Behandeling / salon?' },
   { id: 'zonnebank',      emoji: '☀️',  label: 'Zonnebank',        hasNotes: true,  notesLabel: 'Minuten / stand' },
   { id: 'tandarts',       emoji: '🦷',  label: 'Tandarts',         hasNotes: true,  notesLabel: 'Behandeling?' },
   { id: 'mondhygieniste', emoji: '🪥',  label: 'Mondhygieniste',   hasNotes: false },
   { id: 'tandenbleker',   emoji: '✨',  label: 'Tandenbleker',     hasNotes: true,  notesLabel: 'Type / sessie?' },
 ];
+
+function allSubItems(typeId) {
+  const tp = GLOW_TYPES.find(t => t.id === typeId);
+  return tp?.subItems || [];
+}
 
 function addDays(dateStr, days) {
   const d = new Date(dateStr);
@@ -37,7 +52,14 @@ function addDays(dateStr, days) {
 }
 
 function loadEvents() {
-  try { return JSON.parse(localStorage.getItem(GLOW_KEY) || '[]'); } catch { return []; }
+  try {
+    const raw = localStorage.getItem(GLOW_KEY);
+    if (raw) return JSON.parse(raw);
+    // Seed: first Botox 25 nov 2025, next ~25 mei 2026
+    const seed = [{ id: 1, type: 'botox', date: '2025-11-25', notes: '1e keer', subItems: [], nextDate: '2026-05-25', intervalDays: 182 }];
+    localStorage.setItem(GLOW_KEY, JSON.stringify(seed));
+    return seed;
+  } catch { return []; }
 }
 function saveEvents(arr) {
   localStorage.setItem(GLOW_KEY, JSON.stringify(arr));
@@ -66,9 +88,16 @@ export default function Glow({ log, saveField, currentDate }) {
     setAddType(id);
     setAddNotes('');
     setSubSel([]);
-    setPlanNext(false);
-    setNextDate('');
-    setIntervalDays(null);
+    const tp = typeMap[id];
+    if (tp?.defaultInterval) {
+      setPlanNext(true);
+      setIntervalDays(tp.defaultInterval);
+      setNextDate(addDays(addDate, tp.defaultInterval));
+    } else {
+      setPlanNext(false);
+      setNextDate('');
+      setIntervalDays(null);
+    }
   }
 
   function applyInterval(days) {
@@ -330,7 +359,7 @@ export default function Glow({ log, saveField, currentDate }) {
                   <div style={{ fontSize: 12, fontWeight: 600 }}>{tp.label}</div>
                   {tp.last?.subItems?.length > 0 && (
                     <div style={{ fontSize: 10, color: 'var(--muted)' }}>
-                      {tp.last.subItems.map(id => BODY_VITAL_ITEMS.find(s => s.id === id)?.label).filter(Boolean).join(' · ')}
+                      {tp.last.subItems.map(id => allSubItems(tp.last.type).find(s => s.id === id)?.label).filter(Boolean).join(' · ')}
                     </div>
                   )}
                   {tp.last?.notes && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{tp.last.notes}</div>}
@@ -378,7 +407,7 @@ export default function Glow({ log, saveField, currentDate }) {
                     <div style={{ fontSize: 12, fontWeight: 600 }}>{tp?.label}</div>
                     {e.subItems?.length > 0 && (
                       <div style={{ fontSize: 10, color: 'var(--muted)' }}>
-                        {e.subItems.map(id => BODY_VITAL_ITEMS.find(s => s.id === id)?.label).filter(Boolean).join(' · ')}
+                        {e.subItems.map(id => allSubItems(e.type).find(s => s.id === id)?.label).filter(Boolean).join(' · ')}
                       </div>
                     )}
                     {e.notes && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{e.notes}</div>}
