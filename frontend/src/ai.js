@@ -119,6 +119,14 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
     `${m.date}: taille ${m.waist ?? '?'}cm, heup ${m.hip ?? '?'}cm, borst ${m.chest ?? '?'}cm, arm ${m.arm ?? '?'}cm, dij ${m.thigh ?? '?'}cm`
   );
 
+  // Recent coach reports for pattern recognition
+  const recentReports = (() => {
+    try {
+      const history = JSON.parse(localStorage.getItem('gc_coach_reports_history') || '[]');
+      return history.slice(0, 3).map(r => `[${r.date}]: ${r.text.slice(0, 300)}`).join('\n\n---\n\n');
+    } catch { return ''; }
+  })();
+
   // Cyclus context
   const cycleStart = localStorage.getItem('gc_cycle_start');
   const cycleContext = (() => {
@@ -231,6 +239,12 @@ GEWOONTES SCORE: ${habitPct.join(', ')}
 
 ${cycleContext}
 
+VOEDINGSVOORKEUREN (altijd rekening mee houden):
+- NIET: bonen (zwarte/witte/sperzje/edamame), bananen
+- MATIG: eieren (max 2× per dag, liever niet elke dag)
+- WEL: smoothies, eiwitshakes, soepen, salades, vis, kip, havermout, avocado, noten
+
+${recentReports ? `RECENTE COACH-RAPPORTEN (patroonherkenning — gebruik voor trends):\n${recentReports}\n` : ''}
 MATEN VERLOOP (cm):
 ${measurementLines.join('\n') || 'nog geen maten geregistreerd'}
 `.trim();

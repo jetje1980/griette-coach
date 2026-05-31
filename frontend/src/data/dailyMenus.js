@@ -1,16 +1,17 @@
 // 35 dagmenu's voor Griette — rotatie over 70 dagen
 // Lactosevrij · hoog eiwit · salade-focus lunch · pasta/rijst/wok avond · geen biefstuk
+// Geen bonen (zwart/wit/sperzie/edamame) · geen banaan · max 2 eieren/dag · smoothies/soep welkom
 
 export const DAILY_MENUS = [
   {
     ontbijt: '3 scrambled eggs + avocado + chilivlokken',
-    lunch: 'Niçoisesalade (tonijn + ei + sperziebonen + olijven)',
+    lunch: 'Niçoisesalade (tonijn + ei + aspergepuntjes + olijven)',
     avond: 'Kip wokmix + rijstnoedels + bok choy + sojasaus',
     snack: 'Handje cashews + 1 mandarijn',
     focus: '🥚 Dag vol compleet eiwit',
   },
   {
-    ontbijt: 'Havermout (havermelk) + notenpasta + banaan',
+    ontbijt: 'Havermout (havermelk) + notenpasta + peer',
     lunch: 'Quinoasalade + kikkererwten + avocado + komkommer',
     avond: 'Pasta pesto + kipfilet + cherrytomaten + pijnboompitten',
     snack: 'Rijstwafel + hummus',
@@ -26,26 +27,26 @@ export const DAILY_MENUS = [
   {
     ontbijt: 'Avocadotoast (zuurdesem) + 2 gepocheerde eieren',
     lunch: 'Linzensalade + geroosterde paprika + peterselie + tahini',
-    avond: 'Zalm + rijst + edamame + sesamolie',
-    snack: 'Edamame (gezouten)',
+    avond: 'Zalm + rijst + sugar snaps + sesamolie',
+    snack: 'Handje cashews + mandarijn',
     focus: '🐟 Omega-3 focus',
   },
   {
     ontbijt: 'Shakshuka — 2 eieren in kruidig tomatensaus',
-    lunch: 'Mexicaanse bowl: rijst + zwarte bonen + kip + guacamole + salsa',
+    lunch: 'Mexicaanse bowl: rijst + mais + kip + guacamole + salsa',
     avond: 'Kipnoedelsoep (kokosmelk + citroengras + gember)',
     snack: 'Handje gemengde noten',
     focus: '🌶️ Verwarmend en verzadigend',
   },
   {
     ontbijt: 'Overnight oats (havermelk) + chiazaad + frambozen + amandelboter',
-    lunch: 'Aziatische salade + edamame + sesam + geraspte wortel + kip',
+    lunch: 'Aziatische salade + kipfilet + sesam + geraspte wortel + komkommer',
     avond: 'Pasta arrabiata + garnalen + spinazie',
     snack: 'Handje blauwe bessen + 2 walnoten',
     focus: '🦐 Licht verteerbaar',
   },
   {
-    ontbijt: 'Eiwitshake: havermelk + banaan + eiwitpoeder (plantaardig) + chiazaad',
+    ontbijt: 'Eiwitshake: havermelk + bevroren mango + eiwitpoeder (plantaardig) + chiazaad',
     lunch: 'Bietensalade + gerookte kipfilet + walnoten + rucola',
     avond: 'Rijst + kipfilet + groene curry (kokosmelk) + sugar snaps',
     snack: '2 paranoten + 1 mandarijn',
@@ -66,7 +67,7 @@ export const DAILY_MENUS = [
     focus: '🍋 Magnesium en vezels',
   },
   {
-    ontbijt: 'Omelet (3 ei) + courgette + ui + paprika',
+    ontbijt: 'Proteïne smoothie: havermelk + appel + eiwitpoeder + kaneel + chiazaad',
     lunch: 'Griekse salade (zonder feta) + tonijn + olijven + komkommer',
     avond: 'Pasta bolognese met kip gehakt + tomatensaus',
     snack: 'Handje pompoenpitten',
@@ -81,14 +82,14 @@ export const DAILY_MENUS = [
   },
   {
     ontbijt: 'Avocado + 2 eieren (any style) + rijstwafel + chilivlokken',
-    lunch: 'Tonijnsalade + witte bonen + kappertjes + selderij',
+    lunch: 'Tonijnsalade + olijven + kappertjes + selderij',
     avond: 'Zalm teriyaki + rijst + wokbroccoli + sesamzaad',
     snack: 'Handje amandelen',
     focus: '🐟 Dubbele omega-3 dag',
   },
   {
     ontbijt: 'Smoothiebowl: havermelk + bevroren bessen + chiazaad + noten + granola',
-    lunch: 'Mexicaanse salade + zwarte bonen + maïs + kip + limoendressing',
+    lunch: 'Mexicaanse salade + mais + paprika + kip + limoendressing',
     avond: 'Thaise garnalenwok + rijstnoedels + peultjes',
     snack: 'Mango + kokosflakes',
     focus: '🌺 Tropische vibraties',
@@ -136,8 +137,8 @@ export const DAILY_MENUS = [
     focus: '🍤 Licht en verfijnd',
   },
   {
-    ontbijt: 'Eiwit pancakes: 3 eieren + haver + banaan (bakken zonder boter)',
-    lunch: 'Edamame + soba salade + sesamolie + gember + koriander',
+    ontbijt: 'Proteïne smoothie: havermelk + bevroren mango + eiwitpoeder + chiazaad',
+    lunch: 'Kip + soba noedelsalade + sesamolie + gember + koriander',
     avond: 'Zalm + rijst + wokgroenten + citroensaus',
     snack: 'Chiazaad pudding (kokosmelk)',
     focus: '🎌 Aziatisch geïnspireerd',
@@ -151,7 +152,7 @@ export const DAILY_MENUS = [
   },
   {
     ontbijt: 'Havermout + dadels + kokosschilfers + amandelboter',
-    lunch: 'Salade met edamame + mandarijn + geroosterde sesamzaad + kip',
+    lunch: 'Salade met kipfilet + mandarijn + geroosterde sesamzaad + sesam',
     avond: 'Pasta aglio e olio + garnalen + peterselie',
     snack: 'Handje walnoten + appel',
     focus: '🦐 Snel te maken, vol smaak',
@@ -185,7 +186,7 @@ export const DAILY_MENUS = [
     focus: '💚 Groen en ijzerrijk',
   },
   {
-    ontbijt: 'Havermout + pindaboter + banaan + chiazaad',
+    ontbijt: 'Havermout + pindaboter + peer + chiazaad',
     lunch: 'Quinoa bowl + avocado + gegrilde kipfilet + zongedroogde tomaat',
     avond: 'Pasta met tonijn + olijven + kappertjes + citroen',
     snack: 'Rijstwafel + amandelboter',
@@ -194,7 +195,7 @@ export const DAILY_MENUS = [
   {
     ontbijt: 'Scrambled eggs + avocado + chilivlokken',
     lunch: 'Mediterrane salade + garnalen + hummus + pita (gluten-vrij)',
-    avond: 'Nasi goreng + kipfilet + ei + groenten',
+    avond: 'Kippensoep met vermicelli + wortel + peterselie',
     snack: 'Verse vijg + walnoten',
     focus: '🌊 Middellandse-Zee dag',
   },
@@ -208,13 +209,13 @@ export const DAILY_MENUS = [
   {
     ontbijt: '3-eieren omelet + paprika + ui + verse kruiden',
     lunch: 'Aziatische zeevruchtensalade + glasnoedels + komkommer',
-    avond: 'Pasta met kip + courgette + citroen + olijfolie',
+    avond: 'Tomatensoep met kipballetjes + rijstnoedels + basilicum',
     snack: 'Handje gemengde noten + gedroogde cranberry',
     focus: '🍋 Licht en fris',
   },
   {
     ontbijt: 'Avocadotoast + 2 spiegeleieren + peper + zeezout',
-    lunch: 'Mexicaanse bowl: kip + zwarte bonen + rijst + guacamole + pico de gallo',
+    lunch: 'Mexicaanse bowl: kip + mais + rijst + guacamole + pico de gallo',
     avond: 'Thaise noedelsoep + kip + rijstnoedels + limoensap',
     snack: 'Chiazaad pudding + aardbeien',
     focus: '🌮 Mexicaanse proteïne boost',
@@ -227,8 +228,8 @@ export const DAILY_MENUS = [
     focus: '🍄 Paddenstoelen = vitamine D boost',
   },
   {
-    ontbijt: 'Eiwit pancakes (eieren + haver + banaan)',
-    lunch: 'Edamame + soba noedelsalade + sesamolie',
+    ontbijt: 'Proteïne smoothie: havermelk + bevroren mango + eiwitpoeder + chiazaad',
+    lunch: 'Kip strips + soba noedelsalade + sesamolie',
     avond: 'Zalm + rijst + sugar snaps + sesamolie + gember',
     snack: 'Vers fruit + 2 el pompoenpitten',
     focus: '🌸 Zachte dag, vol voedingsstoffen',
@@ -263,17 +264,17 @@ export const VITAMINS_GUIDE = {
   ],
   folliculair: [
     { naam: 'Zink', dosis: 'Via voeding', waarom: 'Ondersteunt eisprong, immuunsysteem', voeding: 'Pompoenpitten, kikkererwten, cashewnoten, kip' },
-    { naam: 'Vitamine B6', dosis: 'Via voeding', waarom: 'Hormoonbalans, energie, stemming', voeding: 'Kip, tonijn, banaan, aardappel' },
+    { naam: 'Vitamine B6', dosis: 'Via voeding', waarom: 'Hormoonbalans, energie, stemming', voeding: 'Kip, tonijn, zoete aardappel, appel' },
     { naam: 'Vitamine E', dosis: 'Via voeding', waarom: 'Antioxidant, follikelontwikkeling', voeding: 'Amandelen, avocado, olijfolie, zonnebloempitten' },
   ],
   luteaal: [
     { naam: 'Magnesium', dosis: '300mg avond', waarom: 'PMS, slaap, prikkelbaarheid, cravings remmen', voeding: 'Noten, avocado, donkere chocolade, pompoenpitten' },
     { naam: 'Calcium (lactosevrij)', dosis: '800–1000mg via voeding', waarom: 'Perimenopauze: botdichtheid + PMS', voeding: 'Boerenkool, broccoli, amandelen, tahini, sardines' },
-    { naam: 'Vitamine B6', dosis: 'Via voeding of 25mg supplement', waarom: 'Vermindert PMS, waterretentie, stemmingswisselingen', voeding: 'Kip, tonijn, banaan' },
+    { naam: 'Vitamine B6', dosis: 'Via voeding of 25mg supplement', waarom: 'Vermindert PMS, waterretentie, stemmingswisselingen', voeding: 'Kip, tonijn, zoete aardappel' },
   ],
   naSport: [
     { naam: 'Eiwit', dosis: '20–30g binnen 30 min', waarom: 'Spierherstel, voorkomt spierverlies', voeding: 'Hardgekookte eieren, kipfilet, plantaardig eiwitpoeder' },
-    { naam: 'Elektrolyten', dosis: 'Bij >45 min training', waarom: 'Natrium + kalium + magnesium aanvullen', voeding: 'Banaan + snufje zeezout, bouillon, kokoswater' },
-    { naam: 'Koolhydraten', dosis: 'Kleine portie bij intensieve training', waarom: 'Glycogeen aanvullen voor herstel', voeding: 'Rijst, banaan, zoete aardappel' },
+    { naam: 'Elektrolyten', dosis: 'Bij >45 min training', waarom: 'Natrium + kalium + magnesium aanvullen', voeding: 'Dadels + snufje zeezout, bouillon, kokoswater' },
+    { naam: 'Koolhydraten', dosis: 'Kleine portie bij intensieve training', waarom: 'Glycogeen aanvullen voor herstel', voeding: 'Rijst, zoete aardappel, havermelk smoothie' },
   ],
 };

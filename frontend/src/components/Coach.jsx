@@ -8,7 +8,15 @@ const REPORT_DATE_KEY = 'gc_coach_report_date';
 const PLAN_KEY = 'gc_training_plan';
 const PLAN_DATE_KEY = 'gc_training_plan_date';
 const ANALYSIS_PREFIX = 'gc_photo_analysis_';
+const REPORTS_HISTORY_KEY = 'gc_coach_reports_history';
+const PLANS_HISTORY_KEY = 'gc_training_plans_history';
 const CHECK_DAYS = 3;
+
+function pushToHistory(key, entry, max = 20) {
+  const history = JSON.parse(localStorage.getItem(key) || '[]');
+  history.unshift(entry);
+  localStorage.setItem(key, JSON.stringify(history.slice(0, max)));
+}
 
 function daysSince(dateStr) {
   if (!dateStr) return 999;
@@ -270,6 +278,81 @@ function PhotoCapture({ logs, measurements }) {
   );
 }
 
+function ReportHistory() {
+  const [open, setOpen] = useState(false);
+  const reports = JSON.parse(localStorage.getItem(REPORTS_HISTORY_KEY) || '[]');
+  const plans   = JSON.parse(localStorage.getItem(PLANS_HISTORY_KEY)   || '[]');
+  const sportAnalyses = JSON.parse(localStorage.getItem('gc_sport_analyses_history') || '[]');
+  const total = reports.length + plans.length + sportAnalyses.length;
+  if (total === 0) return null;
+
+  return (
+    <div className="card">
+      <div className="card-header" style={{ cursor: 'pointer' }} onClick={() => setOpen(v => !v)}>
+        <div className="card-accent" style={{ background: '#6366F1' }} />
+        <div className="card-title">🗂️ Rapport geschiedenis</div>
+        <span style={{ fontSize: 10, color: 'var(--muted)', marginRight: 4 }}>{total} opgeslagen</span>
+        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div className="card-body" style={{ maxHeight: 500, overflowY: 'auto' }}>
+          {reports.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#6366F1', letterSpacing: 1, marginBottom: 8 }}>
+                📋 COACH-RAPPORTEN ({reports.length})
+              </div>
+              {reports.map((r, i) => (
+                <details key={i} style={{ marginBottom: 10 }}>
+                  <summary style={{ fontSize: 11, color: 'var(--rust)', cursor: 'pointer', fontWeight: 700 }}>
+                    {r.date}
+                  </summary>
+                  <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.7, color: 'var(--text)', whiteSpace: 'pre-wrap', background: 'var(--rust-l)', borderRadius: 8, padding: '8px 10px', borderLeft: '3px solid var(--rust)' }}>
+                    {r.text}
+                  </div>
+                </details>
+              ))}
+            </>
+          )}
+          {plans.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--sage)', letterSpacing: 1, margin: '12px 0 8px' }}>
+                📅 WEEKPLANNEN ({plans.length})
+              </div>
+              {plans.map((r, i) => (
+                <details key={i} style={{ marginBottom: 10 }}>
+                  <summary style={{ fontSize: 11, color: 'var(--sage)', cursor: 'pointer', fontWeight: 700 }}>
+                    {r.date}
+                  </summary>
+                  <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.7, color: 'var(--text)', whiteSpace: 'pre-wrap', background: 'var(--sage-l)', borderRadius: 8, padding: '8px 10px', borderLeft: '3px solid var(--sage)' }}>
+                    {r.text}
+                  </div>
+                </details>
+              ))}
+            </>
+          )}
+          {sportAnalyses.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#F59E0B', letterSpacing: 1, margin: '12px 0 8px' }}>
+                🏃 SPORT-ANALYSES ({sportAnalyses.length})
+              </div>
+              {sportAnalyses.map((r, i) => (
+                <details key={i} style={{ marginBottom: 10 }}>
+                  <summary style={{ fontSize: 11, color: '#B45309', cursor: 'pointer', fontWeight: 700 }}>
+                    {r.date} · {r.type}
+                  </summary>
+                  <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.7, color: 'var(--text)', whiteSpace: 'pre-wrap', background: '#FFFBEB', borderRadius: 8, padding: '8px 10px', borderLeft: '3px solid #F59E0B' }}>
+                    {r.text}
+                  </div>
+                </details>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Coach({ logs }) {
   const [report, setReport] = useState(() => localStorage.getItem(REPORT_KEY) || null);
   const [reportDate, setReportDate] = useState(() => localStorage.getItem(REPORT_DATE_KEY) || null);
@@ -294,6 +377,7 @@ export default function Coach({ logs }) {
       const today = new Date().toISOString().slice(0, 10);
       localStorage.setItem(PLAN_KEY, planText);
       localStorage.setItem(PLAN_DATE_KEY, today);
+      pushToHistory(PLANS_HISTORY_KEY, { date: today, text: planText });
       setPlan(planText);
       setPlanDate(today);
     } catch {
@@ -315,9 +399,9 @@ export default function Coach({ logs }) {
       const today = new Date().toISOString().slice(0, 10);
       localStorage.setItem(REPORT_KEY, text);
       localStorage.setItem(REPORT_DATE_KEY, today);
+      pushToHistory(REPORTS_HISTORY_KEY, { date: today, text });
       setReport(text);
       setReportDate(today);
-      // Direct daarna weekplan bijwerken
       const latestPhotoAnalysis = loadSavedAnalyses()[0]?.text ?? '';
       generatePlan(text, latestPhotoAnalysis);
     } catch (err) {
@@ -423,6 +507,9 @@ export default function Coach({ logs }) {
           <PhotoCapture logs={logs} measurements={measurements} />
         </div>
       </div>
+
+      {/* Rapport geschiedenis */}
+      <ReportHistory />
 
       {/* Geen API sleutel hint */}
       {!ai.hasKey() && (

@@ -131,6 +131,10 @@ function SportScreenshot({ type, label, recentSessions, logs }) {
       const text = await ai.analyzeSession(img, type, recentSessions, logs);
       localStorage.setItem(analysisKey, text);
       setAnalysis(text);
+      const histKey = 'gc_sport_analyses_history';
+      const hist = JSON.parse(localStorage.getItem(histKey) || '[]');
+      hist.unshift({ date: new Date().toISOString().slice(0, 10), type, text });
+      localStorage.setItem(histKey, JSON.stringify(hist.slice(0, 20)));
     } catch (e) { setError(e.message); }
     setLoading(false);
   };
