@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PERSONAL_EVENTS } from '../config';
 
 const NL_MONTHS = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 const NL_DAYS = ['Ma','Di','Wo','Do','Vr','Za','Zo'];
@@ -25,6 +26,10 @@ function isDayComplete(log) {
   if (!log) return false;
   const habits = ['water','protein','no_sugar','no_salt','bed_on_time','low_stress'];
   return log.candesartan && log.adhd_meds && habits.filter(h => log[h]).length >= 4;
+}
+
+function getEventForDay(dk) {
+  return PERSONAL_EVENTS.find(e => dk >= e.startDate && dk <= e.endDate) || null;
 }
 
 export default function Calendar({ currentDate, logs, onSelectDate }) {
@@ -74,16 +79,28 @@ export default function Calendar({ currentDate, logs, onSelectDate }) {
               const log = logs[dk];
               const complete = isDayComplete(log);
               const dots = logDots(log);
+              const event = getEventForDay(dk);
 
               return (
                 <div
                   key={dk}
                   className={`cal-day ${isToday ? 'today' : ''} ${isSel && !isToday ? 'selected' : ''} ${dk < today && !isToday ? 'past' : ''}`}
                   onClick={() => !isFuture && onSelectDate(dk)}
-                  style={{ cursor: isFuture ? 'default' : 'pointer', opacity: isFuture ? 0.3 : undefined }}
+                  style={{
+                    cursor: isFuture ? 'default' : 'pointer',
+                    opacity: isFuture ? 0.3 : undefined,
+                    background: event ? `${event.color}18` : undefined,
+                    outline: event ? `2px solid ${event.color}` : undefined,
+                    outlineOffset: -2,
+                  }}
                 >
                   {complete && <span className="cal-done-mark">✓</span>}
                   <div className="cal-date">{day}</div>
+                  {event && (
+                    <div style={{ fontSize: 10, lineHeight: 1, textAlign: 'center', marginTop: 1 }}>
+                      {event.emoji}
+                    </div>
+                  )}
                   <div className="cal-dots">
                     {dots.map((dot, i) => (
                       <div key={i} className="cal-dot" style={{ background: dot.color + '22', color: dot.color }}>
@@ -102,6 +119,20 @@ export default function Calendar({ currentDate, logs, onSelectDate }) {
         <div className="card-body" style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.8 }}>
           <div>🏃 = loop gedaan &nbsp;·&nbsp; 💪 = core gedaan &nbsp;·&nbsp; ✓ = dag compleet</div>
           <div>Tik op een dag om er naartoe te navigeren.</div>
+          <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+            {PERSONAL_EVENTS.map(e => (
+              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 14 }}>{e.emoji}</span>
+                <span style={{ fontWeight: 700, color: e.color }}>{e.title}</span>
+                <span style={{ color: 'var(--muted)' }}>
+                  {e.startDate === e.endDate
+                    ? new Date(e.startDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                    : `${new Date(e.startDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}–${new Date(e.endDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}`
+                  }
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

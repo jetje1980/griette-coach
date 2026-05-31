@@ -30,3 +30,36 @@ export const BP = {
   red_sys: 160, red_dia: 100,
   orange_sys: 145, orange_dia: 90,
 };
+
+export const PERSONAL_EVENTS = [
+  {
+    id: 'fietsweekend',
+    emoji: '🚴',
+    title: 'Fietsweekend',
+    startDate: '2026-06-12',
+    endDate: '2026-06-13',
+    description: '35–40 km heen + 35–40 km terug met groep',
+    goal: 'Goed presteren en genieten met de groep',
+    color: '#16A34A',
+  },
+  {
+    id: 'foute_party',
+    emoji: '🎉',
+    title: 'Q-music Foute Party',
+    startDate: '2026-06-20',
+    endDate: '2026-06-20',
+    description: 'Avond uit met vrienden',
+    goal: 'Stralend sterk en met glow er staan',
+    color: '#D97706',
+  },
+  {
+    id: 'parijs',
+    emoji: '🗼',
+    title: 'Weekend Parijs',
+    startDate: '2026-06-26',
+    endDate: '2026-06-28',
+    description: 'Weekend met vriendinnen',
+    goal: 'Behoorlijke progressie hebben gezien',
+    color: '#DC2626',
+  },
+];

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HABITS, MEDS, BP } from '../config';
+import { HABITS, MEDS, BP, PERSONAL_EVENTS } from '../config';
 
 const SYMPTOMS = [
   { id: 'symptom_brainfog',   label: 'Hersenmist',    emoji: '🌫️' },
@@ -284,6 +284,59 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
           </div>
         </div>
       )}
+
+      {/* Persoonlijke events */}
+      {(() => {
+        const upcoming = PERSONAL_EVENTS
+          .filter(e => e.endDate >= todayStr)
+          .map(e => ({
+            ...e,
+            daysTo: Math.max(0, Math.floor((new Date(e.startDate) - new Date(todayStr)) / 86400000)),
+            active: e.startDate <= todayStr && e.endDate >= todayStr,
+          }));
+        if (!upcoming.length) return null;
+        return (
+          <div className="card">
+            <div className="card-header">
+              <div className="card-accent" style={{ background: 'var(--rust)' }} />
+              <div className="card-title">🗓️ Aankomende events</div>
+            </div>
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {upcoming.map(e => (
+                <div key={e.id} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                  padding: '8px 10px', borderRadius: 10,
+                  background: e.active ? `${e.color}18` : 'var(--bg)',
+                  border: `1.5px solid ${e.active ? e.color : 'var(--border)'}`,
+                }}>
+                  <div style={{ fontSize: 22, lineHeight: 1 }}>{e.emoji}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: e.color }}>{e.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                      {e.startDate === e.endDate
+                        ? new Date(e.startDate).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
+                        : `${new Date(e.startDate).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'long' })} – ${new Date(e.endDate).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'long' })}`
+                      }
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text)', marginTop: 2 }}>{e.description}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>Doel: {e.goal}</div>
+                  </div>
+                  <div style={{ textAlign: 'center', minWidth: 44 }}>
+                    {e.active ? (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: e.color, background: `${e.color}20`, padding: '3px 7px', borderRadius: 99 }}>NU!</span>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: e.color, lineHeight: 1 }}>{e.daysTo}</div>
+                        <div style={{ fontSize: 9, color: 'var(--muted)' }}>dag{e.daysTo !== 1 ? 'en' : ''}</div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       <BpAlert sys={log?.bp_sys} dia={log?.bp_dia} />
 

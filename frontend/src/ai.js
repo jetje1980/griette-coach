@@ -156,6 +156,19 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
   const overdriveDays = recent.filter(l => l.symptom_overdrive).length;
   const hayfeverDays  = recent.filter(l => l.symptom_hayfever).length;
 
+  const eventsContext = (() => {
+    const EVENTS = [
+      { emoji: '🚴', title: 'Fietsweekend', startDate: '2026-06-12', endDate: '2026-06-13', description: '35–40 km heen + 35–40 km terug met groep', goal: 'Goed presteren en genieten met de groep' },
+      { emoji: '🎉', title: 'Q-music Foute Party', startDate: '2026-06-20', endDate: '2026-06-20', description: 'Avond uit met vrienden', goal: 'Stralend sterk en met glow er staan' },
+      { emoji: '🗼', title: 'Weekend Parijs', startDate: '2026-06-26', endDate: '2026-06-28', description: 'Weekend met vriendinnen', goal: 'Behoorlijke progressie hebben gezien' },
+    ];
+    return EVENTS.map(e => {
+      const days = Math.max(0, Math.floor((new Date(e.startDate) - new Date(today)) / 86400000));
+      const status = e.endDate < today ? '(voorbij)' : e.startDate <= today ? '(NU BEZIG)' : `over ${days} dagen`;
+      return `${e.emoji} ${e.title} ${status}: ${e.startDate}${e.startDate !== e.endDate ? `–${e.endDate}` : ''} — ${e.description} | Doel: "${e.goal}"`;
+    }).join('\n');
+  })();
+
   return `
 GRIETTE — 46 jaar, 163 cm
 Gezondheidsprofiel: long covid herstel, ADHD, waarschijnlijk laat-perimenopauze / vroeg menopauze
@@ -194,6 +207,9 @@ RECENTE BELEMMERING (herstel operatie):
 - Post-operatieve inflammatie + cortisol + immobiliteit verklaren tijdelijke gewichtstoename
 - Nu herstart met zowel Mounjaro als training — lichaam heeft 2–3 weken nodig om te normaliseren
 - Dit is GEEN echte gewichtstoename maar tijdelijk herstelgewicht; beoordeel voortgang pas na normalisatie
+
+PERSOONLIJKE MIJLPALEN (komende weken — coach hierop inspelen):
+${eventsContext}
 
 GEPLANDE VAKANTIE:
 - Vertrek: 25 juli 2026 (dag 59 van 70-dagen programma), ~3 weken
