@@ -887,18 +887,25 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
                 ))}
               </div>
 
-              <div className="scale-label" style={{ marginTop: 8 }}>MOGELIJKE TRIGGER</div>
+              <div className="scale-label" style={{ marginTop: 8 }}>MOGELIJKE TRIGGERS (meerdere mogelijk)</div>
               <div className="habit-grid" style={{ marginTop: 4 }}>
-                {MIGRAINE_TRIGGERS.map(t => (
-                  <div key={t.id}
-                    className={`habit-btn ${log?.migraine_trigger === t.id ? 'on' : ''}`}
-                    style={log?.migraine_trigger === t.id ? { background: '#F3E8FF', borderColor: '#7C3AED', color: '#7C3AED' } : {}}
-                    onClick={() => saveField('migraine_trigger', log?.migraine_trigger === t.id ? null : t.id)}
-                  >
-                    <div className="habit-emoji">{t.emoji}</div>
-                    <div className="habit-label">{t.label}</div>
-                  </div>
-                ))}
+                {MIGRAINE_TRIGGERS.map(tr => {
+                  const active = log?.migraine_triggers || (log?.migraine_trigger ? [log.migraine_trigger] : []);
+                  const isOn = active.includes(tr.id);
+                  return (
+                    <div key={tr.id}
+                      className={`habit-btn ${isOn ? 'on' : ''}`}
+                      style={isOn ? { background: '#F3E8FF', borderColor: '#7C3AED', color: '#7C3AED' } : {}}
+                      onClick={() => {
+                        const cur = log?.migraine_triggers || (log?.migraine_trigger ? [log.migraine_trigger] : []);
+                        saveField('migraine_triggers', cur.includes(tr.id) ? cur.filter(x => x !== tr.id) : [...cur, tr.id]);
+                      }}
+                    >
+                      <div className="habit-emoji">{tr.emoji}</div>
+                      <div className="habit-label">{tr.label}</div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : (

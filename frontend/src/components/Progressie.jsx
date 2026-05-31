@@ -455,18 +455,23 @@ function MigraineOverview({ logs }) {
     byMonth[month].push(d);
   }
 
-  // Trigger tally
+  // Trigger tally — handles both old single string and new array format
   const triggerCount = {};
   for (const d of migraineDays) {
-    const t = d.migraine_trigger || 'onbekend';
-    triggerCount[t] = (triggerCount[t] || 0) + 1;
+    const triggers = d.migraine_triggers || (d.migraine_trigger ? [d.migraine_trigger] : ['onbekend']);
+    for (const t of triggers) {
+      triggerCount[t] = (triggerCount[t] || 0) + 1;
+    }
   }
   const topTriggers = Object.entries(triggerCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
   // Correlate with cycle
   const cycleStart = localStorage.getItem('gc_cycle_start');
   const cycleCorr = cycleStart ? (() => {
-    const hormoonDays = migraineDays.filter(d => d.migraine_trigger === 'hormonen').length;
+    const hormoonDays = migraineDays.filter(d => {
+      const triggers = d.migraine_triggers || (d.migraine_trigger ? [d.migraine_trigger] : []);
+      return triggers.includes('hormonen');
+    }).length;
     return hormoonDays > 0 ? `${hormoonDays} van ${migraineDays.length} migrainedagen zijn gemarkeerd als hormoon-gerelateerd.` : null;
   })() : null;
 
@@ -556,7 +561,10 @@ function MigraineOverview({ logs }) {
               <span style={{ color: 'var(--muted)', minWidth: 80 }}>{d.date}</span>
               {d.migraine_severity && <span>{'🟣'.repeat(d.migraine_severity)}</span>}
               {d.migraine_hours && <span>{d.migraine_hours}u</span>}
-              {d.migraine_trigger && <span style={{ color: '#7C3AED' }}>{TRIGGER_LABELS[d.migraine_trigger]}</span>}
+              {(() => {
+                const trs = d.migraine_triggers || (d.migraine_trigger ? [d.migraine_trigger] : []);
+                return trs.length > 0 && <span style={{ color: '#7C3AED' }}>{trs.map(t => TRIGGER_LABELS[t] || t).join(' · ')}</span>;
+              })()}
             </div>
           ))}
         </div>
