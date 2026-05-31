@@ -173,6 +173,187 @@ function MeasurementRow({ meas, label }) {
   );
 }
 
+// ── Gedrag → Gevolg ─────────────────────────────────────────────────────────
+
+function computeInsights(logs) {
+  const allEntries = Object.values(logs).filter(e => e.date);
+  const byDate = {};
+  allEntries.forEach(e => { byDate[e.date] = e; });
+
+  function nextDay(d) {
+    const dt = new Date(d); dt.setDate(dt.getDate() + 1);
+    return dt.toISOString().slice(0, 10);
+  }
+  function avg(arr) { return arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null; }
+
+  const MIN = 2;
+  const results = [];
+
+  function tryInsight({ emoji, title, A, B, labelA, labelB, color }) {
+    if (A.length < MIN || B.length < MIN) return;
+    const aAvg = avg(A), bAvg = avg(B);
+    if (aAvg == null || bAvg == null || Math.abs(aAvg - bAvg) < 0.2) return;
+    const winner = aAvg >= bAvg ? labelA : labelB;
+    const diff   = Math.abs(aAvg - bAvg).toFixed(1);
+    results.push({
+      emoji, title, color,
+      lines: [
+        `${labelA}: gem. ${aAvg.toFixed(1)}/3 energie (${A.length}×)`,
+        `${labelB}: gem. ${bAvg.toFixed(1)}/3 energie (${B.length}×)`,
+      ],
+      verdict: `${winner} → +${diff} punt energie`,
+      warn: aAvg < bAvg,
+      n: A.length + B.length,
+    });
+  }
+
+  // 1. Slaap → Energie dag erna
+  const sleepG = [], sleepB = [];
+  allEntries.forEach(e => {
+    if (e.sleep_hours == null) return;
+    const nx = byDate[nextDay(e.date)];
+    if (!nx || nx.energy == null) return;
+    (e.sleep_hours >= 7 ? sleepG : sleepB).push(nx.energy);
+  });
+  tryInsight({ emoji: '😴', title: 'Slaap & energie (dag erna)', A: sleepG, B: sleepB, labelA: '≥7u slaap', labelB: '<7u slaap', color: '#6366F1' });
+
+  // 2. Training → Energie dag erna
+  const trainY = [], trainN = [];
+  allEntries.forEach(e => {
+    const nx = byDate[nextDay(e.date)];
+    if (!nx || nx.energy == null) return;
+    const did = !!(e.run_done || e.swim_done || e.bike_done || e.core_done);
+    (did ? trainY : trainN).push(nx.energy);
+  });
+  tryInsight({ emoji: '🏃', title: 'Training & energie (dag erna)', A: trainY, B: trainN, labelA: 'na trainingsdag', labelB: 'na rustdag', color: 'var(--sage)' });
+
+  // 3. Eiwit → Energie zelfde dag
+  const prY = [], prN = [];
+  allEntries.forEach(e => {
+    if (e.energy == null) return;
+    const hit = !!(e.protein || e.protein_day);
+    if (hit) prY.push(e.energy);
+    else if (e.protein === 0 || e.protein_day === 0) prN.push(e.energy);
+  });
+  tryInsight({ emoji: '🥩', title: 'Eiwit & energie', A: prY, B: prN, labelA: 'eiwitdoel ✓', labelB: 'eiwitdoel ✗', color: 'var(--rust)' });
+
+  // 4. Op tijd naar bed → Energie
+  const bedY = [], bedN = [];
+  allEntries.forEach(e => {
+    if (e.energy == null) return;
+    if (e.bed_on_time) bedY.push(e.energy);
+    else if (e.bed_on_time === 0) bedN.push(e.energy);
+  });
+  tryInsight({ emoji: '🌙', title: 'Op tijd bed & energie', A: bedY, B: bedN, labelA: 'op tijd naar bed', labelB: 'laat naar bed', color: '#EC4899' });
+
+  // 5. Weinig stress → Energie
+  const strY = [], strN = [];
+  allEntries.forEach(e => {
+    if (e.energy == null) return;
+    if (e.low_stress) strY.push(e.energy);
+    else if (e.low_stress === 0) strN.push(e.energy);
+  });
+  tryInsight({ emoji: '🧘', title: 'Weinig stress & energie', A: strY, B: strN, labelA: 'rustige dag', labelB: 'stressvolle dag', color: 'var(--gold)' });
+
+  // 6. Geen suiker → Energie
+  const sugY = [], sugN = [];
+  allEntries.forEach(e => {
+    if (e.energy == null) return;
+    if (e.no_sugar) sugY.push(e.energy);
+    else if (e.no_sugar === 0) sugN.push(e.energy);
+  });
+  tryInsight({ emoji: '🍬', title: 'Geen suiker & energie', A: sugY, B: sugN, labelA: 'suikervrij', labelB: 'suiker gegeten', color: '#F59E0B' });
+
+  // 7. PEM-crash → Energie dag erna (1 PEM-obs. is voldoende)
+  const pemY = [], pemN = [];
+  allEntries.forEach(e => {
+    const nx = byDate[nextDay(e.date)];
+    if (!nx || nx.energy == null) return;
+    (e.symptom_pem ? pemY : pemN).push(nx.energy);
+  });
+  if (pemY.length >= 1 && pemN.length >= MIN) {
+    const aAvg = avg(pemY), bAvg = avg(pemN);
+    if (aAvg != null && bAvg != null && (bAvg - aAvg) >= 0.3) {
+      results.push({
+        emoji: '⚡', title: 'PEM-crash & dag erna', color: 'var(--alert)', warn: true,
+        lines: [
+          `na PEM-dag: gem. ${aAvg.toFixed(1)}/3 energie (${pemY.length}×)`,
+          `na normale dag: gem. ${bAvg.toFixed(1)}/3 energie (${pemN.length}×)`,
+        ],
+        verdict: `PEM verlaagt dag erna je energie met ${(bAvg - aAvg).toFixed(1)} punt — pacing is essentieel`,
+        n: pemY.length + pemN.length,
+      });
+    }
+  }
+
+  return results;
+}
+
+function GedragGevolg({ logs }) {
+  const withEnergy = Object.values(logs).filter(e => e.energy != null);
+  const n = withEnergy.length;
+  const insights = n >= 4 ? computeInsights(logs) : [];
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-accent" style={{ background: '#8B5CF6' }} />
+        <div className="card-title">🔍 Gedrag → Gevolg</div>
+        <div style={{ fontSize: 9, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
+          {n} energie-dag{n !== 1 ? 'en' : ''}
+        </div>
+      </div>
+      <div className="card-body">
+        {n < 4 ? (
+          <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--muted)', fontSize: 11 }}>
+            <div style={{ fontSize: 28, marginBottom: 6 }}>📊</div>
+            Nog <strong>{4 - n} dag{4 - n !== 1 ? 'en' : ''}</strong> energiescore nodig voor eerste inzichten.
+            <div style={{ fontSize: 10, marginTop: 6, lineHeight: 1.5 }}>
+              Vul dagelijks energie, slaap en gewoontes in —<br />patronen verschijnen automatisch.
+            </div>
+          </div>
+        ) : insights.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--muted)', fontSize: 11 }}>
+            <div style={{ fontSize: 22, marginBottom: 6 }}>🔄</div>
+            Patronen worden zichtbaar naarmate je meer logt.<br />
+            <span style={{ fontSize: 10 }}>Tip: ook "slechte" dagen bijhouden geeft de vergelijking.</span>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Automatisch berekend uit {n} gelogde dagen. Sterker met meer data.
+            </div>
+            {insights.map((ins, i) => (
+              <div key={i} style={{
+                background: ins.warn ? 'var(--rust-l)' : '#F0FDF4',
+                borderLeft: `3px solid ${ins.color}`,
+                borderRadius: 10,
+                padding: '10px 12px',
+                marginBottom: 8,
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span>{ins.emoji} {ins.title}</span>
+                  <span style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 400 }}>n={ins.n}</span>
+                </div>
+                {ins.lines.map((line, j) => (
+                  <div key={j} style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.7 }}>
+                    {j === 0 ? '→ ' : '↔ '}{line}
+                  </div>
+                ))}
+                <div style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: ins.color, lineHeight: 1.4 }}>
+                  💡 {ins.verdict}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 export default function Progressie({ logs }) {
   const [sessions, setSessions] = useState([]);
   const [measurements, setMeasurements] = useState([]);
@@ -204,6 +385,7 @@ export default function Progressie({ logs }) {
   return (
     <div className="pane">
       <WeightProgress logs={logs} />
+      <GedragGevolg logs={logs} />
 
       {/* Foto-tijdlijn */}
       {photoSessions.length === 0 ? (
