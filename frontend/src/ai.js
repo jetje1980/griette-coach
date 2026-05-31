@@ -286,17 +286,25 @@ export const ai = {
     const context = buildContext(logs, measurements);
     const prompt = `${context}
 
-Je bent de persoonlijke coach van Griette. Geef een coach-analyse van max 300 woorden.
+Je bent de persoonlijke coach van Griette. Jouw taak is PATROONHERKENNING — niet generieke gezondheidsadviezen.
 
-Structuur (gebruik deze kopjes):
-✅ Wat gaat goed
-⚠️ Wat vraagt aandacht
-🎯 Advies komende 3 dagen
-🏃 Training-aanpassing (indien nodig)
+Analyseer de data als een detective: welke combinaties van slaap, training, voeding, energie en gewicht laten een patroon zien dat SPECIFIEK geldt voor haar lichaam? Wat werkt voor háár unieke combinatie van long covid + ADHD + perimenopauze + Mounjaro?
 
-Toon: warm, motiverend, direct en concreet. Geen medische diagnoses. Schrijf in het Nederlands.`;
+AANPAK:
+- Als iets goed gaat (gewichtsdaling, energie hoog, goede training): benoem PRECIES wat er die dag(en) anders was. Rem niet af — verklaar wat werkt zodat ze het kan herhalen.
+- Zoek correlaties: sliep ze goed → meer energie de dag erna? Training gedaan → gewicht de volgende dag lager? Eiwitdoel gehaald → energie beter?
+- Kijk naar de events: fietsweekend 12-13 jun, Q-music Foute Party 20 jun, Parijs 26-28 jun. Is ze op koers?
+- Gebruik de recente coach-rapporten om trends te spotten die je nu bevestigt of ontkracht.
 
-    return callClaude([{ role: 'user', content: prompt }], 800);
+Structuur (gebruik exact deze kopjes):
+✅ Wat werkt voor jouw lichaam
+🔍 Patroon dat ik zie in de data
+🎯 Komende 3 dagen: concreet actieplan
+🚀 Als dit doorgaat: wat je kunt verwachten
+
+Toon: direct, nieuwsgierig, data-gedreven. Behandel haar als iemand die haar eigen lichaam serieus neemt en de data wil begrijpen. Geen generieke veiligheidswaarschuwingen. Schrijf in het Nederlands. Max 320 woorden.`;
+
+    return callClaude([{ role: 'user', content: prompt }], 900);
   },
 
   // photos = array van { base64, mimeType, type ('voor'|'zij'|'achter') }
@@ -393,8 +401,10 @@ ${photoInsight ? `MEEST RECENTE FOTO-ANALYSE:\n${photoInsight.slice(0, 400)}` : 
 HUIDIGE LOOPTRAINING: schema nr ${lastRunNr} van 35
 GEMIDDELDE ENERGIE AFGELOPEN WEEK: ${avgEnergy ?? '?'}/3
 
-Maak een CONCREET WEEKPLAN voor de komende 7 dagen als personal trainer.
-Pas het aan op haar actuele staat: long covid, energie, wat de foto en coach-analyse laten zien.
+Maak een CONCREET WEEKPLAN als personal trainer. Baseer het op de FEITELIJKE data — niet op wat gemiddeld veilig is, maar op wat haar data laat zien dat voor háár werkt.
+
+Als haar energiedata goed is, ga dan vooruit. Als er PEM-signalen zijn, bouw dan in. Lees de data, niet de gemiddelden.
+Houd rekening met de aankomende events (fietsweekend 12-13 jun = grote fysieke uitdaging).
 
 Antwoord in exact dit formaat (geen extra tekst er omheen):
 
@@ -407,11 +417,11 @@ Vr: [activiteit]
 Za: [activiteit]
 Zo: [activiteit]
 
-LOOPSCHEMA: [blijf op T${lastRunNr} / ga naar T${Math.min(35, lastRunNr + 1)} / ga terug naar T${Math.max(1, lastRunNr - 1)} — met korte reden]
-FOCUS DEZE WEEK: [1 zin: wat is de trainingsthema]
-LET OP: [1 concrete waarschuwing of aandachtspunt voor haar lichaam]
+LOOPSCHEMA: [blijf op T${lastRunNr} / ga naar T${Math.min(35, lastRunNr + 1)} / ga terug naar T${Math.max(1, lastRunNr - 1)} — met korte reden op basis van haar energiedata]
+FOCUS DEZE WEEK: [1 zin: wat is de trainingsthema — specifiek voor háár data deze week]
+DATA-INZICHT: [1 zin: welk patroon uit haar logdata stuurt dit plan]
 
-Schrijf in het Nederlands. Wees specifiek en realistisch — niet ambitieuzer dan haar herstelstatus toelaat.`;
+Schrijf in het Nederlands.`;
 
     return callClaude([{ role: 'user', content: prompt }], 600);
   },

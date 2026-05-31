@@ -115,8 +115,8 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
     const first = weightEntries[0], last = weightEntries[weightEntries.length - 1];
     const days = Math.max(1, Math.floor((new Date(last.date) - new Date(first.date)) / 86400000));
     const dailyChange = (last.weight - first.weight) / days;
-    // Cap at max realistic loss: 0.5 kg/week = 0.071 kg/day
-    const cappedChange = Math.max(dailyChange, -0.071);
+    // Cap at max realistic loss: 1 kg/week = 0.143 kg/day
+    const cappedChange = Math.max(dailyChange, -0.143);
     return +(last.weight + cappedChange * daysToVacation).toFixed(1);
   })();
 
