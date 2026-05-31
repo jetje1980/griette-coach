@@ -103,8 +103,10 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
   const daysToVacation = Math.max(0, Math.floor((new Date(VACATION_DATE) - new Date(todayStr)) / 86400000));
   const weeksToVacation = (daysToVacation / 7).toFixed(1);
 
+  const START_DATE = '2026-05-27';
+
   const weightEntries = Object.values(logs || {})
-    .filter(l => l.weight)
+    .filter(l => l.weight && l.date >= START_DATE)
     .sort((a, b) => a.date.localeCompare(b.date));
   const latestWeight = weightEntries.length ? weightEntries[weightEntries.length - 1].weight : null;
 
@@ -113,7 +115,9 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
     const first = weightEntries[0], last = weightEntries[weightEntries.length - 1];
     const days = Math.max(1, Math.floor((new Date(last.date) - new Date(first.date)) / 86400000));
     const dailyChange = (last.weight - first.weight) / days;
-    return +(last.weight + dailyChange * daysToVacation).toFixed(1);
+    // Cap at max realistic loss: 0.5 kg/week = 0.071 kg/day
+    const cappedChange = Math.max(dailyChange, -0.071);
+    return +(last.weight + cappedChange * daysToVacation).toFixed(1);
   })();
 
   const weeklyNeeded = latestWeight && daysToVacation > 0
