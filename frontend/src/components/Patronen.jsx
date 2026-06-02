@@ -201,24 +201,124 @@ export default function Patronen({ logs }) {
           <div className="card-title">💡 Inzichten</div>
         </div>
         <div className="card-body">
-          {trainDays >= 4 && (
-            <div style={{ padding: '10px 12px', background: 'var(--sage-l)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--sage)' }}>
-              <strong style={{ fontSize: 12 }}>🏆 Consequent aan het trainen!</strong>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{trainDays} trainingsdagen deze week. Geweldig.</div>
-            </div>
-          )}
-          {trainDays === 0 && (
-            <div style={{ padding: '10px 12px', background: 'var(--gold-l)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--gold)' }}>
-              <strong style={{ fontSize: 12 }}>👟 Nog niet getraind deze week</strong>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Één keer lopen of core doet al veel.</div>
-            </div>
-          )}
-          {last7.length < 5 && (
-            <div style={{ padding: '10px 12px', background: 'var(--bg)', borderRadius: 9, borderLeft: '3px solid var(--muted)' }}>
-              <strong style={{ fontSize: 12 }}>📊 Meer data = betere inzichten</strong>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Vul 5+ dagen in om patronen te zien.</div>
-            </div>
-          )}
+          {(() => {
+            const cards = [];
+
+            // Gewichtstrend
+            const recentWeights = Object.values(logs)
+              .filter(l => l.weight && l.date)
+              .sort((a, b) => a.date.localeCompare(b.date));
+            if (recentWeights.length >= 2) {
+              const first = recentWeights[0], last = recentWeights[recentWeights.length - 1];
+              const days = Math.max(1, Math.floor((new Date(last.date) - new Date(first.date)) / 86400000));
+              const diff = +(last.weight - first.weight).toFixed(1);
+              const perWeek = +((diff / days) * 7).toFixed(2);
+              const going = diff < 0;
+              cards.push(
+                <div key="weight" style={{ padding: '10px 12px', background: going ? 'var(--sage-l)' : 'var(--rust-l)', borderRadius: 9, marginBottom: 8, borderLeft: `3px solid ${going ? 'var(--sage)' : 'var(--rust)'}` }}>
+                  <strong style={{ fontSize: 12 }}>{going ? '📉 Gewicht daalt' : '📈 Gewicht gestegen'}</strong>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                    {first.weight} → {last.weight} kg ({diff > 0 ? '+' : ''}{diff} kg in {days} dagen · {perWeek > 0 ? '+' : ''}{perWeek} kg/week)
+                  </div>
+                </div>
+              );
+            }
+
+            // Training
+            if (trainDays >= 4) {
+              cards.push(
+                <div key="train-hi" style={{ padding: '10px 12px', background: 'var(--sage-l)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--sage)' }}>
+                  <strong style={{ fontSize: 12 }}>🏆 {trainDays}/7 trainingsdagen deze week</strong>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Uitstekende consistentie — bouw dit zo rustig verder op.</div>
+                </div>
+              );
+            } else if (trainDays === 0) {
+              cards.push(
+                <div key="train-0" style={{ padding: '10px 12px', background: 'var(--gold-l)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--gold)' }}>
+                  <strong style={{ fontSize: 12 }}>👟 Nog geen training deze week</strong>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Eén keer lopen of 15 min core doet al veel voor herstel en stemming.</div>
+                </div>
+              );
+            } else {
+              cards.push(
+                <div key="train-mid" style={{ padding: '10px 12px', background: 'var(--bg)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--sage)' }}>
+                  <strong style={{ fontSize: 12 }}>🏃 {trainDays}/7 trainingsdagen</strong>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Doel is 3–4×/week zone B. {trainDays < 3 ? 'Nog ' + (3 - trainDays) + ' keer te gaan.' : 'Je zit goed op schema.'}</div>
+                </div>
+              );
+            }
+
+            // Energie
+            if (avgEnergy != null) {
+              const e = parseFloat(avgEnergy);
+              const label = e >= 2.5 ? ['🚀 Top energie deze week!', 'Wat doe je goed? Houd dit vast.']
+                          : e >= 1.5 ? ['⚡ Energie redelijk', 'Slaap en eiwitten zijn de snelste hefbomen.']
+                          : ['🪫 Energie laag deze week', 'Prioriteit: ≥7u slaap en niet overplannen.'];
+              cards.push(
+                <div key="energy" style={{ padding: '10px 12px', background: 'var(--bg)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--gold)' }}>
+                  <strong style={{ fontSize: 12 }}>{label[0]} ({avgEnergy}/3)</strong>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{label[1]}</div>
+                </div>
+              );
+            }
+
+            // Beste en slechtste gewoonte van de week
+            const habitScores = HABITS.map(h => ({
+              ...h,
+              score: Array.from({ length: 7 }, (_, i) => (logs[ago(6 - i)]?.[h.id] ? 1 : 0)).reduce((a, b) => a + b, 0),
+            }));
+            const best  = [...habitScores].sort((a, b) => b.score - a.score)[0];
+            const worst = [...habitScores].sort((a, b) => a.score - b.score)[0];
+            if (best && best.score >= 5) {
+              cards.push(
+                <div key="best-habit" style={{ padding: '10px 12px', background: 'var(--sage-l)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--sage)' }}>
+                  <strong style={{ fontSize: 12 }}>✅ Sterkste gewoonte: {best.emoji} {best.label}</strong>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{best.score}/7 dagen — dit is je anker. Blijf hierin consequent.</div>
+                </div>
+              );
+            }
+            if (worst && worst.score <= 2 && last7.length >= 4) {
+              cards.push(
+                <div key="worst-habit" style={{ padding: '10px 12px', background: 'var(--gold-l)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--gold)' }}>
+                  <strong style={{ fontSize: 12 }}>💡 Kans: {worst.emoji} {worst.label}</strong>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Slechts {worst.score}/7 deze week — één extra dag kan al een verschil maken.</div>
+                </div>
+              );
+            }
+
+            // Slaap
+            const sleepVals = last7.filter(l => l.sleep_hours != null).map(l => l.sleep_hours);
+            if (sleepVals.length >= 3) {
+              const avgSleep = (sleepVals.reduce((a, b) => a + b, 0) / sleepVals.length).toFixed(1);
+              const under7 = sleepVals.filter(v => v < 7).length;
+              if (under7 >= 2) {
+                cards.push(
+                  <div key="sleep" style={{ padding: '10px 12px', background: 'var(--rust-l)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--rust)' }}>
+                    <strong style={{ fontSize: 12 }}>😴 Slaap aandacht nodig (gem. {avgSleep}u)</strong>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{under7}× onder 7u — voor long covid herstel is ≥7u essentieel.</div>
+                  </div>
+                );
+              } else {
+                cards.push(
+                  <div key="sleep" style={{ padding: '10px 12px', background: 'var(--sage-l)', borderRadius: 9, marginBottom: 8, borderLeft: '3px solid var(--sage)' }}>
+                    <strong style={{ fontSize: 12 }}>😴 Slaap goed op orde (gem. {avgSleep}u)</strong>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Goede basis voor herstel en energiebeheer.</div>
+                  </div>
+                );
+              }
+            }
+
+            if (cards.length === 0) {
+              cards.push(
+                <div key="empty" style={{ padding: '10px 12px', background: 'var(--bg)', borderRadius: 9, borderLeft: '3px solid var(--muted)' }}>
+                  <strong style={{ fontSize: 12 }}>📊 Vul gewicht en energie in</strong>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Zodra je data hebt, verschijnen hier automatisch inzichten over je week.</div>
+                </div>
+              );
+            }
+
+            return cards;
+          })()}
         </div>
       </div>
     </div>
