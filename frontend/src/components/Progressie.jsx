@@ -254,17 +254,18 @@ function computeInsights(logs) {
   }
   function avg(arr) { return arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null; }
 
-  const MIN = 2;
+  const MIN = 1;
   const results = [];
 
   function tryInsight({ emoji, title, A, B, labelA, labelB, color }) {
     if (A.length < MIN || B.length < MIN) return;
     const aAvg = avg(A), bAvg = avg(B);
-    if (aAvg == null || bAvg == null || Math.abs(aAvg - bAvg) < 0.2) return;
+    if (aAvg == null || bAvg == null || Math.abs(aAvg - bAvg) < 0.1) return;
     const winner = aAvg >= bAvg ? labelA : labelB;
     const diff   = Math.abs(aAvg - bAvg).toFixed(1);
+    const earlySignal = (A.length + B.length) < 6;
     results.push({
-      emoji, title, color,
+      emoji, title, color, earlySignal,
       lines: [
         `${labelA}: gem. ${aAvg.toFixed(1)}/3 energie (${A.length}×)`,
         `${labelB}: gem. ${bAvg.toFixed(1)}/3 energie (${B.length}×)`,
@@ -357,10 +358,14 @@ function computeInsights(logs) {
   return results;
 }
 
+const ENERGY_EMOJI = ['🪫', '😐', '⚡', '🚀'];
+
 function GedragGevolg({ logs }) {
-  const withEnergy = Object.values(logs).filter(e => e.energy != null);
-  const n = withEnergy.length;
-  const insights = n >= 4 ? computeInsights(logs) : [];
+  const allEntries = Object.values(logs)
+    .filter(e => e.energy != null && e.date)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const n = allEntries.length;
+  const insights = n >= 2 ? computeInsights(logs) : [];
 
   return (
     <div className="card">
@@ -372,24 +377,66 @@ function GedragGevolg({ logs }) {
         </div>
       </div>
       <div className="card-body">
-        {n < 4 ? (
-          <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--muted)', fontSize: 11 }}>
-            <div style={{ fontSize: 28, marginBottom: 6 }}>📊</div>
-            Nog <strong>{4 - n} dag{4 - n !== 1 ? 'en' : ''}</strong> energiescore nodig voor eerste inzichten.
-            <div style={{ fontSize: 10, marginTop: 6, lineHeight: 1.5 }}>
-              Vul dagelijks energie, slaap en gewoontes in —<br />patronen verschijnen automatisch.
+
+        {/* Mini-log: altijd zichtbaar zodra er energiedata is */}
+        {allEntries.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div className="scale-label" style={{ marginBottom: 6 }}>RECENTE DAGEN</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {allEntries.slice(0, 7).map(e => {
+                const habits = [
+                  e.sleep_hours != null && `😴 ${e.sleep_hours}u`,
+                  e.water        && '💧',
+                  e.protein      && '🥩',
+                  e.no_sugar     && '🚫',
+                  e.bed_on_time  && '🛏️',
+                  e.low_stress   && '🧘',
+                  (e.run_done || e.core_done || e.swim_done || e.bike_done) && '🏃',
+                  e.migraine     && '🧠',
+                  e.symptom_pem  && '⚡',
+                ].filter(Boolean);
+                return (
+                  <div key={e.date} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '5px 8px', borderRadius: 8, background: 'var(--bg)',
+                    border: '1px solid var(--border)',
+                  }}>
+                    <span style={{ fontSize: 16, minWidth: 20 }}>{ENERGY_EMOJI[e.energy]}</span>
+                    <span style={{ fontSize: 10, color: 'var(--muted)', minWidth: 56, fontFamily: 'var(--font-mono)' }}>
+                      {e.date.slice(5)}
+                    </span>
+                    <span style={{ fontSize: 11, flex: 1, lineHeight: 1.4 }}>
+                      {habits.join(' ')}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 5 }}>
+              Energie: 🪫 uitgeput · 😐 matig · ⚡ goed · 🚀 top
             </div>
           </div>
-        ) : insights.length === 0 ? (
+        )}
+
+        {n === 0 ? (
           <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--muted)', fontSize: 11 }}>
-            <div style={{ fontSize: 22, marginBottom: 6 }}>🔄</div>
-            Patronen worden zichtbaar naarmate je meer logt.<br />
-            <span style={{ fontSize: 10 }}>Tip: ook "slechte" dagen bijhouden geeft de vergelijking.</span>
+            <div style={{ fontSize: 24, marginBottom: 6 }}>📊</div>
+            Vul de <strong>energieknoppen</strong> in op de Vandaag-tab (🪫😐⚡🚀).<br />
+            <span style={{ fontSize: 10 }}>Daarna verschijnen hier direct patronen.</span>
+          </div>
+        ) : n === 1 ? (
+          <div style={{ fontSize: 10, color: 'var(--muted)', padding: '8px 0' }}>
+            Nog 1 dag meer nodig om eerste vergelijkingen te maken.
+          </div>
+        ) : insights.length === 0 ? (
+          <div style={{ fontSize: 10, color: 'var(--muted)', padding: '8px 0', lineHeight: 1.6 }}>
+            <strong>Nog geen duidelijk patroon zichtbaar</strong> — dit komt doordat de dagen tot nu toe vergelijkbaar zijn.<br />
+            Zodra er een dag is met bijv. minder slaap of meer stress, verschijnt hier automatisch de vergelijking.
           </div>
         ) : (
           <>
             <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
-              Automatisch berekend uit {n} gelogde dagen. Sterker met meer data.
+              Berekend uit {n} gelogde dagen. Sterker met meer data.
             </div>
             {insights.map((ins, i) => (
               <div key={i} style={{
@@ -399,9 +446,14 @@ function GedragGevolg({ logs }) {
                 padding: '10px 12px',
                 marginBottom: 8,
               }}>
-                <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>{ins.emoji} {ins.title}</span>
-                  <span style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 400 }}>n={ins.n}</span>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    {ins.earlySignal && (
+                      <span style={{ fontSize: 9, background: '#FEF3C7', color: '#92400E', padding: '1px 5px', borderRadius: 99, fontWeight: 600 }}>vroeg signaal</span>
+                    )}
+                    <span style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 400 }}>n={ins.n}</span>
+                  </div>
                 </div>
                 {ins.lines.map((line, j) => (
                   <div key={j} style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.7 }}>
