@@ -422,49 +422,133 @@ function GedragGevolg({ logs }) {
           <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--muted)', fontSize: 11 }}>
             <div style={{ fontSize: 24, marginBottom: 6 }}>📊</div>
             Vul de <strong>energieknoppen</strong> in op de Vandaag-tab (🪫😐⚡🚀).<br />
-            <span style={{ fontSize: 10 }}>Daarna verschijnen hier direct patronen.</span>
-          </div>
-        ) : n === 1 ? (
-          <div style={{ fontSize: 10, color: 'var(--muted)', padding: '8px 0' }}>
-            Nog 1 dag meer nodig om eerste vergelijkingen te maken.
-          </div>
-        ) : insights.length === 0 ? (
-          <div style={{ fontSize: 10, color: 'var(--muted)', padding: '8px 0', lineHeight: 1.6 }}>
-            <strong>Nog geen duidelijk patroon zichtbaar</strong> — dit komt doordat de dagen tot nu toe vergelijkbaar zijn.<br />
-            Zodra er een dag is met bijv. minder slaap of meer stress, verschijnt hier automatisch de vergelijking.
+            <span style={{ fontSize: 10 }}>Daarna verschijnen hier direct observaties.</span>
           </div>
         ) : (
           <>
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
-              Berekend uit {n} gelogde dagen. Sterker met meer data.
-            </div>
-            {insights.map((ins, i) => (
-              <div key={i} style={{
-                background: ins.warn ? 'var(--rust-l)' : '#F0FDF4',
-                borderLeft: `3px solid ${ins.color}`,
-                borderRadius: 10,
-                padding: '10px 12px',
-                marginBottom: 8,
-              }}>
-                <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{ins.emoji} {ins.title}</span>
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    {ins.earlySignal && (
-                      <span style={{ fontSize: 9, background: '#FEF3C7', color: '#92400E', padding: '1px 5px', borderRadius: 99, fontWeight: 600 }}>vroeg signaal</span>
-                    )}
-                    <span style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 400 }}>n={ins.n}</span>
+            {/* Vroege observaties — altijd zichtbaar met ≥1 dag */}
+            {(() => {
+              const sorted = [...allEntries].sort((a, b) => a.date.localeCompare(b.date));
+              const avgE = (allEntries.reduce((s, e) => s + e.energy, 0) / n).toFixed(1);
+              const avgS = (() => {
+                const v = allEntries.filter(e => e.sleep_hours != null);
+                return v.length ? (v.reduce((s, e) => s + e.sleep_hours, 0) / v.length).toFixed(1) : null;
+              })();
+              const best  = [...allEntries].sort((a, b) => b.energy - a.energy)[0];
+              const worst = [...allEntries].sort((a, b) => a.energy - b.energy)[0];
+              const HABIT_MAP = [
+                { id: 'water',        label: 'water 💧' },
+                { id: 'protein',      label: 'eiwitten 🥩' },
+                { id: 'no_sugar',     label: 'geen suiker 🚫' },
+                { id: 'bed_on_time',  label: 'op tijd naar bed 🛏️' },
+                { id: 'low_stress',   label: 'weinig stress 🧘' },
+              ];
+              const alwaysDone   = HABIT_MAP.filter(h => allEntries.every(e => e[h.id]));
+              const neverDone    = HABIT_MAP.filter(h => allEntries.every(e => !e[h.id]));
+              const bestHabits   = HABIT_MAP.filter(h => best?.[h.id]);
+              const bestTrained  = best && (best.run_done || best.core_done || best.swim_done || best.bike_done);
+              const worstHabits  = HABIT_MAP.filter(h => worst?.[h.id]);
+              const energyLabel  = ['uitgeput 🪫', 'matig 😐', 'goed ⚡', 'top 🚀'];
+
+              const obs = [];
+              // Gemiddelden
+              obs.push({
+                icon: '📊',
+                text: `Gem. energie ${avgE}/3${avgS ? ` · gem. slaap ${avgS}u` : ''} over ${n} gelogde dag${n !== 1 ? 'en' : ''}`,
+                sub: null,
+              });
+              // Beste dag
+              if (best && n >= 2) obs.push({
+                icon: '🔋',
+                text: `Beste dag: ${best.date.slice(5)} — ${energyLabel[best.energy]}`,
+                sub: [
+                  best.sleep_hours != null && `😴 ${best.sleep_hours}u slaap`,
+                  bestTrained && '🏃 training gedaan',
+                  ...bestHabits.map(h => h.label),
+                ].filter(Boolean).join(' · ') || 'geen extra data die dag',
+              });
+              // Slechtste dag (alleen tonen als verschilt van beste)
+              if (worst && n >= 2 && worst.date !== best.date && worst.energy < best.energy) obs.push({
+                icon: '⚠️',
+                text: `Laagste dag: ${worst.date.slice(5)} — ${energyLabel[worst.energy]}`,
+                sub: [
+                  worst.sleep_hours != null && `😴 ${worst.sleep_hours}u slaap`,
+                  ...worstHabits.map(h => h.label),
+                ].filter(Boolean).join(' · ') || 'gewoontes niet ingevuld',
+              });
+              // Consistente gewoontes
+              if (alwaysDone.length > 0 && n >= 2) obs.push({
+                icon: '✅',
+                text: `Elke dag gedaan: ${alwaysDone.map(h => h.label).join(', ')}`,
+                sub: 'Sterke basis — dit zijn je ankers.',
+              });
+              // Nooit gedone gewoontes
+              if (neverDone.length > 0 && n >= 2) obs.push({
+                icon: '💡',
+                text: `Nog nooit gedaan in je logs: ${neverDone.map(h => h.label).join(', ')}`,
+                sub: 'Probeer dit eens — zodra het 1× anders is, zie je de vergelijking.',
+              });
+
+              return obs.length > 0 ? (
+                <div style={{ marginBottom: insights.length > 0 ? 12 : 0 }}>
+                  <div className="scale-label" style={{ marginBottom: 6 }}>OBSERVATIES</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {obs.map((o, i) => (
+                      <div key={i} style={{
+                        background: o.icon === '⚠️' ? 'var(--rust-l)' : o.icon === '✅' ? '#F0FDF4' : 'var(--bg)',
+                        borderRadius: 8, padding: '8px 10px',
+                        border: `1px solid ${o.icon === '⚠️' ? 'var(--rust)' : o.icon === '✅' ? 'var(--sage)' : 'var(--border)'}`,
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 600 }}>{o.icon} {o.text}</div>
+                        {o.sub && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>{o.sub}</div>}
+                      </div>
+                    ))}
                   </div>
                 </div>
-                {ins.lines.map((line, j) => (
-                  <div key={j} style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.7 }}>
-                    {j === 0 ? '→ ' : '↔ '}{line}
+              ) : null;
+            })()}
+
+            {/* Statistische patronen — zodra er variatie is */}
+            {insights.length > 0 && (
+              <>
+                <div className="scale-label" style={{ marginBottom: 6 }}>PATRONEN</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 8 }}>
+                  Vergelijkingen tussen dagen met en zonder de factor. Sterker naarmate je meer logt.
+                </div>
+                {insights.map((ins, i) => (
+                  <div key={i} style={{
+                    background: ins.warn ? 'var(--rust-l)' : '#F0FDF4',
+                    borderLeft: `3px solid ${ins.color}`,
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                    marginBottom: 8,
+                  }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{ins.emoji} {ins.title}</span>
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        {ins.earlySignal && (
+                          <span style={{ fontSize: 9, background: '#FEF3C7', color: '#92400E', padding: '1px 5px', borderRadius: 99, fontWeight: 600 }}>vroeg signaal</span>
+                        )}
+                        <span style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 400 }}>n={ins.n}</span>
+                      </div>
+                    </div>
+                    {ins.lines.map((line, j) => (
+                      <div key={j} style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.7 }}>
+                        {j === 0 ? '→ ' : '↔ '}{line}
+                      </div>
+                    ))}
+                    <div style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: ins.color, lineHeight: 1.4 }}>
+                      💡 {ins.verdict}
+                    </div>
                   </div>
                 ))}
-                <div style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: ins.color, lineHeight: 1.4 }}>
-                  💡 {ins.verdict}
-                </div>
+              </>
+            )}
+            {insights.length === 0 && n >= 2 && (
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, lineHeight: 1.6 }}>
+                <strong>Vergelijkingspatronen</strong> verschijnen zodra je een dag hebt met bijv. minder slaap of een andere gewoonte dan de andere dagen.
               </div>
-            ))}
+            )}
           </>
         )}
       </div>
