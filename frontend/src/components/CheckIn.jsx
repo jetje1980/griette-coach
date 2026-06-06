@@ -190,6 +190,11 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
   const [noteSaved, setNoteSaved] = useState(false);
   const [noteTimer, setNoteTimer] = useState(null);
   const [cycleStart, setCycleStart] = useState(() => localStorage.getItem('gc_cycle_start') || null);
+  const [cycleHistory, setCycleHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gc_cycle_history') || '[]'); } catch { return []; }
+  });
+  const [cycleManualDate, setCycleManualDate] = useState('');
+  const [showCyclePicker, setShowCyclePicker] = useState(false);
 
   useEffect(() => {
     setWeight(log?.weight ?? '');
@@ -241,9 +246,30 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
   const cycleDay = cycleStart
     ? Math.floor((new Date(todayStr) - new Date(cycleStart)) / 86400000) + 1
     : null;
-  const startMenstruatie = () => {
-    localStorage.setItem('gc_cycle_start', todayStr);
-    setCycleStart(todayStr);
+  const startMenstruatie = (date = todayStr) => {
+    const existing = cycleStart
+      ? [cycleStart, ...cycleHistory.filter(d => d !== cycleStart)].slice(0, 24)
+      : cycleHistory;
+    const newHist = existing.filter(d => d !== date);
+    localStorage.setItem('gc_cycle_history', JSON.stringify(newHist));
+    localStorage.setItem('gc_cycle_start', date);
+    setCycleHistory(newHist);
+    setCycleStart(date);
+  };
+
+  const addPastCycleDate = () => {
+    if (!cycleManualDate) return;
+    const date = cycleManualDate;
+    setCycleManualDate('');
+    setShowCyclePicker(false);
+    if (date === cycleStart) return;
+    if (!cycleStart || date > cycleStart) {
+      startMenstruatie(date);
+    } else {
+      const newHist = [date, ...cycleHistory.filter(d => d !== date)].sort((a, b) => b.localeCompare(a)).slice(0, 24);
+      localStorage.setItem('gc_cycle_history', JSON.stringify(newHist));
+      setCycleHistory(newHist);
+    }
   };
 
   const saveWeight = () => {
@@ -546,6 +572,30 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
           {!cycleStart && (
             <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
               Tik als je ongesteld bent geworden — de app bijhoudt dan je cyclusdag automatisch.
+            </div>
+          )}
+          <button
+            className="btn btn-sm"
+            style={{ marginTop: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', fontSize: 11 }}
+            onClick={() => setShowCyclePicker(v => !v)}
+          >
+            {showCyclePicker ? '✕ Annuleren' : '+ Eerder datum toevoegen'}
+          </button>
+          {showCyclePicker && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input
+                type="date"
+                value={cycleManualDate}
+                onChange={e => setCycleManualDate(e.target.value)}
+                max={todayStr}
+                style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 13 }}
+              />
+              <button className="btn btn-rust btn-sm" onClick={addPastCycleDate}>✓</button>
+            </div>
+          )}
+          {cycleHistory.length > 0 && (
+            <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)', lineHeight: 1.7 }}>
+              Eerdere cycli: {cycleHistory.slice(0, 6).join(' · ')}
             </div>
           )}
         </div>

@@ -711,6 +711,125 @@ function MigraineOverview({ logs }) {
 
 // ────────────────────────────────────────────────────────────────────────────
 
+function CycleWeightPattern({ logs }) {
+  const cycleStart = localStorage.getItem('gc_cycle_start');
+  const cycleHistoryRaw = (() => {
+    try { return JSON.parse(localStorage.getItem('gc_cycle_history') || '[]'); } catch { return []; }
+  })();
+
+  const allStarts = [...(cycleStart ? [cycleStart] : []), ...cycleHistoryRaw]
+    .filter((d, i, arr) => arr.indexOf(d) === i)
+    .sort((a, b) => a.localeCompare(b));
+
+  if (allStarts.length < 3) return null;
+
+  const weightEntries = Object.values(logs)
+    .filter(e => e.weight && e.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (weightEntries.length < 10) return null;
+
+  const entriesWithDay = weightEntries.map(entry => {
+    const starts = allStarts.filter(s => s <= entry.date);
+    if (!starts.length) return null;
+    const start = starts[starts.length - 1];
+    const day = Math.floor((new Date(entry.date) - new Date(start)) / 86400000) + 1;
+    return day >= 1 && day <= 35 ? { ...entry, cycleDay: day, cycleStart: start } : null;
+  }).filter(Boolean);
+
+  if (!entriesWithDay.length) return null;
+
+  // Compute per-cycle means
+  const cycleMeans = {};
+  entriesWithDay.forEach(e => {
+    if (!cycleMeans[e.cycleStart]) cycleMeans[e.cycleStart] = [];
+    cycleMeans[e.cycleStart].push(e.weight);
+  });
+  Object.keys(cycleMeans).forEach(k => {
+    const vals = cycleMeans[k];
+    cycleMeans[k] = vals.reduce((s, v) => s + v, 0) / vals.length;
+  });
+
+  // Group deviations by cycle day
+  const dayDevs = {};
+  entriesWithDay.forEach(e => {
+    const mean = cycleMeans[e.cycleStart];
+    if (!mean) return;
+    if (!dayDevs[e.cycleDay]) dayDevs[e.cycleDay] = [];
+    dayDevs[e.cycleDay].push(+(e.weight - mean).toFixed(2));
+  });
+
+  const dayAvg = {};
+  Object.entries(dayDevs).forEach(([d, devs]) => {
+    dayAvg[parseInt(d)] = +(devs.reduce((s, v) => s + v, 0) / devs.length).toFixed(2);
+  });
+
+  const phases = [
+    { label: '🩸 Menstruatie', days: [1, 5], color: 'var(--alert)' },
+    { label: '🌱 Folliculaire fase', days: [6, 13], color: 'var(--sage)' },
+    { label: '✨ Ovulatie', days: [14, 16], color: 'var(--gold)' },
+    { label: '🌙 Luteale fase', days: [17, 35], color: '#9333EA' },
+  ];
+
+  const phaseAvgs = phases.map(phase => {
+    const vals = Object.entries(dayAvg)
+      .filter(([d]) => parseInt(d) >= phase.days[0] && parseInt(d) <= phase.days[1])
+      .map(([, v]) => v);
+    if (!vals.length) return null;
+    const avg = +(vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(2);
+    return { ...phase, avg, n: vals.length };
+  }).filter(Boolean);
+
+  if (!phaseAvgs.length) return null;
+
+  const sortedByAvg = Object.entries(dayAvg).sort(([, a], [, b]) => a - b);
+  const lowestDays = sortedByAvg.slice(0, 5).map(([d]) => `dag ${d}`).join(', ');
+  const highestDays = sortedByAvg.slice(-3).reverse().map(([d]) => `dag ${d}`).join(', ');
+  const totalCycles = allStarts.length;
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-accent" style={{ background: '#C084FC' }} />
+        <div className="card-title">🌙 Cyclus & gewicht</div>
+        <span style={{ fontSize: 11, color: '#9333EA', fontWeight: 700, background: '#F3E8FF', padding: '2px 8px', borderRadius: 99 }}>
+          {totalCycles} cycli
+        </span>
+      </div>
+      <div className="card-body">
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+          Dit zijn hormonale schommelingen — geen echt vet aan/af. Gebruik dit om stressvrij te wegen.
+        </div>
+        <div className="scale-label" style={{ marginBottom: 6 }}>GEWICHTSEFFECT PER FASE (t.o.v. cyclus-gemiddelde)</div>
+        {phaseAvgs.map(phase => (
+          <div key={phase.label} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 0', borderBottom: '1px solid var(--border)',
+          }}>
+            <div style={{ flex: 1, fontSize: 12 }}>{phase.label}</div>
+            <div style={{
+              fontSize: 13, fontWeight: 700,
+              color: phase.avg > 0.4 ? 'var(--alert)' : phase.avg < -0.4 ? 'var(--sage)' : 'var(--muted)',
+            }}>
+              {phase.avg > 0 ? `+${phase.avg}` : phase.avg} kg
+            </div>
+          </div>
+        ))}
+        <div style={{ marginTop: 10, fontSize: 11, lineHeight: 1.8 }}>
+          <div style={{ color: 'var(--sage)', fontWeight: 600 }}>✅ Laagste gewicht: {lowestDays}</div>
+          <div style={{ color: 'var(--alert)', fontWeight: 600 }}>⚠️ Hoogste gewicht: {highestDays}</div>
+          <div style={{ color: 'var(--muted)', marginTop: 6 }}>
+            Weeg jezelf bij voorkeur op de "lage" cyclusdagen voor de meest bemoedigende meting.
+            Op de "hoge" dagen hoef je niet in de stress — dat is vocht, geen vet.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 export default function Progressie({ logs }) {
   const [sessions, setSessions] = useState([]);
   const [measurements, setMeasurements] = useState([]);
@@ -743,6 +862,7 @@ export default function Progressie({ logs }) {
     <div className="pane">
       <WeightProgress logs={logs} />
       <WhrProgress measurements={measurements} />
+      <CycleWeightPattern logs={logs} />
       <GedragGevolg logs={logs} />
       <MigraineOverview logs={logs} />
 

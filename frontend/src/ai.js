@@ -178,6 +178,9 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
 
   // Cyclus context
   const cycleStart = localStorage.getItem('gc_cycle_start');
+  const cycleHistoryArr = (() => {
+    try { return JSON.parse(localStorage.getItem('gc_cycle_history') || '[]'); } catch { return []; }
+  })();
   const cycleContext = (() => {
     if (!cycleStart) return 'Cyclus: niet bijgehouden';
     const daysSince = Math.floor((new Date(today) - new Date(cycleStart)) / 86400000) + 1;
@@ -186,6 +189,60 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
     if (daysSince <= 16) return `Cyclus: dag ${daysSince} — mogelijk ovulatie`;
     if (daysSince <= 28) return `Cyclus: dag ${daysSince} — luteale fase`;
     return `Cyclus: dag ${daysSince} — verlengde/onregelmatige cyclus (perimenopauzaal)`;
+  })();
+
+  // Cyclus-gewicht patroon analyse
+  const cycleWeightPattern = (() => {
+    const allStarts = [...(cycleStart ? [cycleStart] : []), ...cycleHistoryArr]
+      .filter((d, i, arr) => arr.indexOf(d) === i)
+      .sort((a, b) => a.localeCompare(b));
+    if (allStarts.length < 3) return '';
+    const weightEntries = allTime.filter(e => e.weight && e.date).sort((a, b) => a.date.localeCompare(b.date));
+    if (weightEntries.length < 10) return '';
+    const withDay = weightEntries.map(e => {
+      const starts = allStarts.filter(s => s <= e.date);
+      if (!starts.length) return null;
+      const start = starts[starts.length - 1];
+      const day = Math.floor((new Date(e.date) - new Date(start)) / 86400000) + 1;
+      return day >= 1 && day <= 35 ? { ...e, cycleDay: day, cycleStart: start } : null;
+    }).filter(Boolean);
+    if (!withDay.length) return '';
+    const cycleMeans = {};
+    withDay.forEach(e => {
+      if (!cycleMeans[e.cycleStart]) cycleMeans[e.cycleStart] = [];
+      cycleMeans[e.cycleStart].push(e.weight);
+    });
+    Object.keys(cycleMeans).forEach(k => {
+      const v = cycleMeans[k];
+      cycleMeans[k] = v.reduce((s, x) => s + x, 0) / v.length;
+    });
+    const dayDevs = {};
+    withDay.forEach(e => {
+      const mean = cycleMeans[e.cycleStart];
+      if (!mean) return;
+      if (!dayDevs[e.cycleDay]) dayDevs[e.cycleDay] = [];
+      dayDevs[e.cycleDay].push(+(e.weight - mean).toFixed(2));
+    });
+    const dayAvg = {};
+    Object.entries(dayDevs).forEach(([d, devs]) => {
+      dayAvg[parseInt(d)] = +(devs.reduce((s, v) => s + v, 0) / devs.length).toFixed(2);
+    });
+    const phases = [
+      ['Menstruatie (dag 1-5)', 1, 5],
+      ['Folliculair (dag 6-13)', 6, 13],
+      ['Ovulatie (dag 14-16)', 14, 16],
+      ['Luteaal (dag 17-35)', 17, 35],
+    ];
+    const phaseLines = phases.map(([label, from, to]) => {
+      const vals = Object.entries(dayAvg).filter(([d]) => parseInt(d) >= from && parseInt(d) <= to).map(([, v]) => v);
+      if (!vals.length) return null;
+      const avg = +(vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(2);
+      return `  ${label}: gemiddeld ${avg > 0 ? '+' : ''}${avg} kg t.o.v. cyclus-gemiddelde`;
+    }).filter(Boolean);
+    const sorted = Object.entries(dayAvg).sort(([, a], [, b]) => a - b);
+    const lowest = sorted.slice(0, 3).map(([d]) => `dag ${d}`).join(', ');
+    const highest = sorted.slice(-3).reverse().map(([d]) => `dag ${d}`).join(', ');
+    return `CYCLUS-GEWICHT PATROON (${allStarts.length} cycli geanalyseerd):\n${phaseLines.join('\n')}\nLaagste gewicht: ${lowest} | Hoogste: ${highest}\nDit zijn hormonale vochtschommelingen, geen vet.`;
   })();
 
   const batteryData = recent
@@ -363,6 +420,7 @@ ${symptomSummary || 'geen klachten geregistreerd'}
 GEWOONTES SCORE: ${habitPct.join(', ')}
 
 ${cycleContext}
+${cycleWeightPattern ? `\n${cycleWeightPattern}` : ''}
 
 VOEDINGSVOORKUREN (door gebruiker ingesteld in app):
 ${(() => {
