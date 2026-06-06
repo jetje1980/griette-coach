@@ -392,8 +392,7 @@ ADHD PACING: ${adhdContext}
 
 ${historicalPatterns ? `HISTORISCHE PATRONEN (alle gelogde data inclusief retroactief ingevoerd):\n${historicalPatterns}\n` : ''}
 ${recentReports ? `RECENTE COACH-RAPPORTEN (patroonherkenning — gebruik voor trends):\n${recentReports}\n` : ''}
-MATEN VERLOOP (cm):
-${measurementLines.join('\n') || 'nog geen maten geregistreerd'}
+${measurementLines.length ? `MATEN VERLOOP (cm):\n${measurementLines.join('\n')}` : ''}
 `.trim();
 }
 
