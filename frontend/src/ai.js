@@ -325,12 +325,41 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
       { emoji: '🚴', title: 'Fietsweekend', startDate: '2026-06-12', endDate: '2026-06-13', description: '35–40 km heen + 35–40 km terug met groep', goal: 'Goed presteren en genieten met de groep' },
       { emoji: '🎉', title: 'Q-music Foute Party', startDate: '2026-06-20', endDate: '2026-06-20', description: 'Avond uit met vrienden', goal: 'Stralend sterk en met glow er staan' },
       { emoji: '🗼', title: 'Weekend Parijs', startDate: '2026-06-26', endDate: '2026-06-28', description: 'Weekend met vriendinnen', goal: 'Behoorlijke progressie hebben gezien' },
+      { emoji: '🏖️', title: 'Zomervakantie', startDate: '2026-07-27', endDate: '2026-08-14', description: 'Zomervakantie — geen training, eiwitrijk eten als anker', goal: 'In best mogelijke shape vertrekken; zo min mogelijk rebound' },
+      { emoji: '🏝️', title: 'Ameland gezinsvakantie', startDate: '2026-08-21', endDate: '2026-08-28', description: 'Gezinsvakantie Ameland — beperkte training mogelijk (fietsen, wandelen)', goal: 'Mounjaro-herstart verankeren, stabiliseren na zomervakantie' },
+      { emoji: '💍', title: '22 jaar getrouwd — TROUWJURK', startDate: '2026-09-02', endDate: '2026-09-02', description: 'Huwelijksverjaardag — de trouwjurk passen is HET persoonlijke mijlpaal', goal: 'In de trouwjurk passen — emotioneel belangrijkste milestone van het hele traject' },
     ];
     return EVENTS.map(e => {
       const days = Math.max(0, Math.floor((new Date(e.startDate) - new Date(today)) / 86400000));
       const status = e.endDate < today ? '(voorbij)' : e.startDate <= today ? '(NU BEZIG)' : `over ${days} dagen`;
       return `${e.emoji} ${e.title} ${status}: ${e.startDate}${e.startDate !== e.endDate ? `–${e.endDate}` : ''} — ${e.description} | Doel: "${e.goal}"`;
     }).join('\n');
+  })();
+
+  // Projecteer gewicht op mijlpalen op basis van huidige trend
+  const milestoneProjection = (() => {
+    const withWeight = allTime.filter(l => l.weight).sort((a, b) => a.date.localeCompare(b.date));
+    if (withWeight.length < 3) return '';
+    const latest = withWeight[withWeight.length - 1];
+    const first  = withWeight[0];
+    const daySpan = Math.max(1, Math.floor((new Date(latest.date) - new Date(first.date)) / 86400000));
+    const weeklyRate = ((first.weight - latest.weight) / daySpan) * 7; // kg/week (positief = verlies)
+    if (weeklyRate <= 0) return '';
+    const project = (targetDate) => {
+      const days = Math.floor((new Date(targetDate) - new Date(latest.date)) / 86400000);
+      if (days <= 0) return null;
+      return +(latest.weight - (weeklyRate / 7) * days).toFixed(1);
+    };
+    const milestones = [
+      { label: '🏖️ Vakantie (27 jul)', date: '2026-07-27' },
+      { label: '🏝️ Ameland (21 aug)', date: '2026-08-21' },
+      { label: '💍 Trouwjurk (2 sep)', date: '2026-09-02' },
+    ];
+    const lines = milestones.map(m => {
+      const w = project(m.date);
+      return w ? `${m.label}: ~${w} kg (bij huidig tempo van −${weeklyRate.toFixed(2)} kg/week)` : null;
+    }).filter(Boolean);
+    return lines.length ? `GEWICHTSPROJECTIE OP MIJLPALEN (huidig tempo):\n${lines.join('\n')}` : '';
   })();
 
   return `
@@ -376,14 +405,27 @@ RECENTE BELEMMERING (herstel operatie):
 
 PERSOONLIJKE MIJLPALEN (komende weken — coach hierop inspelen):
 ${eventsContext}
+${milestoneProjection ? `\n${milestoneProjection}` : ''}
 
-GEPLANDE VAKANTIE:
-- Vertrek: 25 juli 2026 (dag 59 van 70-dagen programma), ~3 weken
-- Terugkomst: ~15 augustus 2026
-- Strategie: laatste Mounjaro-prik zo laat mogelijk voor vertrek (24 of 25 juli), direct hervatten bij terugkomst
-- Tijdens vakantie: geen training mogelijk, eiwitrijk eten als anker tegen ghreline-rebound
-- Effectieve sprint zonder onderbreking: nu t/m 24 juli = 55 dagen
-- Verwacht enige terugval tijdens vakantie — dit is ingecalculeerd, geen reden voor ontmoediging
+VAKANTIE- EN MIJLPALENPLANNING:
+
+🏖️ Zomervakantie: 27 jul – 14 aug 2026
+- Laatste Mounjaro-prik: 25 juli (#11) — optimale timing (2 dagen voor vertrek, medicijn werkt ~5-7 dagen na)
+- Effectieve sprint vóór vakantie: nu t/m 26 juli
+- Tijdens vakantie: geen gestructureerde training, eiwitrijk eten als anker tegen ghreline-rebound
+- Terugkomst: 14 augustus — direct Mounjaro hervatten
+
+🏝️ Ameland gezinsvakantie: 21–28 aug 2026
+- Slechts 1 week na terugkeer van zomervakantie → Mounjaro-herstart loopt al, maar nog niet op vol effect
+- Positief: Ameland biedt wandelen en fietsen — lichte zone B training mogelijk
+- Doel: stabiliseren wat voor vakantie bereikt was, geen nieuwe terugval
+
+💍 Huwelijksverjaardag — 22 jaar getrouwd: 2 september 2026
+- EMOTIONEEL BELANGRIJKSTE MIJLPAAL: in de trouwjurk passen
+- 5 weken na terugkeer van zomervakantie + 1 week na Ameland
+- Mounjaro loopt dan weer ~3 weken → stijgende eetlustremming
+- Dit is het moment waar alles naartoe werkt na de vakantieonderbreking
+- Verwacht enige tijdelijke terugval tijdens vakantieperiode — dit is ingecalculeerd
 
 LANGE-TERMIJN STRATEGIE (door Griette zelf bepaald):
 - Mounjaro 2.5mg continueren door peri- en menopauze (~5 jaar, tot ~51e jaar)
@@ -392,6 +434,7 @@ LANGE-TERMIJN STRATEGIE (door Griette zelf bepaald):
 - Stoppoging pas realistisch postmenopauze als gewicht gestabiliseerd en eetgewoontes automatisch zijn
 - Pijlers voor "ooit stoppen": spiermassa opbouwen (zone B + core), eiwitgewoontes automatiseren, vetverbrandingscapaciteit trainen
 - Vakantie-pauzes zijn onvermijdelijk maar minimaliseerbaar door timing van laatste/eerste prik
+- Eerstvolgende grote persoonlijke mijlpaal: 2 sept 2026 (22 jaar getrouwd) — trouwjurk passen
 
 GEWICHTVERLOOP:
 ${weights.slice(0, 10).join(' | ') || 'geen data'}

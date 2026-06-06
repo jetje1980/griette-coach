@@ -39,7 +39,7 @@ function WeightGraph({ logs }) {
   if (entries.length < 2) return null;
 
   const START_DATE    = '2026-05-27';
-  const VACATION_DATE = '2026-07-25';
+  const VACATION_DATE = '2026-07-27';
   const GOAL          = 55;
 
   const startMs   = new Date(START_DATE).getTime();
