@@ -107,4 +107,14 @@ export const PERSONAL_EVENTS = [
     goal: 'In de trouwjurk passen',
     color: '#C026D3',
   },
+  {
+    id: 'bereloop',
+    emoji: '🏃',
+    title: 'Terschelling Bereloop',
+    startDate: '2026-10-30',
+    endDate: '2026-11-02',
+    description: 'Hardloopevenement Terschelling — 10 km strand/duin',
+    goal: '10 km uitlopen in zone B, eigen tempo',
+    color: '#EA580C',
+  },
 ];

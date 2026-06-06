@@ -328,6 +328,7 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
       { emoji: '🏖️', title: 'Zomervakantie', startDate: '2026-07-27', endDate: '2026-08-14', description: 'Zomervakantie — geen training, eiwitrijk eten als anker', goal: 'In best mogelijke shape vertrekken; zo min mogelijk rebound' },
       { emoji: '🏝️', title: 'Ameland gezinsvakantie', startDate: '2026-08-21', endDate: '2026-08-28', description: 'Gezinsvakantie Ameland — beperkte training mogelijk (fietsen, wandelen)', goal: 'Mounjaro-herstart verankeren, stabiliseren na zomervakantie' },
       { emoji: '💍', title: '22 jaar getrouwd — TROUWJURK', startDate: '2026-09-02', endDate: '2026-09-02', description: 'Huwelijksverjaardag — de trouwjurk passen is HET persoonlijke mijlpaal', goal: 'In de trouwjurk passen — emotioneel belangrijkste milestone van het hele traject' },
+      { emoji: '🏃', title: 'Terschelling Bereloop', startDate: '2026-10-30', endDate: '2026-11-02', description: '10 km hardloopevenement op Terschelling — strand + duin, zone B tempo', goal: '10 km finishen in zone B, ~80–90 min — het eerste officiële hardloopevenement ooit' },
     ];
     return EVENTS.map(e => {
       const days = Math.max(0, Math.floor((new Date(e.startDate) - new Date(today)) / 86400000));
@@ -343,7 +344,7 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
     const latest = withWeight[withWeight.length - 1];
     const first  = withWeight[0];
     const daySpan = Math.max(1, Math.floor((new Date(latest.date) - new Date(first.date)) / 86400000));
-    const weeklyRate = ((first.weight - latest.weight) / daySpan) * 7; // kg/week (positief = verlies)
+    const weeklyRate = ((first.weight - latest.weight) / daySpan) * 7;
     if (weeklyRate <= 0) return '';
     const project = (targetDate) => {
       const days = Math.floor((new Date(targetDate) - new Date(latest.date)) / 86400000);
@@ -354,12 +355,52 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
       { label: '🏖️ Vakantie (27 jul)', date: '2026-07-27' },
       { label: '🏝️ Ameland (21 aug)', date: '2026-08-21' },
       { label: '💍 Trouwjurk (2 sep)', date: '2026-09-02' },
+      { label: '🏃 Bereloop (30 okt)', date: '2026-10-30' },
     ];
     const lines = milestones.map(m => {
       const w = project(m.date);
       return w ? `${m.label}: ~${w} kg (bij huidig tempo van −${weeklyRate.toFixed(2)} kg/week)` : null;
     }).filter(Boolean);
     return lines.length ? `GEWICHTSPROJECTIE OP MIJLPALEN (huidig tempo):\n${lines.join('\n')}` : '';
+  })();
+
+  // Bereloop loopprogressie projectie
+  const bereloopRunProjection = (() => {
+    const currentRun = parseInt(localStorage.getItem('gc_current_run') || '10', 10);
+    // Schema: T35 = 5 km (week 12). Remaining sessions from current point:
+    const remaining = Math.max(0, 35 - currentRun);
+    // ~3 runs/week, but with ~3 weeks vacation interruption (no running) and regression after
+    // Vacation Jul 27 - Aug 14 = 2.5 weeks off → estimated setback ~4-6 sessions
+    // Days from today to Oct 30:
+    const daysToEvent = Math.floor((new Date('2026-10-30') - new Date(today)) / 86400000);
+    if (daysToEvent <= 0) return '';
+    const weeksToEvent = daysToEvent / 7;
+    // Available training weeks (minus ~4 weeks vacation/recovery): ~weeksToEvent - 4
+    const effectiveWeeks = Math.max(0, weeksToEvent - 4);
+    // Sessions available at 2.5 avg runs/week (conservative for long covid):
+    const sessionsAvailable = Math.floor(effectiveWeeks * 2.5);
+    // After T35 (5km), expect 8-10 more weeks to build to 10km at zone B
+    const finishes5k = remaining <= sessionsAvailable;
+    // After 5km, building to 10km: ~8 weeks of zone B runs adding 10% volume/week
+    const weeksAfter5k = finishes5k ? Math.floor((sessionsAvailable - remaining) / 2.5) : 0;
+    const estDistanceKm = finishes5k
+      ? Math.min(10, +(5 * Math.pow(1.08, Math.min(weeksAfter5k, 10))).toFixed(1))
+      : null;
+    // Time estimate at zone B (8:30 min/km for 10km on trail/sand = harder surface +10%)
+    const paceMinKm = 9.0; // trail/strand pace zone B
+    const estTimeMin = estDistanceKm ? Math.round(estDistanceKm * paceMinKm) : null;
+    const estTimeStr = estTimeMin ? `${Math.floor(estTimeMin / 60)}u${(estTimeMin % 60).toString().padStart(2, '0')}` : null;
+
+    return [
+      `TERSCHELLING BERELOOP (30 okt–2 nov 2026) — LOOPPROJECTIE:`,
+      `Huidig schema: T${currentRun}/35 | Schema klaar (5 km): ${finishes5k ? 'JA — vóór de zomervakantie' : `nog ${remaining} sessies nodig`}`,
+      finishes5k && estDistanceKm
+        ? `Haalbare afstand op 30 okt: ~${estDistanceKm} km (zone B opbouw na 5km-mijlpaal)`
+        : `Aanbeveling: focus na vakantie direct op 5km afmaken, daarna opbouw naar 10km`,
+      estTimeStr ? `Streeftijd 10 km op strand/duin (zone B, ~9 min/km): ~${estTimeStr} (hardere ondergrond, zone B altijd leidend)` : '',
+      `Bereloop strategie: 10 km als doel, 5 km als veilig alternatief | Eerste officiële loopwedstrijd → finishen = winnen`,
+      `Gewicht bij Bereloop: lichter lichaam = sneller + minder belasting op gewrichten — direct voordeel van Mounjaro-traject`,
+    ].filter(Boolean).join('\n');
   })();
 
   return `
@@ -406,6 +447,7 @@ RECENTE BELEMMERING (herstel operatie):
 PERSOONLIJKE MIJLPALEN (komende weken — coach hierop inspelen):
 ${eventsContext}
 ${milestoneProjection ? `\n${milestoneProjection}` : ''}
+${bereloopRunProjection ? `\n${bereloopRunProjection}` : ''}
 
 VAKANTIE- EN MIJLPALENPLANNING:
 
@@ -435,6 +477,7 @@ LANGE-TERMIJN STRATEGIE (door Griette zelf bepaald):
 - Pijlers voor "ooit stoppen": spiermassa opbouwen (zone B + core), eiwitgewoontes automatiseren, vetverbrandingscapaciteit trainen
 - Vakantie-pauzes zijn onvermijdelijk maar minimaliseerbaar door timing van laatste/eerste prik
 - Eerstvolgende grote persoonlijke mijlpaal: 2 sept 2026 (22 jaar getrouwd) — trouwjurk passen
+- Hardloopdoel: Terschelling Bereloop 30 okt–2 nov 2026 — 10 km finishen (eerste officiële loopwedstrijd)
 
 GEWICHTVERLOOP:
 ${weights.slice(0, 10).join(' | ') || 'geen data'}
