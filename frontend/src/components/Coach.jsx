@@ -126,7 +126,7 @@ function PhotoCapture({ logs, measurements }) {
       const previousAnalyses = loadSavedAnalyses().filter(a => a.date !== today);
 
       // Vorige sessie foto's meesturen voor visuele vergelijking
-      const prevSession = sessions.find(s => s.date !== today);
+      const prevSession = pastSessions[0];
       const prevPhotos = prevSession
         ? PHOTO_TYPES.filter(({ key }) => prevSession.views[key]).map(({ key }) => ({ ...prevSession.views[key], type: key, sessionDate: prevSession.date }))
         : [];
@@ -149,7 +149,7 @@ function PhotoCapture({ logs, measurements }) {
 
   const hasTodayPhotos = Object.keys(todayViews).length > 0;
   const isSavingAny = Object.values(saving).some(Boolean);
-  const pastSessions = sessions.filter(s => s.date !== today);
+  const pastSessions = sessions.filter(s => s.date !== today).sort((a, b) => b.date.localeCompare(a.date));
 
   return (
     <div>
@@ -208,9 +208,9 @@ function PhotoCapture({ logs, measurements }) {
           <button className="btn btn-rust btn-full" onClick={analyzeToday} disabled={analyzing || isSavingAny}>
             {analyzing ? '⏳ AI analyseert + vergelijkt…' : `🤖 Analyseer ${Object.keys(todayViews).length} foto('s) met AI`}
           </button>
-          {sessions.filter(s => s.date !== today).length > 0 && !analyzing && (
+          {pastSessions.length > 0 && !analyzing && (
             <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'center' }}>
-              ↑ AI vergelijkt visueel met vorige sessie ({sessions.find(s => s.date !== today)?.date})
+              ↑ AI vergelijkt visueel met vorige sessie ({pastSessions[0]?.date})
             </div>
           )}
           {analyzeError && (
