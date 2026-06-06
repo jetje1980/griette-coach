@@ -192,18 +192,16 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
   const [cycleStart, setCycleStart] = useState(() => localStorage.getItem('gc_cycle_start') || null);
 
   useEffect(() => {
-    if (log) {
-      setWeight(log.weight ?? '');
-      setBpSys(log.bp_sys ?? '');
-      setBpDia(log.bp_dia ?? '');
-      setBpHr(log.bp_hr ?? '');
-      setBpTime(log.bp_time ?? '');
-      setSteps(log.steps ?? '');
-      setHrRest(log.hr_rest ?? '');
-      setSleepHours(log.sleep_hours ?? '');
-      setBatteryStart(log.battery_start ?? '');
-      setBatteryEnd(log.battery_end ?? '');
-    }
+    setWeight(log?.weight ?? '');
+    setBpSys(log?.bp_sys ?? '');
+    setBpDia(log?.bp_dia ?? '');
+    setBpHr(log?.bp_hr ?? '');
+    setBpTime(log?.bp_time ?? '');
+    setSteps(log?.steps ?? '');
+    setHrRest(log?.hr_rest ?? '');
+    setSleepHours(log?.sleep_hours ?? '');
+    setBatteryStart(log?.battery_start ?? '');
+    setBatteryEnd(log?.battery_end ?? '');
   }, [log, currentDate]);
 
   // Sprint calculations
@@ -500,7 +498,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
             <input
               type="number"
               step="0.1"
-              placeholder="62.7"
+              placeholder="kg"
               value={weight}
               onChange={e => setWeight(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && saveWeight()}
