@@ -355,6 +355,7 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
       { emoji: '🏝️', title: 'Ameland gezinsvakantie', startDate: '2026-08-21', endDate: '2026-08-28', description: 'Gezinsvakantie Ameland — beperkte training mogelijk (fietsen, wandelen)', goal: 'Mounjaro-herstart verankeren, stabiliseren na zomervakantie' },
       { emoji: '💍', title: '22 jaar getrouwd — TROUWJURK', startDate: '2026-09-02', endDate: '2026-09-02', description: 'Huwelijksverjaardag — de trouwjurk passen is HET persoonlijke mijlpaal', goal: 'In de trouwjurk passen — emotioneel belangrijkste milestone van het hele traject' },
       { emoji: '🏃', title: 'Terschelling Bereloop', startDate: '2026-10-30', endDate: '2026-11-02', description: '10 km hardloopevenement op Terschelling — strand + duin, zone B tempo', goal: '10 km finishen in zone B, ~80–90 min — het eerste officiële hardloopevenement ooit' },
+      { emoji: '🥂', title: 'Oud & Nieuw met vrienden', startDate: '2026-12-29', endDate: '2027-01-02', description: 'Oud & nieuw vieren met vrienden', goal: 'Stralend het nieuwe jaar ingaan — ondergrens eigen keuze: nooit onder 45 kg' },
     ];
     return EVENTS.map(e => {
       const days = Math.max(0, Math.floor((new Date(e.startDate) - new Date(today)) / 86400000));
@@ -377,15 +378,19 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
       if (days <= 0) return null;
       return +(latest.weight - (weeklyRate / 7) * days).toFixed(1);
     };
+    const MIN_WEIGHT = 45;
     const milestones = [
       { label: '🏖️ Vakantie (27 jul)', date: '2026-07-27' },
       { label: '🏝️ Ameland (21 aug)', date: '2026-08-21' },
       { label: '💍 Trouwjurk (2 sep)', date: '2026-09-02' },
       { label: '🏃 Bereloop (30 okt)', date: '2026-10-30' },
+      { label: '🥂 Oud & Nieuw (29 dec)', date: '2026-12-29' },
     ];
     const lines = milestones.map(m => {
       const w = project(m.date);
-      return w ? `${m.label}: ~${w} kg (bij huidig tempo van −${weeklyRate.toFixed(2)} kg/week)` : null;
+      if (!w) return null;
+      const floor = w < MIN_WEIGHT ? ` ⚠️ ONDER MINIMUM (${MIN_WEIGHT} kg) — tempo bijstellen` : '';
+      return `${m.label}: ~${w} kg (bij huidig tempo van −${weeklyRate.toFixed(2)} kg/week)${floor}`;
     }).filter(Boolean);
     return lines.length ? `GEWICHTSPROJECTIE OP MIJLPALEN (huidig tempo):\n${lines.join('\n')}` : '';
   })();
@@ -436,6 +441,7 @@ GRIETTE — 46 jaar, 163 cm
 Gezondheidsprofiel: long covid herstel, ADHD, waarschijnlijk laat-perimenopauze / vroeg menopauze
 Medicatie: Mounjaro 2.5mg/wk (GLP-1, eetlustremmer + insulinegevoeligheid), Candesartan 12mg/dag (hypertensie), ADHD-meds
 Doel: huidige weging → 55 kg (herstart 70-dagen traject 2026-05-27)
+Gewichtsondergrens (eigen keuze, absoluut): NOOIT onder 45 kg — als prognose richting 45 kg gaat, altijd signaleren en tempo bijstellen
 Zone B hartslag: 106–132 bpm (alle aerobe training hierin houden)
 
 HORMONALE VOORGESCHIEDENIS (cruciaal voor context):

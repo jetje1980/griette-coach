@@ -214,7 +214,8 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
   const daysToVacation = Math.max(0, Math.floor((new Date(VACATION_DATE) - new Date(todayStr)) / 86400000));
   const weeksToVacation = (daysToVacation / 7).toFixed(1);
 
-  const START_DATE = '2026-05-27';
+  const START_DATE  = '2026-05-27';
+  const MIN_WEIGHT  = 45;
 
   const weightEntries = Object.values(logs || {})
     .filter(l => l.weight && l.date >= START_DATE)
@@ -585,8 +586,11 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
                     <div style={{ background: `${e.color}10`, borderRadius: 7, padding: '6px 8px', fontSize: 11 }}>
                       {projAtEvent && (
                         <div style={{ marginBottom: 3 }}>
-                          📊 Prognose op {e.startDate.slice(5).replace('-', '/')}: <strong style={{ color: e.color }}>{projAtEvent} kg</strong>
-                          {wkNeeded > 0 && <span style={{ color: 'var(--muted)' }}> · nodig: −{wkNeeded} kg/wk</span>}
+                          📊 Prognose op {e.startDate.slice(5).replace('-', '/')}: <strong style={{ color: projAtEvent < MIN_WEIGHT ? 'var(--alert)' : e.color }}>{projAtEvent} kg</strong>
+                          {projAtEvent < MIN_WEIGHT
+                            ? <span style={{ color: 'var(--alert)', fontWeight: 700 }}> ⚠️ onder jouw minimum (45 kg) — tempo mag omlaag</span>
+                            : wkNeeded > 0 && <span style={{ color: 'var(--muted)' }}> · nodig: −{wkNeeded} kg/wk</span>
+                          }
                         </div>
                       )}
                       {cyclePhaseAtEvent && (

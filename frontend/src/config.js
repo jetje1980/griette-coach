@@ -4,6 +4,7 @@ export const USER = {
   height: 163,
   startWeight: 62.7,
   goalWeight: 55,
+  minWeight: 45,
   startDate: '2026-05-27',
   durationDays: 70,
   hrZone: { low: 106, high: 132 },
@@ -116,5 +117,15 @@ export const PERSONAL_EVENTS = [
     description: 'Hardloopevenement Terschelling — 10 km strand/duin',
     goal: '10 km uitlopen in zone B, eigen tempo',
     color: '#EA580C',
+  },
+  {
+    id: 'oud_nieuw',
+    emoji: '🥂',
+    title: 'Oud & Nieuw met vrienden',
+    startDate: '2026-12-29',
+    endDate: '2027-01-02',
+    description: 'Oud & nieuw vieren met vrienden',
+    goal: 'Stralend het nieuwe jaar ingaan — minimaal gewicht: 45 kg',
+    color: '#CA8A04',
   },
 ];
