@@ -166,179 +166,188 @@ function PhotoCapture({ logs, measurements }) {
 
   const hasPhotos = Object.keys(selectedViews).length > 0;
   const isSavingAny = Object.values(saving).some(Boolean);
-  const otherSessions = sessions.filter(s => s.date !== selectedDate).sort((a, b) => b.date.localeCompare(a.date));
+  const allSessions = [...sessions].sort((a, b) => b.date.localeCompare(a.date));
   const prevSessionDate = sessions.filter(s => s.date < selectedDate).sort((a, b) => b.date.localeCompare(a.date))[0]?.date;
 
   return (
     <div>
-      {/* Datum selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', flexShrink: 0 }}>Sessie datum:</div>
-        <input
-          type="date"
-          value={selectedDate}
-          max={today}
-          onChange={e => setSelectedDate(e.target.value)}
-          style={{ fontSize: 12, border: '1.5px solid var(--border)', borderRadius: 7, padding: '4px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text)', background: 'var(--bg)', flex: 1 }}
-        />
-        {selectedDate !== today && (
-          <button
-            onClick={() => setSelectedDate(today)}
-            style={{ fontSize: 10, padding: '4px 8px', background: 'var(--rust-l)', border: '1px solid var(--rust)', borderRadius: 7, color: 'var(--rust)', cursor: 'pointer', flexShrink: 0 }}
-          >
-            Vandaag
-          </button>
-        )}
-        {hasPhotos && (
-          <button
-            onClick={() => { if (window.confirm(`Sessie ${selectedDate} verwijderen?`)) deleteSession(selectedDate); }}
-            style={{ fontSize: 10, padding: '4px 8px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 7, color: '#DC2626', cursor: 'pointer', flexShrink: 0 }}
-            title="Verwijder hele sessie"
-          >
-            🗑️
-          </button>
-        )}
-      </div>
-
-      {saveError && (
-        <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--alert)', background: 'var(--alert-l)', padding: '8px 10px', borderRadius: 8 }}>
-          ⚠️ Opslaan mislukt: {saveError}
-        </div>
-      )}
-
-      {/* 3 foto slots voor geselecteerde datum */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
-        {PHOTO_TYPES.map(({ key, label }) => {
-          const photo = selectedViews[key];
-          const isSavingThis = saving[key];
-          return (
-            <div key={key}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textAlign: 'center', marginBottom: 4 }}>{label}</div>
-              {isSavingThis ? (
-                <div style={{ height: 100, borderRadius: 9, background: 'var(--bg)', border: '1.5px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--muted)' }}>
-                  ⏳ Opslaan…
-                </div>
-              ) : photo ? (
-                <div style={{ position: 'relative' }}>
-                  <img
-                    src={`data:${photo.mimeType};base64,${photo.base64}`}
-                    alt={label}
-                    style={{ width: '100%', borderRadius: 9, objectFit: 'cover', height: 100 }}
-                  />
-                  <button
-                    onClick={() => deletePhoto(selectedDate, key)}
-                    style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(42,37,32,0.65)', border: 'none', color: 'white', borderRadius: '50%', width: 18, height: 18, fontSize: 9, cursor: 'pointer', padding: 0, lineHeight: '18px', textAlign: 'center' }}
-                  >✕</button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 4px', background: 'var(--rust-l)', border: '1.5px dashed var(--rust)', borderRadius: 9, cursor: 'pointer', fontSize: 14 }} title="Camera">
-                    📷
-                    <input type="file" accept="image/*" capture="environment" onChange={e => handleFile(key, e)} style={{ display: 'none' }} />
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 4px', background: 'var(--sage-l)', border: '1.5px dashed var(--sage)', borderRadius: 9, cursor: 'pointer', fontSize: 14 }} title="Galerij">
-                    🖼️
-                    <input type="file" accept="image/*" onChange={e => handleFile(key, e)} style={{ display: 'none' }} />
-                  </label>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Analyseer knop */}
-      {hasPhotos && (
-        <div style={{ marginBottom: 16 }}>
-          <button className="btn btn-rust btn-full" onClick={analyzeSession} disabled={analyzing || isSavingAny}>
-            {analyzing ? '⏳ AI analyseert + vergelijkt…' : `🤖 Analyseer ${Object.keys(selectedViews).length} foto('s) met AI`}
-          </button>
-          {prevSessionDate && !analyzing && (
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'center' }}>
-              ↑ AI vergelijkt met sessie van {prevSessionDate}
-            </div>
-          )}
-          {!prevSessionDate && !analyzing && (
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'center' }}>
-              Geen eerdere sessie gevonden — voeg een oudere datum toe als startfoto
-            </div>
-          )}
-          {analyzeError && (
-            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--alert)', background: 'var(--alert-l)', padding: '8px 10px', borderRadius: 8 }}>
-              {analyzeError}
-            </div>
-          )}
-          {analysis && (
-            <div style={{ marginTop: 10, background: 'var(--sage-l)', borderRadius: 10, padding: '12px 14px', fontSize: 12, lineHeight: 1.8, color: 'var(--text)', borderLeft: '3px solid var(--sage)', whiteSpace: 'pre-wrap' }}>
-              {analysis}
-            </div>
+      {/* Actieve sessie – upload / bewerken */}
+      <div style={{ background: 'var(--rust-l)', border: '1.5px solid var(--rust)', borderRadius: 11, padding: '10px 12px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--rust)', flex: 1 }}>
+            📸 Sessie toevoegen / bewerken
+          </div>
+          {selectedDate !== today && (
+            <button
+              onClick={() => setSelectedDate(today)}
+              style={{ fontSize: 10, padding: '3px 8px', background: 'white', border: '1px solid var(--rust)', borderRadius: 6, color: 'var(--rust)', cursor: 'pointer' }}
+            >
+              Vandaag
+            </button>
           )}
         </div>
-      )}
 
-      {/* Alle sessies */}
-      {otherSessions.length > 0 && (
-        <div>
-          <div className="section-title">Alle sessies ({sessions.length})</div>
-          {otherSessions.map(({ date, views }) => {
-            const savedAnalysis = localStorage.getItem(`${ANALYSIS_PREFIX}${date}`);
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: 'var(--muted)', flexShrink: 0 }}>Datum:</div>
+          <input
+            type="date"
+            value={selectedDate}
+            max={today}
+            onChange={e => setSelectedDate(e.target.value)}
+            style={{ fontSize: 12, border: '1.5px solid var(--border)', borderRadius: 7, padding: '4px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text)', background: 'white', flex: 1 }}
+          />
+        </div>
+
+        {saveError && (
+          <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--alert)', background: 'var(--alert-l)', padding: '8px 10px', borderRadius: 8 }}>
+            ⚠️ Opslaan mislukt: {saveError}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+          {PHOTO_TYPES.map(({ key, label }) => {
+            const photo = selectedViews[key];
+            const isSavingThis = saving[key];
             return (
-              <div key={date} style={{ marginBottom: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                  <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', flex: 1 }}>{date}</div>
-                  <button
-                    onClick={() => setSelectedDate(date)}
-                    style={{ fontSize: 9, padding: '2px 7px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer' }}
-                  >
-                    ✏️ bewerken
-                  </button>
-                  <button
-                    onClick={() => { if (window.confirm(`Sessie ${date} verwijderen?`)) deleteSession(date); }}
-                    style={{ fontSize: 9, padding: '2px 7px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 5, color: '#DC2626', cursor: 'pointer' }}
-                    title="Verwijder sessie"
-                  >
-                    🗑️
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5, marginBottom: savedAnalysis ? 8 : 0 }}>
-                  {PHOTO_TYPES.map(({ key, label }) => {
-                    const photo = views[key];
-                    return (
-                      <div key={key}>
-                        {photo ? (
-                          <div style={{ position: 'relative' }}>
-                            <img
-                              src={`data:${photo.mimeType};base64,${photo.base64}`}
-                              alt={`${date} ${label}`}
-                              style={{ width: '100%', borderRadius: 7, objectFit: 'cover', height: 80 }}
-                            />
-                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(42,37,32,0.6)', borderRadius: '0 0 7px 7px', padding: '2px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: 8, color: 'white' }}>{label}</span>
-                              <button onClick={() => deletePhoto(date, key)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 10, padding: 0 }}>✕</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ height: 80, background: 'var(--bg)', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--border)', border: '1px dashed var(--border)' }}>
-                            {label}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {savedAnalysis && (
-                  <details style={{ marginTop: 4 }}>
-                    <summary style={{ fontSize: 10, color: 'var(--sage)', cursor: 'pointer', fontWeight: 700 }}>🤖 AI-analyse bekijken</summary>
-                    <div style={{ marginTop: 6, background: 'var(--sage-l)', borderRadius: 8, padding: '10px 12px', fontSize: 11, lineHeight: 1.7, color: 'var(--text)', borderLeft: '3px solid var(--sage)', whiteSpace: 'pre-wrap' }}>
-                      {savedAnalysis}
-                    </div>
-                  </details>
+              <div key={key}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textAlign: 'center', marginBottom: 4 }}>{label}</div>
+                {isSavingThis ? (
+                  <div style={{ height: 100, borderRadius: 9, background: 'white', border: '1.5px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--muted)' }}>
+                    ⏳ Opslaan…
+                  </div>
+                ) : photo ? (
+                  <div style={{ position: 'relative' }}>
+                    <img
+                      src={`data:${photo.mimeType};base64,${photo.base64}`}
+                      alt={label}
+                      style={{ width: '100%', borderRadius: 9, objectFit: 'cover', height: 100 }}
+                    />
+                    <button
+                      onClick={() => deletePhoto(selectedDate, key)}
+                      style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(42,37,32,0.65)', border: 'none', color: 'white', borderRadius: '50%', width: 18, height: 18, fontSize: 9, cursor: 'pointer', padding: 0, lineHeight: '18px', textAlign: 'center' }}
+                    >✕</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 4px', background: 'white', border: '1.5px dashed var(--rust)', borderRadius: 9, cursor: 'pointer', fontSize: 14 }} title="Camera">
+                      📷
+                      <input type="file" accept="image/*" capture="environment" onChange={e => handleFile(key, e)} style={{ display: 'none' }} />
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 4px', background: 'white', border: '1.5px dashed var(--sage)', borderRadius: 9, cursor: 'pointer', fontSize: 14 }} title="Galerij">
+                      🖼️
+                      <input type="file" accept="image/*" onChange={e => handleFile(key, e)} style={{ display: 'none' }} />
+                    </label>
+                  </div>
                 )}
               </div>
             );
           })}
         </div>
+
+        {hasPhotos && (
+          <div>
+            <button className="btn btn-rust btn-full" onClick={analyzeSession} disabled={analyzing || isSavingAny}>
+              {analyzing ? '⏳ AI analyseert + vergelijkt…' : `🤖 Analyseer ${Object.keys(selectedViews).length} foto('s) met AI`}
+            </button>
+            {prevSessionDate && !analyzing && (
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'center' }}>
+                ↑ AI vergelijkt met sessie van {prevSessionDate}
+              </div>
+            )}
+            {!prevSessionDate && !analyzing && (
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'center' }}>
+                Geen eerdere sessie — voeg eerst een oudere datum toe
+              </div>
+            )}
+            {analyzeError && (
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--alert)', background: 'var(--alert-l)', padding: '8px 10px', borderRadius: 8 }}>
+                {analyzeError}
+              </div>
+            )}
+            {analysis && (
+              <div style={{ marginTop: 10, background: 'white', borderRadius: 10, padding: '12px 14px', fontSize: 12, lineHeight: 1.8, color: 'var(--text)', borderLeft: '3px solid var(--sage)', whiteSpace: 'pre-wrap' }}>
+                {analysis}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Overzicht alle sessies */}
+      <div className="section-title">
+        Opgeslagen sessies ({allSessions.length})
+      </div>
+      {allSessions.length === 0 && (
+        <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', padding: '12px 0' }}>
+          Nog geen sessies opgeslagen — upload je eerste foto hierboven.
+        </div>
       )}
+      {allSessions.map(({ date, views }) => {
+        const isCurrent = date === selectedDate;
+        const savedAnalysis = localStorage.getItem(`${ANALYSIS_PREFIX}${date}`);
+        const photoCount = Object.keys(views).length;
+        return (
+          <div key={date} style={{ marginBottom: 14, borderRadius: 10, border: isCurrent ? '2px solid var(--rust)' : '1px solid var(--border)', padding: '8px 10px', background: isCurrent ? 'var(--rust-l)' : 'var(--bg)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: isCurrent ? 'var(--rust)' : 'var(--text)', flex: 1 }}>
+                {date}{isCurrent ? ' ← bezig' : ''}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--muted)' }}>{photoCount}/3 foto's</div>
+              {savedAnalysis && <div style={{ fontSize: 10, color: 'var(--sage)' }}>🤖</div>}
+              {!isCurrent && (
+                <button
+                  onClick={() => setSelectedDate(date)}
+                  style={{ fontSize: 9, padding: '2px 7px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer' }}
+                >
+                  ✏️
+                </button>
+              )}
+              <button
+                onClick={() => { if (window.confirm(`Sessie ${date} verwijderen inclusief alle foto's en analyse?`)) deleteSession(date); }}
+                style={{ fontSize: 9, padding: '2px 7px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 5, color: '#DC2626', cursor: 'pointer' }}
+              >
+                🗑️
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 }}>
+              {PHOTO_TYPES.map(({ key, label }) => {
+                const photo = views[key];
+                return (
+                  <div key={key}>
+                    {photo ? (
+                      <div style={{ position: 'relative' }}>
+                        <img
+                          src={`data:${photo.mimeType};base64,${photo.base64}`}
+                          alt={`${date} ${label}`}
+                          style={{ width: '100%', borderRadius: 7, objectFit: 'cover', height: 72 }}
+                        />
+                        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(42,37,32,0.55)', borderRadius: '0 0 7px 7px', padding: '2px 5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 8, color: 'white' }}>{label}</span>
+                          <button onClick={() => deletePhoto(date, key)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: 10, padding: 0 }}>✕</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ height: 72, background: 'var(--border)', opacity: 0.3, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--muted)' }}>
+                        {label}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {savedAnalysis && (
+              <details style={{ marginTop: 6 }}>
+                <summary style={{ fontSize: 10, color: 'var(--sage)', cursor: 'pointer', fontWeight: 700 }}>🤖 AI-analyse bekijken</summary>
+                <div style={{ marginTop: 6, background: 'var(--sage-l)', borderRadius: 8, padding: '10px 12px', fontSize: 11, lineHeight: 1.7, color: 'var(--text)', borderLeft: '3px solid var(--sage)', whiteSpace: 'pre-wrap' }}>
+                  {savedAnalysis}
+                </div>
+              </details>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
