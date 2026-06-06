@@ -42,27 +42,52 @@ function loadSavedAnalyses() {
   return results.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-// Canvas-compressie: verkleint foto naar max 900px, JPEG 78% → ~50-150KB ipv 3-5MB
-async function compressImage(file) {
+// Stap 1: probeer canvas-compressie (max 900px, JPEG 78%)
+function tryCanvas(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Foto laden mislukt')); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('canvas_fail')); };
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const MAX = 900;
-      const ratio = Math.min(1, MAX / Math.max(img.width, img.height));
-      const w = Math.round(img.width * ratio);
-      const h = Math.round(img.height * ratio);
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
-      resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+      try {
+        const MAX = 900;
+        const ratio = Math.min(1, MAX / Math.max(img.width, img.height));
+        const w = Math.round(img.width * ratio);
+        const h = Math.round(img.height * ratio);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+      } catch (e) { reject(e); }
     };
     img.src = url;
   });
+}
+
+// Stap 2: fallback — lees bestand direct (geen compressie, maar werkt voor alle formaten)
+function tryDirect(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Foto lezen mislukt. Probeer een andere foto.'));
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      const mimeType = file.type || 'image/jpeg';
+      resolve({ base64: dataUrl.split(',')[1], mimeType });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function compressImage(file) {
+  try {
+    return await tryCanvas(file);
+  } catch {
+    // Canvas ondersteunt dit formaat niet (bijv. HEIC) — probeer direct
+    return await tryDirect(file);
+  }
 }
 
 function PhotoCapture({ logs, measurements }) {
@@ -215,13 +240,17 @@ function PhotoCapture({ logs, measurements }) {
                   <div style={{ height: 100, borderRadius: 9, background: 'white', border: '1.5px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--muted)' }}>
                     ⏳ Opslaan…
                   </div>
-                ) : photo ? (
+                ) : photo?.base64 ? (
                   <div style={{ position: 'relative' }}>
                     <img
-                      src={`data:${photo.mimeType};base64,${photo.base64}`}
+                      src={`data:${photo.mimeType || 'image/jpeg'};base64,${photo.base64}`}
                       alt={label}
                       style={{ width: '100%', borderRadius: 9, objectFit: 'cover', height: 100 }}
+                      onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                     />
+                    <div style={{ display: 'none', height: 100, borderRadius: 9, background: 'var(--alert-l)', border: '1px solid var(--alert)', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--alert)', textAlign: 'center', padding: 4 }}>
+                      ⚠️ Kan niet laden — verwijder en upload opnieuw
+                    </div>
                     <button
                       onClick={() => deletePhoto(selectedDate, key)}
                       style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(42,37,32,0.65)', border: 'none', color: 'white', borderRadius: '50%', width: 18, height: 18, fontSize: 9, cursor: 'pointer', padding: 0, lineHeight: '18px', textAlign: 'center' }}
@@ -315,12 +344,13 @@ function PhotoCapture({ logs, measurements }) {
                 const photo = views[key];
                 return (
                   <div key={key}>
-                    {photo ? (
+                    {photo?.base64 ? (
                       <div style={{ position: 'relative' }}>
                         <img
-                          src={`data:${photo.mimeType};base64,${photo.base64}`}
+                          src={`data:${photo.mimeType || 'image/jpeg'};base64,${photo.base64}`}
                           alt={`${date} ${label}`}
                           style={{ width: '100%', borderRadius: 7, objectFit: 'cover', height: 72 }}
+                          onError={e => { e.target.style.display = 'none'; }}
                         />
                         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(42,37,32,0.55)', borderRadius: '0 0 7px 7px', padding: '2px 5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 8, color: 'white' }}>{label}</span>
