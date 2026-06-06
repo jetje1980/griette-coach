@@ -112,6 +112,13 @@ function PhotoCapture({ logs, measurements }) {
     await loadPhotos();
   }
 
+  async function deleteSession(date) {
+    await Promise.all(PHOTO_TYPES.map(({ key }) => photoStore.delete(date, key)));
+    localStorage.removeItem(`${ANALYSIS_PREFIX}${date}`);
+    if (date === selectedDate) setSelectedDate(today);
+    await loadPhotos();
+  }
+
   async function analyzeSession() {
     if (!ai.hasKey()) {
       setAnalyzeError('Stel eerst je API-sleutel in via ⚙️ Instellingen');
@@ -180,6 +187,15 @@ function PhotoCapture({ logs, measurements }) {
             style={{ fontSize: 10, padding: '4px 8px', background: 'var(--rust-l)', border: '1px solid var(--rust)', borderRadius: 7, color: 'var(--rust)', cursor: 'pointer', flexShrink: 0 }}
           >
             Vandaag
+          </button>
+        )}
+        {hasPhotos && (
+          <button
+            onClick={() => { if (window.confirm(`Sessie ${selectedDate} verwijderen?`)) deleteSession(selectedDate); }}
+            style={{ fontSize: 10, padding: '4px 8px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 7, color: '#DC2626', cursor: 'pointer', flexShrink: 0 }}
+            title="Verwijder hele sessie"
+          >
+            🗑️
           </button>
         )}
       </div>
@@ -268,13 +284,20 @@ function PhotoCapture({ logs, measurements }) {
             const savedAnalysis = localStorage.getItem(`${ANALYSIS_PREFIX}${date}`);
             return (
               <div key={date} style={{ marginBottom: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                  <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{date}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                  <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', flex: 1 }}>{date}</div>
                   <button
                     onClick={() => setSelectedDate(date)}
                     style={{ fontSize: 9, padding: '2px 7px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer' }}
                   >
                     ✏️ bewerken
+                  </button>
+                  <button
+                    onClick={() => { if (window.confirm(`Sessie ${date} verwijderen?`)) deleteSession(date); }}
+                    style={{ fontSize: 9, padding: '2px 7px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 5, color: '#DC2626', cursor: 'pointer' }}
+                    title="Verwijder sessie"
+                  >
+                    🗑️
                   </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5, marginBottom: savedAnalysis ? 8 : 0 }}>
