@@ -68,20 +68,26 @@ async function compressImage(file) {
 function PhotoCapture({ logs, measurements }) {
   const today = new Date().toISOString().slice(0, 10);
   const [sessions, setSessions] = useState([]);
-  const [todayViews, setTodayViews] = useState({});
-  const [saving, setSaving] = useState({});   // { voor: true/false, ... }
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedViews, setSelectedViews] = useState({});
+  const [saving, setSaving] = useState({});
   const [saveError, setSaveError] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState(() => localStorage.getItem(`${ANALYSIS_PREFIX}${new Date().toISOString().slice(0,10)}`) || null);
+  const [analysis, setAnalysis] = useState(null);
   const [analyzeError, setAnalyzeError] = useState(null);
 
   useEffect(() => { loadPhotos(); }, []);
 
+  useEffect(() => {
+    const session = sessions.find(s => s.date === selectedDate);
+    setSelectedViews(session?.views ?? {});
+    setAnalysis(localStorage.getItem(`${ANALYSIS_PREFIX}${selectedDate}`) || null);
+    setAnalyzeError(null);
+  }, [selectedDate, sessions]);
+
   async function loadPhotos() {
     const all = await photoStore.getAll().catch(() => []);
     setSessions(all);
-    const todaySession = all.find(s => s.date === today);
-    setTodayViews(todaySession?.views ?? {});
   }
 
   async function handleFile(type, e) {
@@ -92,7 +98,7 @@ function PhotoCapture({ logs, measurements }) {
     setSaveError(null);
     try {
       const { base64, mimeType } = await compressImage(file);
-      await photoStore.save(today, type, base64, mimeType);
+      await photoStore.save(selectedDate, type, base64, mimeType);
       await loadPhotos();
     } catch (err) {
       setSaveError(`${type}: ${err.message}`);
@@ -106,14 +112,14 @@ function PhotoCapture({ logs, measurements }) {
     await loadPhotos();
   }
 
-  async function analyzeToday() {
+  async function analyzeSession() {
     if (!ai.hasKey()) {
       setAnalyzeError('Stel eerst je API-sleutel in via ⚙️ Instellingen');
       return;
     }
     const photoList = PHOTO_TYPES
-      .filter(({ key }) => todayViews[key])
-      .map(({ key }) => ({ ...todayViews[key], type: key }));
+      .filter(({ key }) => selectedViews[key])
+      .map(({ key }) => ({ ...selectedViews[key], type: key }));
     if (photoList.length === 0) return;
 
     setAnalyzing(true);
@@ -122,24 +128,28 @@ function PhotoCapture({ logs, measurements }) {
     try {
       const weights = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
       const currentWeight = weights[0]?.weight;
-      const dayNum = Math.max(1, Math.floor((new Date(today) - new Date(USER.startDate)) / 86400000) + 1);
-      const previousAnalyses = loadSavedAnalyses().filter(a => a.date !== today);
+      const dayNum = Math.max(1, Math.floor((new Date(selectedDate) - new Date(USER.startDate)) / 86400000) + 1);
+      const previousAnalyses = loadSavedAnalyses().filter(a => a.date !== selectedDate);
 
-      // Vorige sessie foto's meesturen voor visuele vergelijking
-      const prevSession = pastSessions[0];
+      // Meest recente sessie vóór geselecteerde datum
+      const prevSession = sessions
+        .filter(s => s.date < selectedDate)
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
       const prevPhotos = prevSession
         ? PHOTO_TYPES.filter(({ key }) => prevSession.views[key]).map(({ key }) => ({ ...prevSession.views[key], type: key, sessionDate: prevSession.date }))
         : [];
 
       const text = await ai.analyzePhoto(photoList, dayNum, currentWeight, logs, measurements, previousAnalyses, prevPhotos);
-      localStorage.setItem(`${ANALYSIS_PREFIX}${today}`, text);
+      localStorage.setItem(`${ANALYSIS_PREFIX}${selectedDate}`, text);
       setAnalysis(text);
-      const coachReport = localStorage.getItem('gc_coach_report') ?? '';
-      ai.weeklyTrainingPlan(logs, measurements, coachReport, text).then(planText => {
-        const d = new Date().toISOString().slice(0, 10);
-        localStorage.setItem('gc_training_plan', planText);
-        localStorage.setItem('gc_training_plan_date', d);
-      }).catch(() => {});
+
+      if (selectedDate === today) {
+        const coachReport = localStorage.getItem('gc_coach_report') ?? '';
+        ai.weeklyTrainingPlan(logs, measurements, coachReport, text).then(planText => {
+          localStorage.setItem('gc_training_plan', planText);
+          localStorage.setItem('gc_training_plan_date', today);
+        }).catch(() => {});
+      }
     } catch (err) {
       setAnalyzeError(err.message);
     } finally {
@@ -147,13 +157,32 @@ function PhotoCapture({ logs, measurements }) {
     }
   }
 
-  const hasTodayPhotos = Object.keys(todayViews).length > 0;
+  const hasPhotos = Object.keys(selectedViews).length > 0;
   const isSavingAny = Object.values(saving).some(Boolean);
-  const pastSessions = sessions.filter(s => s.date !== today).sort((a, b) => b.date.localeCompare(a.date));
+  const otherSessions = sessions.filter(s => s.date !== selectedDate).sort((a, b) => b.date.localeCompare(a.date));
+  const prevSessionDate = sessions.filter(s => s.date < selectedDate).sort((a, b) => b.date.localeCompare(a.date))[0]?.date;
 
   return (
     <div>
-      <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', marginBottom: 8 }}>Vandaag — {today}</div>
+      {/* Datum selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', flexShrink: 0 }}>Sessie datum:</div>
+        <input
+          type="date"
+          value={selectedDate}
+          max={today}
+          onChange={e => setSelectedDate(e.target.value)}
+          style={{ fontSize: 12, border: '1.5px solid var(--border)', borderRadius: 7, padding: '4px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text)', background: 'var(--bg)', flex: 1 }}
+        />
+        {selectedDate !== today && (
+          <button
+            onClick={() => setSelectedDate(today)}
+            style={{ fontSize: 10, padding: '4px 8px', background: 'var(--rust-l)', border: '1px solid var(--rust)', borderRadius: 7, color: 'var(--rust)', cursor: 'pointer', flexShrink: 0 }}
+          >
+            Vandaag
+          </button>
+        )}
+      </div>
 
       {saveError && (
         <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--alert)', background: 'var(--alert-l)', padding: '8px 10px', borderRadius: 8 }}>
@@ -161,10 +190,10 @@ function PhotoCapture({ logs, measurements }) {
         </div>
       )}
 
-      {/* 3 slots vandaag */}
+      {/* 3 foto slots voor geselecteerde datum */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
         {PHOTO_TYPES.map(({ key, label }) => {
-          const photo = todayViews[key];
+          const photo = selectedViews[key];
           const isSavingThis = saving[key];
           return (
             <div key={key}>
@@ -181,7 +210,7 @@ function PhotoCapture({ logs, measurements }) {
                     style={{ width: '100%', borderRadius: 9, objectFit: 'cover', height: 100 }}
                   />
                   <button
-                    onClick={() => deletePhoto(today, key)}
+                    onClick={() => deletePhoto(selectedDate, key)}
                     style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(42,37,32,0.65)', border: 'none', color: 'white', borderRadius: '50%', width: 18, height: 18, fontSize: 9, cursor: 'pointer', padding: 0, lineHeight: '18px', textAlign: 'center' }}
                   >✕</button>
                 </div>
@@ -203,14 +232,19 @@ function PhotoCapture({ logs, measurements }) {
       </div>
 
       {/* Analyseer knop */}
-      {hasTodayPhotos && (
+      {hasPhotos && (
         <div style={{ marginBottom: 16 }}>
-          <button className="btn btn-rust btn-full" onClick={analyzeToday} disabled={analyzing || isSavingAny}>
-            {analyzing ? '⏳ AI analyseert + vergelijkt…' : `🤖 Analyseer ${Object.keys(todayViews).length} foto('s) met AI`}
+          <button className="btn btn-rust btn-full" onClick={analyzeSession} disabled={analyzing || isSavingAny}>
+            {analyzing ? '⏳ AI analyseert + vergelijkt…' : `🤖 Analyseer ${Object.keys(selectedViews).length} foto('s) met AI`}
           </button>
-          {pastSessions.length > 0 && !analyzing && (
+          {prevSessionDate && !analyzing && (
             <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'center' }}>
-              ↑ AI vergelijkt visueel met vorige sessie ({pastSessions[0]?.date})
+              ↑ AI vergelijkt met sessie van {prevSessionDate}
+            </div>
+          )}
+          {!prevSessionDate && !analyzing && (
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'center' }}>
+              Geen eerdere sessie gevonden — voeg een oudere datum toe als startfoto
             </div>
           )}
           {analyzeError && (
@@ -226,15 +260,23 @@ function PhotoCapture({ logs, measurements }) {
         </div>
       )}
 
-      {/* Historische sessies */}
-      {pastSessions.length > 0 && (
+      {/* Alle sessies */}
+      {otherSessions.length > 0 && (
         <div>
-          <div className="section-title">Progressie-overzicht ({pastSessions.length} sessie{pastSessions.length !== 1 ? 's' : ''})</div>
-          {pastSessions.map(({ date, views }) => {
+          <div className="section-title">Alle sessies ({sessions.length})</div>
+          {otherSessions.map(({ date, views }) => {
             const savedAnalysis = localStorage.getItem(`${ANALYSIS_PREFIX}${date}`);
             return (
               <div key={date} style={{ marginBottom: 18 }}>
-                <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)', marginBottom: 5 }}>{date}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                  <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{date}</div>
+                  <button
+                    onClick={() => setSelectedDate(date)}
+                    style={{ fontSize: 9, padding: '2px 7px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer' }}
+                  >
+                    ✏️ bewerken
+                  </button>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5, marginBottom: savedAnalysis ? 8 : 0 }}>
                   {PHOTO_TYPES.map(({ key, label }) => {
                     const photo = views[key];
