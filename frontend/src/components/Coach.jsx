@@ -42,40 +42,81 @@ function loadSavedAnalyses() {
   return results.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-// Stap 1: probeer canvas-compressie (max 900px, JPEG 78%)
+// Lees EXIF-orientatie uit JPEG (Samsung portretfoto's zijn raw 90° gedraaid)
+function readOrientation(buffer) {
+  try {
+    const v = new DataView(buffer);
+    if (v.getUint16(0) !== 0xFFD8) return 1;
+    let off = 2;
+    while (off < v.byteLength - 2) {
+      const marker = v.getUint16(off);
+      if (marker === 0xFFE1) {
+        if (v.getUint32(off + 4) !== 0x45786966) return 1;
+        const le = v.getUint16(off + 10) === 0x4949;
+        const base = off + 10;
+        const entries = v.getUint16(base + 8, le);
+        for (let i = 0; i < entries; i++) {
+          const e = base + 10 + i * 12;
+          if (v.getUint16(e, le) === 0x0112) return v.getUint16(e + 8, le);
+        }
+        return 1;
+      }
+      if ((marker & 0xFF00) !== 0xFF00) return 1;
+      off += 2 + v.getUint16(off + 2);
+    }
+  } catch {}
+  return 1;
+}
+
 function tryCanvas(file) {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('canvas_fail')); };
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      try {
-        const MAX = 900;
-        const ratio = Math.min(1, MAX / Math.max(img.width, img.height));
-        const w = Math.round(img.width * ratio);
-        const h = Math.round(img.height * ratio);
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
-        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
-      } catch (e) { reject(e); }
+    // Lees EXIF oriëntatie uit eerste 64KB
+    const sliceReader = new FileReader();
+    sliceReader.onerror = () => reject(new Error('canvas_fail'));
+    sliceReader.onload = re => {
+      const orientation = readOrientation(re.target.result);
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('canvas_fail')); };
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        try {
+          const MAX = 900;
+          // Bij orientaties 5-8 zijn breedte/hoogte verwisseld
+          const sw = orientation >= 5 ? img.height : img.width;
+          const sh = orientation >= 5 ? img.width : img.height;
+          const ratio = Math.min(1, MAX / Math.max(sw, sh));
+          const outW = Math.round(sw * ratio);
+          const outH = Math.round(sh * ratio);
+          const canvas = document.createElement('canvas');
+          canvas.width = outW;
+          canvas.height = outH;
+          const ctx = canvas.getContext('2d');
+          // Pas rotatie toe vóór het tekenen
+          if      (orientation === 3) { ctx.translate(outW, outH); ctx.rotate(Math.PI); }
+          else if (orientation === 6) { ctx.rotate(Math.PI / 2); ctx.translate(0, -outW); }
+          else if (orientation === 8) { ctx.translate(0, outH); ctx.rotate(-Math.PI / 2); }
+          ctx.drawImage(img, 0, 0,
+            orientation >= 5 ? outH : outW,
+            orientation >= 5 ? outW : outH);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+          resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+        } catch (e) { reject(e); }
+      };
+      img.src = url;
     };
-    img.src = url;
+    sliceReader.readAsArrayBuffer(file.slice(0, 65536));
   });
 }
 
-// Stap 2: fallback — lees bestand direct (geen compressie, maar werkt voor alle formaten)
+// Fallback: lees bestand direct zonder compressie
 function tryDirect(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Foto lezen mislukt. Probeer een andere foto.'));
+    reader.onerror = () => reject(new Error('Foto lezen mislukt'));
     reader.onload = e => {
       const dataUrl = e.target.result;
-      const mimeType = file.type || 'image/jpeg';
-      resolve({ base64: dataUrl.split(',')[1], mimeType });
+      resolve({ base64: dataUrl.split(',')[1], mimeType: file.type || 'image/jpeg' });
     };
     reader.readAsDataURL(file);
   });
@@ -85,7 +126,6 @@ async function compressImage(file) {
   try {
     return await tryCanvas(file);
   } catch {
-    // Canvas ondersteunt dit formaat niet (bijv. HEIC) — probeer direct
     return await tryDirect(file);
   }
 }
@@ -126,7 +166,8 @@ function PhotoCapture({ logs, measurements }) {
       await photoStore.save(selectedDate, type, base64, mimeType);
       await loadPhotos();
     } catch (err) {
-      setSaveError(`${type}: ${err.message}`);
+      const info = `${file.type || 'onbekend type'}, ${Math.round(file.size / 1024)}KB`;
+      setSaveError(`Opslaan mislukt (${info}): ${err.message}. Probeer de camera-knop (📷) i.p.v. galerij.`);
     } finally {
       setSaving(prev => ({ ...prev, [type]: false }));
     }
