@@ -194,7 +194,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
     try { return JSON.parse(localStorage.getItem('gc_cycle_history') || '[]'); } catch { return []; }
   });
   const [cycleManualDate, setCycleManualDate] = useState('');
-  const [showCyclePicker, setShowCyclePicker] = useState(false);
+  const [showCycleHistory, setShowCycleHistory] = useState(false);
 
   useEffect(() => {
     setWeight(log?.weight ?? '');
@@ -242,35 +242,55 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
     ? Math.floor((new Date(volgendePrik.date) - new Date(todayStr)) / 86400000)
     : null;
 
-  // Cycle calculations
+  // Cycle — single source of truth: all dates merged, sorted desc, max 36
+  const allCycleDates = [...new Set([
+    ...(cycleStart ? [cycleStart] : []),
+    ...cycleHistory,
+  ])].sort((a, b) => b.localeCompare(a));
+
+  const saveAllCycleDates = (dates) => {
+    const sorted = [...new Set(dates)].sort((a, b) => b.localeCompare(a)).slice(0, 36);
+    const newStart = sorted[0] || null;
+    const newHist  = sorted.slice(1);
+    if (newStart) localStorage.setItem('gc_cycle_start', newStart);
+    else localStorage.removeItem('gc_cycle_start');
+    localStorage.setItem('gc_cycle_history', JSON.stringify(newHist));
+    setCycleStart(newStart);
+    setCycleHistory(newHist);
+  };
+
   const cycleDay = cycleStart
     ? Math.floor((new Date(todayStr) - new Date(cycleStart)) / 86400000) + 1
     : null;
-  const startMenstruatie = (date = todayStr) => {
-    const existing = cycleStart
-      ? [cycleStart, ...cycleHistory.filter(d => d !== cycleStart)].slice(0, 24)
-      : cycleHistory;
-    const newHist = existing.filter(d => d !== date);
-    localStorage.setItem('gc_cycle_history', JSON.stringify(newHist));
-    localStorage.setItem('gc_cycle_start', date);
-    setCycleHistory(newHist);
-    setCycleStart(date);
+
+  // Average cycle length from intervals (filter outliers 18-55 days)
+  const avgCycleLength = (() => {
+    const sorted = [...allCycleDates].sort((a, b) => a.localeCompare(b));
+    if (sorted.length < 2) return null;
+    const intervals = [];
+    for (let i = 1; i < sorted.length; i++)
+      intervals.push(Math.floor((new Date(sorted[i]) - new Date(sorted[i - 1])) / 86400000));
+    const valid = intervals.filter(d => d >= 18 && d <= 55);
+    return valid.length ? Math.round(valid.reduce((s, v) => s + v, 0) / valid.length) : null;
+  })();
+
+  const nextExpectedPeriod = cycleStart && avgCycleLength
+    ? (() => { const d = new Date(cycleStart); d.setDate(d.getDate() + avgCycleLength); return d.toISOString().slice(0, 10); })()
+    : null;
+
+  const daysToNextPeriod = nextExpectedPeriod
+    ? Math.floor((new Date(nextExpectedPeriod) - new Date(todayStr)) / 86400000)
+    : null;
+
+  const startMenstruatie = (date = todayStr) => saveAllCycleDates([...allCycleDates, date]);
+
+  const addCycleDate = () => {
+    if (!cycleManualDate) return;
+    saveAllCycleDates([...allCycleDates, cycleManualDate]);
+    setCycleManualDate('');
   };
 
-  const addPastCycleDate = () => {
-    if (!cycleManualDate) return;
-    const date = cycleManualDate;
-    setCycleManualDate('');
-    setShowCyclePicker(false);
-    if (date === cycleStart) return;
-    if (!cycleStart || date > cycleStart) {
-      startMenstruatie(date);
-    } else {
-      const newHist = [date, ...cycleHistory.filter(d => d !== date)].sort((a, b) => b.localeCompare(a)).slice(0, 24);
-      localStorage.setItem('gc_cycle_history', JSON.stringify(newHist));
-      setCycleHistory(newHist);
-    }
-  };
+  const deleteCycleDate = (date) => saveAllCycleDates(allCycleDates.filter(d => d !== date));
 
   const saveWeight = () => {
     const w = parseFloat(weight);
@@ -544,58 +564,137 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
           <div className="card-title">🌙 Cyclus</div>
           {cycleDay != null && (
             <span style={{ fontSize: 11, color: '#9333EA', fontWeight: 700, background: '#F3E8FF', padding: '2px 8px', borderRadius: 99 }}>
-              {cycleDay <= 5 ? `🩸 Dag ${cycleDay}` : cycleDay > 45 ? `${cycleDay} dagen — peri` : `Dag ${cycleDay}`}
+              {cycleDay <= 5 ? `🩸 Dag ${cycleDay}` : cycleDay > 45 ? `${cycleDay}d — peri` : `Dag ${cycleDay}`}
             </span>
           )}
         </div>
         <div className="card-body">
+
+          {/* Huidige fase */}
           {cycleStart && (
             <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
               Laatste menstruatie: <strong>{cycleStart}</strong>
               {cycleDay > 45 && <span style={{ color: '#9333EA', marginLeft: 6 }}>· langere cyclus (perimenopauzaal)</span>}
               {cycleDay <= 5 && <span style={{ color: 'var(--alert)', marginLeft: 6 }}>· ongesteld</span>}
-              {cycleDay > 5 && cycleDay <= 13 && <span style={{ color: 'var(--sage)', marginLeft: 6 }}>· folliculaire fase — meer energie verwacht</span>}
+              {cycleDay > 5 && cycleDay <= 13 && <span style={{ color: 'var(--sage)', marginLeft: 6 }}>· folliculaire fase</span>}
               {cycleDay >= 14 && cycleDay <= 16 && <span style={{ color: 'var(--gold)', marginLeft: 6 }}>· mogelijke ovulatie</span>}
               {cycleDay > 16 && cycleDay <= 28 && <span style={{ color: 'var(--muted)', marginLeft: 6 }}>· luteale fase</span>}
             </div>
           )}
+
+          {/* Verwachte volgende menstruatie */}
+          {nextExpectedPeriod && (
+            <div style={{ background: '#F3E8FF', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#7C3AED' }}>
+                🩸 Verwacht: {nextExpectedPeriod}
+                {daysToNextPeriod != null && (
+                  <span style={{ fontWeight: 400, marginLeft: 6, fontSize: 11 }}>
+                    {daysToNextPeriod < 0
+                      ? `(${Math.abs(daysToNextPeriod)}d te laat)`
+                      : daysToNextPeriod === 0
+                        ? '(vandaag)'
+                        : `(over ${daysToNextPeriod} dagen)`}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 10, color: '#9333EA', marginTop: 2 }}>
+                Gem. cycluslengte: {avgCycleLength} dagen · op basis van {allCycleDates.length} geregistreerde cycli
+              </div>
+            </div>
+          )}
+
+          {/* Ongesteld vandaag knop */}
           <button
             className="btn btn-full"
-            style={{
-              background: '#F3E8FF', color: '#7C3AED', border: '1.5px solid #C084FC',
-              fontWeight: 700, fontSize: 13,
-            }}
-            onClick={startMenstruatie}
+            style={{ background: '#F3E8FF', color: '#7C3AED', border: '1.5px solid #C084FC', fontWeight: 700, fontSize: 13 }}
+            onClick={() => startMenstruatie()}
           >
             🩸 Ongesteld geworden vandaag
           </button>
+
           {!cycleStart && (
             <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
               Tik als je ongesteld bent geworden — de app bijhoudt dan je cyclusdag automatisch.
             </div>
           )}
-          <button
-            className="btn btn-sm"
-            style={{ marginTop: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', fontSize: 11 }}
-            onClick={() => setShowCyclePicker(v => !v)}
-          >
-            {showCyclePicker ? '✕ Annuleren' : '+ Eerder datum toevoegen'}
-          </button>
-          {showCyclePicker && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <input
-                type="date"
-                value={cycleManualDate}
-                onChange={e => setCycleManualDate(e.target.value)}
-                max={todayStr}
-                style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 13 }}
-              />
-              <button className="btn btn-rust btn-sm" onClick={addPastCycleDate}>✓</button>
-            </div>
-          )}
-          {cycleHistory.length > 0 && (
-            <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)', lineHeight: 1.7 }}>
-              Eerdere cycli: {cycleHistory.slice(0, 6).join(' · ')}
+
+          {/* Datum toevoegen — altijd zichtbaar */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <input
+              type="date"
+              value={cycleManualDate}
+              onChange={e => setCycleManualDate(e.target.value)}
+              max={todayStr}
+              style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 13 }}
+            />
+            <button
+              className="btn btn-rust btn-sm"
+              onClick={addCycleDate}
+              disabled={!cycleManualDate}
+            >
+              + Toevoegen
+            </button>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
+            Voeg datums van afgelopen jaar toe — ze worden allemaal bewaard.
+          </div>
+
+          {/* Geschiedenis lijst */}
+          {allCycleDates.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginBottom: 6 }}
+                onClick={() => setShowCycleHistory(v => !v)}
+              >
+                <div className="scale-label" style={{ margin: 0 }}>
+                  GESCHIEDENIS ({allCycleDates.length} cycli)
+                  {avgCycleLength && <span style={{ fontWeight: 400, marginLeft: 6 }}>· gem. {avgCycleLength}d</span>}
+                </div>
+                <span style={{ fontSize: 10, color: 'var(--muted)' }}>{showCycleHistory ? '▲' : '▼'}</span>
+              </div>
+              {showCycleHistory && (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {allCycleDates.map((date, i) => {
+                    const olderDate = allCycleDates[i + 1];
+                    const cycleLen = olderDate
+                      ? Math.floor((new Date(date) - new Date(olderDate)) / 86400000)
+                      : null;
+                    const isCurrent = date === cycleStart;
+                    return (
+                      <div key={date} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '6px 0', borderBottom: '1px solid var(--border)',
+                      }}>
+                        <span style={{ fontSize: 10, color: isCurrent ? '#9333EA' : 'var(--muted)', minWidth: 8 }}>
+                          {isCurrent ? '●' : '○'}
+                        </span>
+                        <span style={{
+                          flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)',
+                          fontWeight: isCurrent ? 700 : 400,
+                          color: isCurrent ? '#7C3AED' : 'var(--text)',
+                        }}>
+                          {date}
+                          {isCurrent && <span style={{ fontSize: 10, color: '#9333EA', marginLeft: 6 }}>huidig</span>}
+                        </span>
+                        {cycleLen && (
+                          <span style={{
+                            fontSize: 10, color: cycleLen > 45 ? '#9333EA' : cycleLen < 21 ? 'var(--alert)' : 'var(--muted)',
+                            minWidth: 42, textAlign: 'right',
+                          }}>
+                            {cycleLen}d
+                          </span>
+                        )}
+                        <button
+                          onClick={() => deleteCycleDate(date)}
+                          style={{ fontSize: 11, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

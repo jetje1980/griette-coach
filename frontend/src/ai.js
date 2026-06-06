@@ -181,21 +181,47 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
   const cycleHistoryArr = (() => {
     try { return JSON.parse(localStorage.getItem('gc_cycle_history') || '[]'); } catch { return []; }
   })();
+  const allCycleStartsSorted = [...new Set([
+    ...(cycleStart ? [cycleStart] : []),
+    ...cycleHistoryArr,
+  ])].sort((a, b) => a.localeCompare(b)); // ascending for interval math
+
+  const avgCycleLengthAI = (() => {
+    if (allCycleStartsSorted.length < 2) return null;
+    const intervals = [];
+    for (let i = 1; i < allCycleStartsSorted.length; i++)
+      intervals.push(Math.floor((new Date(allCycleStartsSorted[i]) - new Date(allCycleStartsSorted[i - 1])) / 86400000));
+    const valid = intervals.filter(d => d >= 18 && d <= 55);
+    return valid.length ? Math.round(valid.reduce((s, v) => s + v, 0) / valid.length) : null;
+  })();
+
+  const nextExpectedPeriodAI = cycleStart && avgCycleLengthAI
+    ? (() => { const d = new Date(cycleStart); d.setDate(d.getDate() + avgCycleLengthAI); return d.toISOString().slice(0, 10); })()
+    : null;
+
+  const daysToNextAI = nextExpectedPeriodAI
+    ? Math.floor((new Date(nextExpectedPeriodAI) - new Date(today)) / 86400000)
+    : null;
+
   const cycleContext = (() => {
     if (!cycleStart) return 'Cyclus: niet bijgehouden';
     const daysSince = Math.floor((new Date(today) - new Date(cycleStart)) / 86400000) + 1;
-    if (daysSince <= 5)  return `Cyclus: dag ${daysSince} — menstruatie`;
-    if (daysSince <= 13) return `Cyclus: dag ${daysSince} — folliculaire fase (meer energie verwacht)`;
-    if (daysSince <= 16) return `Cyclus: dag ${daysSince} — mogelijk ovulatie`;
-    if (daysSince <= 28) return `Cyclus: dag ${daysSince} — luteale fase`;
-    return `Cyclus: dag ${daysSince} — verlengde/onregelmatige cyclus (perimenopauzaal)`;
+    const phase = daysSince <= 5  ? 'menstruatie'
+      : daysSince <= 13 ? 'folliculaire fase (meer energie verwacht)'
+      : daysSince <= 16 ? 'mogelijk ovulatie'
+      : daysSince <= 28 ? 'luteale fase'
+      : 'verlengde/onregelmatige cyclus (perimenopauzaal)';
+    const lines = [
+      `Cyclus: dag ${daysSince} — ${phase}`,
+      allCycleStartsSorted.length > 1 ? `Gem. cycluslengte: ${avgCycleLengthAI ?? '?'} dagen (${allCycleStartsSorted.length} cycli geregistreerd)` : '',
+      nextExpectedPeriodAI ? `Verwachte volgende menstruatie: ${nextExpectedPeriodAI} (${daysToNextAI != null ? (daysToNextAI < 0 ? `${Math.abs(daysToNextAI)}d te laat` : daysToNextAI === 0 ? 'vandaag verwacht' : `over ${daysToNextAI} dagen`) : '?'})` : '',
+    ];
+    return lines.filter(Boolean).join('\n');
   })();
 
   // Cyclus-gewicht patroon analyse
   const cycleWeightPattern = (() => {
-    const allStarts = [...(cycleStart ? [cycleStart] : []), ...cycleHistoryArr]
-      .filter((d, i, arr) => arr.indexOf(d) === i)
-      .sort((a, b) => a.localeCompare(b));
+    const allStarts = allCycleStartsSorted;
     if (allStarts.length < 3) return '';
     const weightEntries = allTime.filter(e => e.weight && e.date).sort((a, b) => a.date.localeCompare(b.date));
     if (weightEntries.length < 10) return '';
