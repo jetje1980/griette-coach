@@ -292,6 +292,61 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
 
   const deleteCycleDate = (date) => saveAllCycleDates(allCycleDates.filter(d => d !== date));
 
+  // Cycle-weight deviation map: cycleDay → avg kg above/below that cycle's mean
+  const cycleWeightDeviationMap = (() => {
+    if (allCycleDates.length < 3) return {};
+    const allStartsSorted = [...allCycleDates].sort((a, b) => a.localeCompare(b));
+    const entries = Object.values(logs || {}).filter(e => e.weight && e.date).sort((a, b) => a.date.localeCompare(b.date));
+    if (entries.length < 10) return {};
+    const withDay = entries.map(e => {
+      const starts = allStartsSorted.filter(s => s <= e.date);
+      if (!starts.length) return null;
+      const start = starts[starts.length - 1];
+      const day = Math.floor((new Date(e.date) - new Date(start)) / 86400000) + 1;
+      return day >= 1 && day <= 35 ? { weight: e.weight, cycleDay: day, cycleStart: start } : null;
+    }).filter(Boolean);
+    if (!withDay.length) return {};
+    const means = {};
+    withDay.forEach(e => { if (!means[e.cycleStart]) means[e.cycleStart] = []; means[e.cycleStart].push(e.weight); });
+    Object.keys(means).forEach(k => { const v = means[k]; means[k] = v.reduce((s, x) => s + x, 0) / v.length; });
+    const devs = {};
+    withDay.forEach(e => {
+      const m = means[e.cycleStart]; if (!m) return;
+      if (!devs[e.cycleDay]) devs[e.cycleDay] = [];
+      devs[e.cycleDay].push(+(e.weight - m).toFixed(2));
+    });
+    const result = {};
+    Object.entries(devs).forEach(([d, arr]) => {
+      result[parseInt(d)] = +(arr.reduce((s, v) => s + v, 0) / arr.length).toFixed(2);
+    });
+    return result;
+  })();
+
+  // Project which cycle day it will be on a future date (wraps through full cycles)
+  const getCycleDayAt = (targetDate) => {
+    if (!cycleStart || !avgCycleLength) return null;
+    const days = Math.floor((new Date(targetDate) - new Date(cycleStart)) / 86400000);
+    if (days < 0) return null;
+    return (days % avgCycleLength) + 1;
+  };
+
+  // Get phase-average deviation for a cycle day (falls back to phase mean when exact day unknown)
+  const getCycleDeviation = (cycleDay) => {
+    if (!cycleDay || Object.keys(cycleWeightDeviationMap).length === 0) return null;
+    if (cycleWeightDeviationMap[cycleDay] !== undefined) return cycleWeightDeviationMap[cycleDay];
+    // Fallback: average of the phase this day belongs to
+    const phases = [[1, 5], [6, 13], [14, 16], [17, 35]];
+    for (const [from, to] of phases) {
+      if (cycleDay >= from && cycleDay <= to) {
+        const vals = Object.entries(cycleWeightDeviationMap)
+          .filter(([d]) => parseInt(d) >= from && parseInt(d) <= to)
+          .map(([, v]) => v);
+        return vals.length ? +(vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(2) : null;
+      }
+    }
+    return null;
+  };
+
   const saveWeight = () => {
     const w = parseFloat(weight);
     if (!isNaN(w) && w > 30 && w < 200) saveField('weight', w);
@@ -459,7 +514,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
             </div>
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {upcoming.map(e => {
-                // Strategy calculation per event
+                // Weight projection
                 const eventWeightEntries = Object.values(logs || {})
                   .filter(l => l.weight && l.date >= START_DATE)
                   .sort((a, b) => a.date.localeCompare(b.date));
@@ -472,12 +527,28 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
                   return +(last2.weight + rate * e.daysTo).toFixed(1);
                 })();
                 const wkNeeded = lastW && e.daysTo > 0 ? +(((lastW - GOAL_WEIGHT) / e.daysTo) * 7).toFixed(2) : null;
+
+                // Cycle context at event date
+                const eventCycleDay = getCycleDayAt(e.startDate);
+                const eventCycleDev = getCycleDeviation(eventCycleDay);
+                const cyclePhaseAtEvent = eventCycleDay
+                  ? eventCycleDay <= 5 ? '🩸 menstruatie'
+                  : eventCycleDay <= 13 ? '🌱 folliculair'
+                  : eventCycleDay <= 16 ? '✨ ovulatie'
+                  : '🌙 luteaal'
+                  : null;
+                // Adjusted prognosis (trend - cycle deviation = underlying weight)
+                const projAdjusted = projAtEvent && eventCycleDev != null && Math.abs(eventCycleDev) >= 0.15
+                  ? +(projAtEvent - eventCycleDev).toFixed(1)
+                  : null;
+
                 const strategy = (() => {
                   if (!e.daysTo || e.active) return null;
                   if (e.daysTo <= 7) return 'Focus: herstel, lichte beweging, voldoende slaap en eiwitten.';
                   if (e.daysTo <= 14) return 'Bouw training af de laatste week. Prioriteit: goed slapen, eiwitten, hydratatie.';
                   return 'Regulier schema. 3×/week zone B training, dagelijks eiwitdoel halen.';
                 })();
+
                 return (
                 <div key={e.id} style={{
                   display: 'flex', flexDirection: 'column', gap: 8,
@@ -509,13 +580,28 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
                       )}
                     </div>
                   </div>
-                  {/* Strategy strip */}
-                  {(projAtEvent || strategy) && !e.active && (
+                  {/* Strategy + cycle strip */}
+                  {(projAtEvent || strategy || cyclePhaseAtEvent) && !e.active && (
                     <div style={{ background: `${e.color}10`, borderRadius: 7, padding: '6px 8px', fontSize: 11 }}>
                       {projAtEvent && (
-                        <div style={{ marginBottom: strategy ? 4 : 0 }}>
+                        <div style={{ marginBottom: 3 }}>
                           📊 Prognose op {e.startDate.slice(5).replace('-', '/')}: <strong style={{ color: e.color }}>{projAtEvent} kg</strong>
                           {wkNeeded > 0 && <span style={{ color: 'var(--muted)' }}> · nodig: −{wkNeeded} kg/wk</span>}
+                        </div>
+                      )}
+                      {cyclePhaseAtEvent && (
+                        <div style={{ color: 'var(--muted)', marginBottom: strategy ? 3 : 0 }}>
+                          🌙 Cyclus dag {eventCycleDay} ({cyclePhaseAtEvent})
+                          {eventCycleDev != null && Math.abs(eventCycleDev) >= 0.15 && (
+                            <span style={{ color: eventCycleDev > 0 ? 'var(--alert)' : 'var(--sage)', fontWeight: 600, marginLeft: 4 }}>
+                              · typisch {eventCycleDev > 0 ? '+' : ''}{eventCycleDev} kg vocht
+                            </span>
+                          )}
+                          {projAdjusted && (
+                            <span style={{ color: 'var(--muted)', marginLeft: 4 }}>
+                              → onderliggende trend: <strong>{projAdjusted} kg</strong>
+                            </span>
+                          )}
                         </div>
                       )}
                       {strategy && <div style={{ color: 'var(--muted)' }}>💡 {strategy}</div>}
