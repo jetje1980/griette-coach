@@ -511,6 +511,10 @@ export default function Coach({ logs }) {
   const daysSinceReport = daysSince(reportDate);
   const needsCheck = daysSinceReport >= CHECK_DAYS;
 
+  // Data bijgewerkt na laatste analyse?
+  const lastDataChange = localStorage.getItem('gc_last_data_change');
+  const dataNewerThanReport = !!(lastDataChange && reportDate && lastDataChange > new Date(reportDate + 'T23:59:59').toISOString());
+
   useEffect(() => {
     import('../store').then(({ store }) => store.getMeasurements().then(setMeasurements).catch(() => {}));
   }, []);
@@ -581,6 +585,12 @@ export default function Coach({ logs }) {
           ) : (
             <div style={{ background: 'var(--sage-l)', borderRadius: 10, padding: '10px', marginBottom: 12, fontSize: 11, color: 'var(--sage)' }}>
               ✓ Volgende check over {CHECK_DAYS - daysSinceReport} dag{CHECK_DAYS - daysSinceReport !== 1 ? 'en' : ''}
+            </div>
+          )}
+
+          {dataNewerThanReport && !needsCheck && (
+            <div style={{ background: '#FFF7ED', border: '1px solid #FDBA74', borderRadius: 10, padding: '10px', marginBottom: 12, fontSize: 11, color: '#C2410C', lineHeight: 1.5 }}>
+              📝 Je hebt data bijgewerkt na de laatste analyse — start een nieuwe check voor de meest actuele inzichten.
             </div>
           )}
 

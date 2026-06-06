@@ -58,6 +58,13 @@ function buildContext(logs, measurements) {
   const prikContext = `Huidige Mounjaro-prik: #${huidigePrik.nr} (gegeven ${huidigePrik.date}, ${huidigePrik.dagenGeleden ?? '?'} dagen geleden)${huidigePrik.volgende ? ` | Volgende prik: ${huidigePrik.volgende}` : ' | Laatste prik voor vakantie'}
 Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op volle kracht' : huidigePrik.nr <= 7 ? 'opkomende volle werking — eetlust neemt merkbaar af' : 'volle therapeutische werking — optimale fase'}`;
 
+  // Datumbereik van alle ingevoerde gegevens
+  const dataFrom  = allTime.length ? allTime[allTime.length - 1].date : today;
+  const dataTo    = allTime.length ? allTime[0].date : today;
+  const dataRange = allTime.length
+    ? `Ingevoerde data: ${allTime.length} dag(en) van ${dataFrom} t/m ${dataTo} — ALLEEN ingevoerde dagen, geen aannames voor lege dagen`
+    : 'Nog geen data ingevoerd';
+
   const weights = allTime.filter(l => l.weight).slice(0, 20)
     .map(l => `${l.date}: ${l.weight}kg`);
   const bps = recent.filter(l => l.bp_sys)
@@ -270,6 +277,8 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
   })();
 
   return `
+${dataRange}
+
 GRIETTE — 46 jaar, 163 cm
 Gezondheidsprofiel: long covid herstel, ADHD, waarschijnlijk laat-perimenopauze / vroeg menopauze
 Medicatie: Mounjaro 2.5mg/wk (GLP-1, eetlustremmer + insulinegevoeligheid), Candesartan 12mg/dag (hypertensie), ADHD-meds

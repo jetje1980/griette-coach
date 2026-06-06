@@ -60,6 +60,8 @@ export const store = {
 
   async saveLog(date, data) {
     const local = ls.saveLog(date, data);
+    // Bijhouden wanneer data voor het laatst is ingevoerd (ook met terugwerkende kracht)
+    localStorage.setItem('gc_last_data_change', new Date().toISOString());
     await tryApi(() =>
       fetch(`/api/log/${date}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
     );
