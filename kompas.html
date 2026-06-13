@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mijn Kompas</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#1a1a1a;--paper:#faf8f5;--fog:#f0ede8;
+  --copper:#b5622a;--copper-l:#e8d4c4;--copper-p:#f5ece4;
+  --stone:#8a8078;--stone-l:#d4cfc9;
+  --green:#3d6b4f;--green-l:#c8ddd0;--green-p:#eaf3ee;
+  --blue:#2a5b8a;--blue-p:#e4eef7;
+  --purple:#6b3d8a;--purple-p:#f0e8f7;
+  --warn:#8a6b2a;--warn-p:#f7f0e4;
+}
+body{font-family:'Inter',sans-serif;background:var(--paper);color:var(--ink);font-size:15px;line-height:1.6;min-height:100vh}
+nav{background:var(--ink);color:var(--paper);position:sticky;top:0;z-index:200}
+.nav-inner{max-width:920px;margin:0 auto;display:flex;align-items:stretch}
+.nav-logo{padding:1rem 1.5rem;font-family:'DM Serif Display',serif;font-size:1.1rem;border-right:1px solid #333;white-space:nowrap;display:flex;align-items:center;gap:0.5rem}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#555;transition:background 0.3s;flex-shrink:0}
+.sync-dot.ok{background:var(--green)}
+.sync-dot.saving{background:var(--copper)}
+.sync-dot.err{background:#c0392b}
+.nav-tabs{display:flex;flex:1;overflow-x:auto}
+.nav-tab{padding:0 1.1rem;font-size:0.72rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--stone-l);cursor:pointer;border:none;background:none;font-family:'Inter',sans-serif;border-bottom:2px solid transparent;white-space:nowrap;transition:all 0.15s;display:flex;align-items:center}
+.nav-tab:hover{color:var(--paper)}
+.nav-tab.active{color:var(--paper);border-bottom-color:var(--copper)}
+.nav-xp{padding:0 1.25rem;display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;font-weight:700;color:var(--copper);border-left:1px solid #333;white-space:nowrap}
+.progress-bar{background:var(--ink);padding:0 1.5rem 0.9rem;border-bottom:1px solid #2a2a2a}
+.progress-inner{max-width:920px;margin:0 auto}
+.progress-meta{display:flex;justify-content:space-between;font-size:0.65rem;color:var(--stone-l);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.35rem}
+.progress-track{height:3px;background:#2a2a2a;border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--copper);border-radius:2px;transition:width 0.6s ease}
+.page{display:none;max-width:920px;margin:0 auto;padding:2rem 1.5rem 5rem}
+.page.active{display:block}
+.page-title{font-family:'DM Serif Display',serif;font-size:1.5rem;letter-spacing:-0.02em;margin-bottom:0.25rem}
+.page-sub{font-size:0.83rem;color:var(--stone);margin-bottom:1.75rem}
+.leervraag{background:var(--copper-p);border-left:3px solid var(--copper);padding:1rem 1.25rem;border-radius:0 4px 4px 0;margin-bottom:1.75rem}
+.lq-label{font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--copper);font-weight:700;margin-bottom:0.3rem}
+.leervraag p{font-family:'DM Serif Display',serif;font-style:italic;font-size:0.97rem;line-height:1.5}
+.card{background:white;border:1px solid var(--stone-l);border-radius:6px;padding:1.25rem;margin-bottom:1rem}
+.card-label{font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;margin-bottom:0.65rem}
+.card-label.c{color:var(--copper)}.card-label.g{color:var(--green)}.card-label.b{color:var(--blue)}.card-label.p{color:var(--purple)}.card-label.w{color:var(--warn)}
+.intake-q{font-weight:600;font-size:0.88rem;margin-bottom:0.4rem;line-height:1.4}
+.intake-sub{font-size:0.78rem;color:var(--stone);margin-bottom:0.5rem}
+.opts{display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:0.4rem}
+.opt{font-size:0.77rem;padding:0.3rem 0.7rem;border:1.5px solid var(--stone-l);border-radius:20px;cursor:pointer;background:white;font-family:'Inter',sans-serif;transition:all 0.15s}
+.opt:hover{border-color:var(--copper);color:var(--copper)}
+.opt.sel{background:var(--copper);border-color:var(--copper);color:white}
+.opt.msel{background:var(--blue);border-color:var(--blue);color:white}
+textarea,input[type=text]{width:100%;border:1.5px solid var(--stone-l);border-radius:4px;padding:0.55rem 0.7rem;font-family:'Inter',sans-serif;font-size:0.84rem;line-height:1.6;resize:vertical;background:white;color:var(--ink);transition:border-color 0.15s}
+textarea{min-height:68px}
+textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
+.divider{height:1px;background:var(--stone-l);margin:1.75rem 0}
+.intake-prog{background:var(--fog);border-radius:4px;padding:0.7rem 1rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem}
+.ip-pct{font-family:'DM Serif Display',serif;font-size:1.4rem;color:var(--copper);min-width:3rem}
+.ip-track{flex:1;height:4px;background:var(--stone-l);border-radius:2px;overflow:hidden}
+.ip-fill{height:100%;background:var(--copper);border-radius:2px;transition:width 0.4s}
+.ip-status{font-size:0.7rem;color:var(--stone)}
+/* SESSIES */
+.slist{display:flex;flex-direction:column;gap:1px;background:var(--stone-l);border-radius:8px;overflow:hidden;margin-bottom:2rem}
+.srow{background:var(--paper);display:grid;grid-template-columns:2.4rem 1fr auto;gap:1rem;padding:1.25rem;cursor:pointer;transition:background 0.15s;align-items:start}
+.srow:hover:not(.locked){background:var(--fog)}
+.srow.locked{opacity:0.5;cursor:default}
+.srow.active{background:var(--copper-p)}
+.srow.done{background:var(--green-p)}
+.snum{width:2.2rem;height:2.2rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'DM Serif Display',serif;font-size:1rem;flex-shrink:0}
+.srow.locked .snum{background:var(--stone-l);color:var(--stone)}
+.srow.active .snum{background:var(--copper);color:white}
+.srow.done .snum{background:var(--green);color:white}
+.stitle{font-family:'DM Serif Display',serif;font-size:1rem;margin-bottom:0.15rem}
+.ssub{font-size:0.77rem;color:var(--stone)}
+.stags{display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.45rem}
+.tag{font-size:0.6rem;letter-spacing:0.05em;text-transform:uppercase;padding:0.15rem 0.45rem;border-radius:2px;font-weight:700}
+.tag.c{background:var(--copper-l);color:var(--copper)}.tag.g{background:var(--green-l);color:var(--green)}.tag.b{background:var(--blue-p);color:var(--blue)}.tag.p{background:var(--purple-p);color:var(--purple)}
+.sxp{font-size:0.7rem;font-weight:700;color:var(--copper);white-space:nowrap;padding-top:0.15rem}
+.srow.done .sxp{color:var(--green)}.srow.locked .sxp{color:var(--stone)}
+.sdetail{display:none;padding:1.25rem;background:white;border-top:1px solid var(--stone-l)}
+.sdetail.open{display:block}
+.dtitle{font-size:0.63rem;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;color:var(--copper);margin-bottom:0.4rem}
+.hw-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.7rem;margin-bottom:1rem}
+.hw-card{border:1.5px solid var(--stone-l);border-radius:6px;padding:0.85rem}
+.hw-card.werk{border-color:var(--blue-p);background:var(--blue-p)}
+.hw-card.thuis{border-color:var(--purple-p);background:var(--purple-p)}
+.hw-card.netwerk{border-color:var(--warn-p);background:var(--warn-p)}
+.hw-card.familie{border-color:var(--green-p);background:var(--green-p)}
+.hw-domain{font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;margin-bottom:0.35rem}
+.hw-card.werk .hw-domain{color:var(--blue)}.hw-card.thuis .hw-domain{color:var(--purple)}.hw-card.netwerk .hw-domain{color:var(--warn)}.hw-card.familie .hw-domain{color:var(--green)}
+.hw-text{font-size:0.81rem;line-height:1.5}
+.hw-check{display:flex;align-items:flex-start;gap:0.45rem;margin-top:0.55rem;cursor:pointer}
+.hw-check input{margin-top:0.2rem;accent-color:var(--copper);cursor:pointer;flex-shrink:0}
+.hw-check span{font-size:0.73rem;color:var(--stone)}
+/* FEEDBACK */
+.fbmod{background:var(--fog);border:1.5px solid var(--stone-l);border-radius:6px;padding:0.9rem;margin-top:0.75rem}
+.fb-opts{display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:0.65rem}
+.fb-opt{font-size:0.74rem;padding:0.28rem 0.6rem;border:1.5px solid var(--stone-l);border-radius:20px;cursor:pointer;background:white;font-family:'Inter',sans-serif;transition:all 0.15s}
+.fb-opt:hover{border-color:var(--copper);color:var(--copper)}
+.fb-opt.sel{background:var(--copper);border-color:var(--copper);color:white}
+.upload-area{border:2px dashed var(--stone-l);border-radius:4px;padding:0.65rem;text-align:center;font-size:0.76rem;color:var(--stone);cursor:pointer;margin-top:0.5rem;transition:border-color 0.15s}
+.upload-area:hover{border-color:var(--copper);color:var(--copper)}
+.previews{display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.4rem}
+.preview-img{width:58px;height:58px;object-fit:cover;border-radius:3px;border:1px solid var(--stone-l)}
+.hidden-file{display:none}
+/* RELATIES */
+.relatie-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.65rem;margin-bottom:1rem}
+.rel-card{border:1.5px solid var(--stone-l);border-radius:6px;padding:0.9rem;cursor:pointer;transition:all 0.15s;background:white}
+.rel-card:hover{border-color:var(--copper);background:var(--copper-p)}
+.rel-card.has-data{border-color:var(--green);background:var(--green-p)}
+.rel-icon{font-size:1.4rem;margin-bottom:0.3rem}
+.rel-name{font-size:0.82rem;font-weight:600}
+.rel-status{font-size:0.68rem;color:var(--stone);margin-top:0.15rem}
+.rel-detail{display:none;background:white;border:1.5px solid var(--copper-l);border-radius:6px;padding:1rem;margin-top:0.5rem}
+.rel-detail.open{display:block}
+.rel-field{margin-bottom:0.75rem}
+.rel-field-label{font-size:0.65rem;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;color:var(--stone);margin-bottom:0.3rem}
+.rel-checks{display:flex;gap:1rem;margin-top:0.4rem}
+.rel-check{display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;cursor:pointer}
+.rel-check input{accent-color:var(--green);cursor:pointer}
+/* VINKLIJST */
+.checklist{display:flex;flex-direction:column;gap:0.4rem}
+.ci{display:flex;align-items:center;gap:0.65rem;padding:0.65rem 0.85rem;background:white;border:1.5px solid var(--stone-l);border-radius:5px;cursor:pointer;transition:all 0.15s}
+.ci:hover{border-color:var(--copper)}
+.ci.done{background:var(--green-p);border-color:var(--green-l)}
+.ci input[type=checkbox]{width:15px;height:15px;accent-color:var(--green);flex-shrink:0;cursor:pointer}
+.ci-label{font-size:0.83rem;flex:1}
+.ci.done .ci-label{text-decoration:line-through;color:var(--stone)}
+.ci-tag{font-size:0.58rem;letter-spacing:0.06em;text-transform:uppercase;font-weight:700;padding:0.13rem 0.38rem;border-radius:2px;white-space:nowrap}
+.ci-tag.jaap{background:#fde8d4;color:#8a3d0a}
+.ci-tag.werk{background:var(--blue-p);color:var(--blue)}
+.ci-tag.thuis{background:var(--purple-p);color:var(--purple)}
+.ci-tag.netwerk{background:var(--warn-p);color:var(--warn)}
+.ci-tag.familie{background:var(--green-l);color:var(--green)}
+/* TURVEN */
+.trow{display:flex;align-items:center;gap:0.7rem;margin-bottom:0.5rem}
+.tlabel{font-size:0.8rem;font-weight:500;min-width:78px}
+.tdots{display:flex;gap:0.22rem;flex-wrap:wrap}
+.dot{width:15px;height:15px;border-radius:50%;border:2px solid var(--copper-l);cursor:pointer;transition:all 0.15s;background:white}
+.dot.filled{background:var(--copper);border-color:var(--copper)}
+.tcount{font-size:0.7rem;color:var(--stone);min-width:1.5rem}
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:0.35rem;padding:0.5rem 1rem;border-radius:4px;font-family:'Inter',sans-serif;font-size:0.78rem;font-weight:600;cursor:pointer;border:none;transition:all 0.15s}
+.btn-p{background:var(--copper);color:white}.btn-p:hover{background:#9d5224}
+.btn-g{background:var(--green);color:white}.btn-g:hover{background:#2e5239}
+.btn-ghost{background:white;color:var(--ink);border:1.5px solid var(--stone-l)}.btn-ghost:hover{border-color:var(--copper);color:var(--copper)}
+.btn-row{display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem}
+/* CT */
+.ct-wrap{border:1px solid var(--stone-l);border-radius:6px;overflow:hidden;margin-top:0.75rem;display:none}
+.ct-wrap.open{display:block}
+.ct-hdr{background:var(--ink);color:var(--paper);padding:0.6rem 1rem;font-size:0.77rem;display:flex;justify-content:space-between;align-items:center}
+.ct-hdr span{color:var(--stone-l);font-size:0.67rem}
+.ct-canvas{width:100%;height:310px;background:#f7f4ef;position:relative;overflow:hidden}
+.figuur{position:absolute;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:grab;user-select:none;touch-action:none}
+.figuur:active{cursor:grabbing}
+.fig-circle{width:38px;height:38px;border-radius:50%;border:2.5px solid;display:flex;align-items:center;justify-content:center;font-size:1rem}
+.fig-label{font-size:0.58rem;font-weight:600;text-align:center;max-width:54px;line-height:1.2}
+.ct-vraag{padding:0.6rem 1rem;background:var(--copper-p);font-size:0.77rem;font-style:italic;border-top:1px solid var(--copper-l)}
+.ct-ctrl{padding:0.55rem 1rem;background:white;border-top:1px solid var(--stone-l);display:flex;gap:0.4rem;flex-wrap:wrap}
+.ct-btn{font-size:0.68rem;padding:0.28rem 0.6rem;border:1.5px solid var(--stone-l);background:white;border-radius:3px;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.15s}
+.ct-btn:hover{border-color:var(--copper);color:var(--copper)}
+.ct-btn.p{background:var(--copper);color:white;border-color:var(--copper)}
+/* ACH */
+.ach{display:none;position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);color:white;padding:0.9rem 1.2rem;border-radius:8px;border-left:4px solid var(--copper);font-size:0.8rem;box-shadow:0 8px 32px rgba(0,0,0,0.25);z-index:999;max-width:250px;animation:slideUp 0.3s ease}
+.ach.show{display:block}
+.ach-title{font-weight:700;margin-bottom:0.2rem}
+.ach-sub{color:var(--stone-l);font-size:0.7rem}
+@keyframes slideUp{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
+#sync-status{position:fixed;bottom:1rem;left:1rem;font-size:0.65rem;color:var(--stone);background:rgba(250,248,245,0.95);padding:0.25rem 0.55rem;border-radius:3px;border:1px solid var(--stone-l);z-index:300;letter-spacing:0.04em;text-transform:uppercase;pointer-events:none;opacity:0;transition:opacity 0.3s}
+#reset-btn{position:fixed;bottom:1rem;right:1rem;font-size:0.63rem;color:var(--stone);background:white;border:1px solid var(--stone-l);padding:0.25rem 0.5rem;border-radius:3px;cursor:pointer;font-family:'Inter',sans-serif;opacity:0.5;transition:opacity 0.2s;z-index:300;letter-spacing:0.04em;text-transform:uppercase}
+#reset-btn:hover{opacity:1}
+.claude-link{display:flex;align-items:center;gap:0.75rem;background:var(--ink);color:var(--paper);border-radius:6px;padding:0.85rem 1.1rem;margin-bottom:1.5rem;text-decoration:none;transition:background 0.15s}
+.claude-link:hover{background:#2a2a2a}
+.claude-link-icon{font-size:1.3rem;flex-shrink:0}
+.claude-link-body{}
+.claude-link-label{font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--stone-l);font-weight:700;margin-bottom:0.1rem}
+.claude-link-text{font-size:0.85rem;font-weight:600}
+.claude-link-sub{font-size:0.72rem;color:var(--stone-l);margin-top:0.1rem}
+.loading-screen{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;z-index:1000;font-family:'DM Serif Display',serif;font-size:1.2rem;color:var(--stone);flex-direction:column;gap:0.5rem}
+.loading-screen.hidden{display:none}
+.loading-dot{width:8px;height:8px;border-radius:50%;background:var(--copper);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:0.3}50%{opacity:1}}
+@media(max-width:600px){.nav-logo{padding:0.7rem 0.9rem;font-size:0.9rem}.nav-tab{padding:0 0.7rem;font-size:0.66rem}.page{padding:1.25rem 1rem 5rem}.srow{grid-template-columns:2rem 1fr;gap:0.7rem}.sxp{display:none}.hw-grid{grid-template-columns:1fr}.relatie-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div class="loading-screen" id="loading">
+  <div class="loading-dot"></div>
+  <div>Kompas laden…</div>
+</div>
+
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo"><div class="sync-dot" id="sync-dot"></div>🧭 Kompas</div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showPage('intake')" id="tab-intake">Intake</button>
+      <button class="nav-tab" onclick="showPage('sessies')" id="tab-sessies">Sessies</button>
+      <button class="nav-tab" onclick="showPage('relaties')" id="tab-relaties">Relaties</button>
+      <button class="nav-tab" onclick="showPage('vinklijst')" id="tab-vinklijst">Vinklijst</button>
+      <button class="nav-tab" onclick="showPage('turven')" id="tab-turven">Turven</button>
+    </div>
+    <div class="nav-xp">⬡ <span id="xp-total">0</span></div>
+  </div>
+</nav>
+<div class="progress-bar">
+  <div class="progress-inner">
+    <div class="progress-meta"><span>Voortgang</span><span id="pct-lbl">0%</span></div>
+    <div class="progress-track"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- ═══ INTAKE ═══ -->
+<div class="page active" id="page-intake">
+  <div class="page-title">Intakegesprek</div>
+  <div class="page-sub">Vul dit in vóór sessie 1. Alles wordt opgeslagen in jouw beveiligde database.</div>
+  <div class="leervraag"><div class="lq-label">Leervraag</div><p>"Hoe blijf ik aanwezig — met mijn behoefte, mijn positie, mijn enthousiasme — op het moment dat ik de neiging voel om terug te stappen, te sussen of het zelf op te lossen?"</p></div>
+  <a href="https://claude.ai/project/01973e33-e0b1-7cf6-8c71-3e61eba04728" target="_blank" class="claude-link">
+    <div class="claude-link-icon">🤖</div>
+    <div class="claude-link-body">
+      <div class="claude-link-label">Coachingsgesprek</div>
+      <div class="claude-link-text">Open Claude — bespreek je intake</div>
+      <div class="claude-link-sub">Plak je antwoorden of stel een vraag over wat je invult</div>
+    </div>
+    <div style="margin-left:auto;color:var(--stone-l);font-size:0.9rem">↗</div>
+  </a>
+  <div class="intake-prog"><div class="ip-pct" id="ip-pct">0%</div><div class="ip-track"><div class="ip-fill" id="ip-fill" style="width:0%"></div></div><div class="ip-status" id="ip-status">Begin hieronder</div></div>
+
+  <div class="card"><div class="card-label c">Blok 1 — Energiepeil</div>
+    <div class="intake-q">1. Hoe sta je er nu in?</div>
+    <div class="opts" id="iq1"><button class="opt" onclick="selS('iq1',this,'Sterk en helder')">Sterk en helder</button><button class="opt" onclick="selS('iq1',this,'Goed maar druk')">Goed maar druk</button><button class="opt" onclick="selS('iq1',this,'Moe maar functioneel')">Moe maar functioneel</button><button class="opt" onclick="selS('iq1',this,'Uitgeput')">Uitgeput</button></div>
+    <div class="intake-q" style="margin-top:1rem">2. Wat kost het meeste energie? (meerdere mogelijk)</div>
+    <div class="opts" id="iq2"><button class="opt" onclick="selM('iq2',this,'Werkstagnatie')">Werkstagnatie</button><button class="opt" onclick="selM('iq2',this,'Fysiek')">Fysiek</button><button class="opt" onclick="selM('iq2',this,'Familiedynamiek')">Familiedynamiek</button><button class="opt" onclick="selM('iq2',this,'Toekomst')">Toekomst</button><button class="opt" onclick="selM('iq2',this,'Niet gehoord')">Niet gehoord</button><button class="opt" onclick="selM('iq2',this,'Anders')">Anders</button></div>
+    <textarea id="iq2t" placeholder="Toelichting..." oninput="saveTA('iq2t')" style="margin-top:0.5rem"></textarea>
+  </div>
+  <div class="divider"></div>
+
+  <div class="card"><div class="card-label c">Blok 2 — Patronen & triggers</div>
+    <div class="intake-q">3. Wanneer trek je je het vaakst terug?</div>
+    <div class="opts" id="iq3"><button class="opt" onclick="selM('iq3',this,'Te veel ruimte')">Te veel ruimte</button><button class="opt" onclick="selM('iq3',this,'Spanning bij ander')">Spanning bij ander</button><button class="opt" onclick="selM('iq3',this,'Enthousiasme zonder respons')">Enthousiasme zonder respons</button><button class="opt" onclick="selM('iq3',this,'Iets nodig maar niet vragen')">Iets nodig maar niet vragen</button><button class="opt" onclick="selM('iq3',this,'Als ik moe ben')">Als ik moe ben</button><button class="opt" onclick="selM('iq3',this,'In vergaderingen')">In vergaderingen</button><button class="opt" onclick="selM('iq3',this,'Thuis')">Thuis</button></div>
+    <div class="intake-q" style="margin-top:1rem">4. Wat doe je ná het terugtrekken?</div>
+    <div class="opts" id="iq4"><button class="opt" onclick="selM('iq4',this,'Zelf oplossen')">Zelf oplossen</button><button class="opt" onclick="selM('iq4',this,'Verzachtend appje')">Verzachtend appje</button><button class="opt" onclick="selM('iq4',this,'Piekeren')">Piekeren</button><button class="opt" onclick="selM('iq4',this,'Praten met iemand anders')">Praten met iemand anders</button><button class="opt" onclick="selM('iq4',this,'Loslaten')">Loslaten</button><button class="opt" onclick="selM('iq4',this,'Boos op mezelf')">Boos op mezelf</button></div>
+    <div class="intake-q" style="margin-top:1rem">5. Beschrijf een moment waarop je NIET terugtrad — wat maakte dat mogelijk?</div>
+    <textarea id="iq5" placeholder="Vertel kort..." oninput="saveTA('iq5')"></textarea>
+  </div>
+  <div class="divider"></div>
+
+  <div class="card"><div class="card-label c">Blok 3 — Relaties & systeem</div>
+    <div class="intake-q">6. Hoe is de relatie met Nathalie nu?</div>
+    <div class="opts" id="iq6"><button class="opt" onclick="selS('iq6',this,'Warm en goed')">Warm en goed</button><button class="opt" onclick="selS('iq6',this,'Functioneel maar voorzichtig')">Functioneel maar voorzichtig</button><button class="opt" onclick="selS('iq6',this,'Spanning, niet uitgesproken')">Spanning, niet uitgesproken</button><button class="opt" onclick="selS('iq6',this,'Langs elkaar heen')">Langs elkaar heen</button><button class="opt" onclick="selS('iq6',this,'Weet ik niet')">Weet ik niet</button></div>
+    <div class="intake-q" style="margin-top:1rem">7. Wat mis je in de samenwerking met je driehoek?</div>
+    <textarea id="iq7" placeholder="Concreet..." oninput="saveTA('iq7')"></textarea>
+    <div class="intake-q" style="margin-top:1rem">8. Hoe is de dynamiek met je manager?</div>
+    <div class="opts" id="iq8"><button class="opt" onclick="selS('iq8',this,'Ruimte en steun')">Ruimte en steun</button><button class="opt" onclick="selS('iq8',this,'Neutraal')">Neutraal</button><button class="opt" onclick="selS('iq8',this,'Druk / tegenstrijdig')">Druk / tegenstrijdig</button><button class="opt" onclick="selS('iq8',this,'Onduidelijke verwachting')">Onduidelijke verwachting</button><button class="opt" onclick="selS('iq8',this,'Weinig contact')">Weinig contact</button></div>
+    <div class="intake-q" style="margin-top:1rem">9. Hoe voelt contact met Jaap nu?</div>
+    <div class="opts" id="iq9"><button class="opt" onclick="selS('iq9',this,'Goed, ik pak het op')">Goed, ik pak het op</button><button class="opt" onclick="selS('iq9',this,'Ik stel het uit')">Ik stel het uit</button><button class="opt" onclick="selS('iq9',this,'Weet niet wat ik wil vragen')">Weet niet wat ik wil vragen</button><button class="opt" onclick="selS('iq9',this,'Voelt spannend')">Voelt spannend</button></div>
+  </div>
+  <div class="divider"></div>
+
+  <div class="card"><div class="card-label c">Blok 4 — Familie & herkomst</div>
+    <div class="intake-q">10. Jouw plek in het gezin van herkomst?</div>
+    <div class="opts" id="iq10"><button class="opt" onclick="selM('iq10',this,'De stille')">De stille</button><button class="opt" onclick="selM('iq10',this,'De verzorger')">De verzorger</button><button class="opt" onclick="selM('iq10',this,'De regisseur')">De regisseur</button><button class="opt" onclick="selM('iq10',this,'De buitenstaander')">De buitenstaander</button><button class="opt" onclick="selM('iq10',this,'De verbinder')">De verbinder</button><button class="opt" onclick="selM('iq10',this,'Degene die het goed deed')">Degene die het goed deed</button></div>
+    <textarea id="iq10t" placeholder="Toelichting..." oninput="saveTA('iq10t')" style="margin-top:0.5rem"></textarea>
+    <div class="intake-q" style="margin-top:1rem">11. Herken je bij je zussen het patroon zien→benoemen→sst→terugtrekken?</div>
+    <div class="opts" id="iq11"><button class="opt" onclick="selS('iq11',this,'Ja, heel duidelijk')">Ja, heel duidelijk</button><button class="opt" onclick="selS('iq11',this,'Soms')">Soms</button><button class="opt" onclick="selS('iq11',this,'Minder dan vroeger')">Minder dan vroeger</button><button class="opt" onclick="selS('iq11',this,'Eigenlijk niet')">Eigenlijk niet</button></div>
+    <div class="intake-q" style="margin-top:1rem">12. Wat wil je in familierelaties dit traject oefenen of loslaten?</div>
+    <textarea id="iq12" placeholder="Vrij..." oninput="saveTA('iq12')"></textarea>
+  </div>
+  <div class="divider"></div>
+
+  <div class="card"><div class="card-label c">Blok 5 — Zelfbeeld & mandaat</div>
+    <div class="intake-q">13. Welk beeld van jezelf draag je mee dat je van iemand anders overgenomen hebt?</div>
+    <textarea id="iq13" placeholder="Bijv: 'ik ben te veel', 'meer interimmer dan bestuurder'..." oninput="saveTA('iq13')"></textarea>
+    <div class="intake-q" style="margin-top:1rem">14. Waar verlang je het meest naar?</div>
+    <div class="opts" id="iq14"><button class="opt" onclick="selM('iq14',this,'Erkend in mijn rol')">Erkend in mijn rol</button><button class="opt" onclick="selM('iq14',this,'Echte samenwerking')">Echte samenwerking</button><button class="opt" onclick="selM('iq14',this,'Ruimte om te bouwen')">Ruimte om te bouwen</button><button class="opt" onclick="selM('iq14',this,'Minder alleen hierin')">Minder alleen hierin</button><button class="opt" onclick="selM('iq14',this,'Meer energie')">Meer energie</button><button class="opt" onclick="selM('iq14',this,'Weten wat de volgende stap is')">Volgende stap weten</button></div>
+    <div class="intake-q" style="margin-top:1rem">15. Wat hoop je dat er aan het einde van dit traject anders is?</div>
+    <textarea id="iq15" placeholder="In je eigen woorden..." oninput="saveTA('iq15')"></textarea>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-p" onclick="completeIntake()">✓ Intake afronden (+50 XP)</button>
+  </div>
+  <div style="margin-top:0.75rem;padding:0.65rem 0.9rem;background:var(--green-p);border-radius:4px;font-size:0.78rem;color:var(--green);border:1px solid var(--green-l)">✓ Je antwoorden worden automatisch opgeslagen. Klik de Claude-link hierboven — ik haal alles op uit je database.</div>
+</div>
+
+<!-- ═══ SESSIES ═══ -->
+<div class="page" id="page-sessies">
+  <div class="page-title">Sessies</div>
+  <div class="page-sub">6 zaterdagen, elk een laag dieper.</div>
+  <div class="leervraag"><div class="lq-label">Leervraag</div><p>"Hoe blijf ik aanwezig — met mijn behoefte, mijn positie, mijn enthousiasme — op het moment dat ik de neiging voel om terug te stappen, te sussen of het zelf op te lossen?"</p></div>
+  <div class="slist" id="slist"></div>
+</div>
+
+<!-- ═══ RELATIES ═══ -->
+<div class="page" id="page-relaties">
+  <div class="page-title">Relatiekaart</div>
+  <div class="page-sub">Per sessie: wat heb je waargenomen in elk relatiedomein? Klik op een relatie om in te vullen.</div>
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-label c">Sessie</div>
+    <div class="opts" id="rel-sessie-sel" style="margin-bottom:0"></div>
+  </div>
+  <div class="relatie-grid" id="relatie-grid"></div>
+  <div id="rel-detail-wrap"></div>
+</div>
+
+<!-- ═══ VINKLIJST ═══ -->
+<div class="page" id="page-vinklijst">
+  <div class="page-title">Vinklijst</div>
+  <div class="page-sub">Alle huiswerk en acties op één plek.</div>
+  <div class="card" style="margin-bottom:1rem"><div class="card-label w">⭐ Prioriteit</div><div class="checklist" id="cl-priority"></div></div>
+  <div class="card" style="margin-bottom:1rem"><div class="card-label b">Werk</div><div class="checklist" id="cl-werk"></div></div>
+  <div class="card" style="margin-bottom:1rem"><div class="card-label p">Thuis</div><div class="checklist" id="cl-thuis"></div></div>
+  <div class="card" style="margin-bottom:1rem"><div class="card-label w">Netwerk</div><div class="checklist" id="cl-netwerk"></div></div>
+  <div class="card"><div class="card-label g">Familie</div><div class="checklist" id="cl-familie"></div></div>
+</div>
+
+<!-- ═══ TURVEN ═══ -->
+<div class="page" id="page-turven">
+  <div class="page-title">Turven</div>
+  <div class="page-sub">Klik op een stip om een moment te turven.</div>
+  <div class="card" style="margin-bottom:1rem"><div class="card-label c">Alarmwoorden</div><div id="trows"></div><button class="btn btn-ghost" style="margin-top:0.65rem;font-size:0.76rem" onclick="addTurvenWord()">+ Woord toevoegen</button></div>
+  <div class="card"><div class="card-label c">Notities</div><textarea id="tnotes" placeholder="Waar, met wie, wat had je nodig?" oninput="saveTurvenNotes()"></textarea></div>
+</div>
+
+<div class="ach" id="ach"><div class="ach-title" id="ach-t"></div><div class="ach-sub" id="ach-s"></div></div>
+<div id="sync-status">✓ Opgeslagen</div>
+<button id="reset-btn" onclick="resetAll()">↺ Reset</button>
+
+<script>
+// ══════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════
+const API = 'https://osuqtfsxmquwqsbgzlqn.supabase.co/functions/v1/kompas-api';
+const KEY = 'kompas_griette_2026';
+const XPV = {intake:50,s1:80,s2:90,s3:100,s4:110,s5:120,s6:150};
+const TOTAL_XP = Object.values(XPV).reduce((a,b)=>a+b,0);
+
+const RELATIES = [
+  {id:'duurt',icon:'💑',name:'Duurt',sub:'Partner'},
+  {id:'kinderen',icon:'👧',name:'Kinderen',sub:'Gezin'},
+  {id:'zussen',icon:'👯',name:'Zussen',sub:'Familie'},
+  {id:'moeder',icon:'👩',name:'Moeder',sub:'Familie'},
+  {id:'vader',icon:'👨',name:'Vader',sub:'Familie'},
+  {id:'medewerkers',icon:'👥',name:'Medewerkers',sub:'Werk — hiërarchisch onder'},
+  {id:'gelijken',icon:'🤝',name:'Gelijken',sub:'Werk — onderhandelen/samenwerken'},
+  {id:'hierarchisch',icon:'🏛️',name:'Hiërarchisch boven',sub:'Werk — manager/ST'},
+  {id:'vriendinnengroep',icon:'💬',name:'Vriendinnengroep',sub:'Netwerk'},
+  {id:'vriendin1op1',icon:'🫶',name:'Vriendin 1-op-1',sub:'Netwerk'},
+  {id:'jaap',icon:'☕',name:'Jaap',sub:'Netwerk — sparring'},
+  {id:'frederike',icon:'✨',name:'Frederike',sub:'Netwerk'},
+];
+
+const SESSIE_DATA = [
+  {id:1,title:'De kaart van het systeem',sub:'Wie staat waar — en waar ben jij?',tags:[{l:'Opstelling',c:'c'},{l:'Ordening',c:'c'}],focus:'Je zet je driehoek op — jij, Nathalie, Ellis, managers. We kijken wie hoe staat en waar jij staat.',ct:true,
+    hw:[{d:'werk',t:'Schrijf in drie zinnen op wat jouw rol in de driehoek is — niet hoe die gedefinieerd is, maar hoe jij hem ervaart.',id:'hw-1-werk'},{d:'thuis',t:'Vertel aan iemand thuis één ding wat je nu in het werk bezig houdt — zonder het op te lossen.',id:'hw-1-thuis'},{d:'netwerk',t:'App Jaap terug. Gebruik één van de sparrvragen uit je kompas.',id:'hw-1-netwerk',prio:true,jaap:true},{d:'familie',t:'Kies één moment met een zus: zeg de zin die je normaal inslikt. Één zin, geen sorry.',id:'hw-1-familie'}],
+    fbo:['Gedaan en het voelde goed','Gedaan maar ongemakkelijk','Half gedaan','Nog niet']},
+  {id:2,title:'Het moment van terugtrekken',sub:'Wat gebeurt er in je lijf vóórdat je sst zegt?',tags:[{l:'Patroon',c:'c'},{l:'Turven',c:'g'}],focus:'Terug naar een concreet moment. Niet analyseren — voelen.',ct:false,
+    hw:[{d:'werk',t:'Noteer elke keer deze week dat je iets wil zeggen maar inslikt. Alleen waarnemen, nog niet veranderen.',id:'hw-2-werk'},{d:'thuis',t:'Observeer wanneer je thuis begint te "regelen" terwijl je eigenlijk iets nodig hebt.',id:'hw-2-thuis'},{d:'netwerk',t:'Stuur één iemand in je netwerk een bericht zonder agenda — alleen contact.',id:'hw-2-netwerk'},{d:'familie',t:'Ga een gesprek met een zus in zonder van tevoren te bedenken wat je zegt.',id:'hw-2-familie'}],
+    fbo:['Patroon duidelijk herkend','Soms herkend','Nauwelijks','Te druk geweest']},
+  {id:3,title:'Begrenzen zonder verbreken',sub:'Roos van Leary — boven zonder boven te willen',tags:[{l:'Roos van Leary',c:'b'},{l:'Oefening',c:'c'}],focus:'Grenzen stellen als feit, niet als verwijt. Met behoud van contact.',ct:false,
+    hw:[{d:'werk',t:'Zeg deze week één keer een grens zonder uitleg. Één zin, geen sorry.',id:'hw-3-werk'},{d:'thuis',t:'Vraag iemand thuis iets over te nemen zonder het eerst zelf te proberen.',id:'hw-3-thuis'},{d:'netwerk',t:'Sla één verzoek of kans af die niet bij je past — vriendelijk, zonder smoesjes.',id:'hw-3-netwerk'},{d:'familie',t:'Oefenzin met familie: "Ik ga eraf, neem over." Merk wat er gebeurt.',id:'hw-3-familie'}],
+    fbo:['Grens gezet en gehouden','Gezet maar daarna gesust','Geprobeerd maar ingeslikte','Nog niet']},
+  {id:4,title:'Geven zonder entreebewijs',sub:'Balans in geven en nemen — systemisch',tags:[{l:'Systemisch',c:'c'},{l:'Opstelling',c:'c'}],focus:'Balans in geven en nemen in driehoek en breder. Opstelling rondom energie.',ct:true,
+    hw:[{d:'werk',t:'Schrijf op wat je de afgelopen maand gaf aan je driehoek én wat je terugkreeg. Eerlijk tellen.',id:'hw-4-werk'},{d:'thuis',t:'Vraag iets voor jezelf — groot of klein — zonder er gezelligheid van te maken.',id:'hw-4-thuis'},{d:'netwerk',t:'Deed je de komende week iets voor iemand in je netwerk uit angst of uit keuze?',id:'hw-4-netwerk'},{d:'familie',t:'Laat een familielid jou helpen. Niet andersom.',id:'hw-4-familie'}],
+    fbo:['Balans helder geworden','Iets van gezien','Moeilijk om toe te geven','Te pijnlijk nu']},
+  {id:5,title:'Frames wegen, niet tekenen',sub:'Wat hoort bij jou, wat leg je terug?',tags:[{l:'Identiteit',c:'p'},{l:'Verstrikkingen',c:'c'}],focus:'Frames die over je zijn neergelegd. Wat klopt? Wat is niet van jou?',ct:false,
+    hw:[{d:'werk',t:'Eén frame dat iemand op het werk over je neerlegde. Weeg: wat klopt, wat leg je terug?',id:'hw-5-werk'},{d:'thuis',t:'Is er een verwachting thuis die eigenlijk niet van jou is? Schrijf hem op.',id:'hw-5-thuis'},{d:'netwerk',t:'Vraag iemand in je netwerk: "Hoe zie jij mij eigenlijk?" Luister zonder te corrigeren.',id:'hw-5-netwerk'},{d:'familie',t:'Welk familieframe wil je dit jaar definitief teruggeven?',id:'hw-5-familie'}],
+    fbo:['Frame benoemd en teruggelegd','Benoemd maar moeilijk los','Nog aan het uitzoeken','Te dichtbij nu']},
+  {id:6,title:'De volgende stap — met mandaat',sub:'Wat neem ik mee? Waar ga ik naartoe?',tags:[{l:'Integratie',c:'g'},{l:'Toekomst',c:'g'}],focus:'Terugkijken én vooruitkijken. Welk mandaat neem je mee?',ct:false,
+    hw:[{d:'werk',t:'Schrijf je eigen functieprofiel — niet voor HR, maar voor jezelf. Wat is jouw mandaat?',id:'hw-6-werk'},{d:'thuis',t:'Deel één inzicht uit dit traject met iemand die dichtbij staat.',id:'hw-6-thuis'},{d:'netwerk',t:'Plan één gesprek met Jaap of Frederike over de volgende stap.',id:'hw-6-netwerk'},{d:'familie',t:'Schrijf een brief aan je jongere zelf — wat weet je nu dat je haar had willen meegeven?',id:'hw-6-familie'}],
+    fbo:['Helder beeld','Richting maar nog niet concreet','Veel geleerd maar zoekend','Meer tijd nodig']},
+];
+
+const CT_Q = {
+  1:['Zet eerst jezelf neer. Waar sta je van nature?','Zet Nathalie. Hoe dichtbij voelt ze?','Zet Ellis — nieuw in het systeem.','Voeg je manager toe.','Voeg Nathalie\'s manager toe.','Wie staat centraal? Klopt dat?'],
+  4:['Zet jezelf in het midden. Energie begint bij jou.','Wie trekt het meeste van je energie?','Waar geef je energie die je niet terugkrijgt?','Wat geeft jou energie? Zet dat dichtbij.','Wat zegt dit beeld?']
+};
+const CT_FIGS = {
+  1:[{id:'jij',e:'🟠',l:'Jij',c:'#b5622a',bg:'#f5ece4',x:140,y:140},{id:'nathalie',e:'🔵',l:'Nathalie',c:'#3d6b4f',bg:'#c8ddd0',x:260,y:100},{id:'ellis',e:'🟢',l:'Ellis',c:'#3d6b4f',bg:'#c8ddd0',x:360,y:175},{id:'jmgr',e:'⬛',l:'Jouw mgr',c:'#1a1a1a',bg:'#d4cfc9',x:85,y:50},{id:'nmgr',e:'⬜',l:'Nat.mgr',c:'#8a8078',bg:'#ede9e4',x:330,y:42}],
+  4:[{id:'jij',e:'🟠',l:'Jij',c:'#b5622a',bg:'#f5ece4',x:200,y:130},{id:'driehoek',e:'🔷',l:'Driehoek',c:'#3d6b4f',bg:'#c8ddd0',x:310,y:100},{id:'team',e:'👥',l:'Team',c:'#3d6b4f',bg:'#c8ddd0',x:105,y:185},{id:'st',e:'🔲',l:'ST',c:'#1a1a1a',bg:'#d4cfc9',x:340,y:205},{id:'thuis',e:'🏠',l:'Thuis',c:'#8a8078',bg:'#ede9e4',x:85,y:50}]
+};
+
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+const S = {
+  xp:0, completed:new Set(), hwDone:new Set(),
+  intake:{}, reflecties:{}, feedback:{},
+  turven:[{w:'Gedoe',n:0},{w:'Te veel',n:0},{w:'Sst',n:0}],
+  turvenNotes:'',
+  canvasPos:{}, canvasQIdx:{},
+  relaties:{}, // {sessie_id: {relatie_id: {...}}}
+  relSessie: 1,
+  analyses:{}, // {sessie_id: analyse_tekst}
+};
+
+// ══════════════════════════════════════════
+//  API
+// ══════════════════════════════════════════
+async function api(action, body=null) {
+  const opts = { method: body ? 'POST' : 'GET', headers: {'x-kompas-key': KEY, 'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const url = `${API}?action=${action}`;
+  const r = await fetch(url, opts);
+  return r.json();
+}
+
+function setSyncDot(state) {
+  const d = document.getElementById('sync-dot');
+  d.className = 'sync-dot ' + state;
+}
+
+let saveTimer;
+async function syncSave(action, body) {
+  setSyncDot('saving');
+  try {
+    await api(action, body);
+    setSyncDot('ok');
+    flashSync('✓ Opgeslagen');
+  } catch(e) {
+    setSyncDot('err');
+    flashSync('⚠ Verbindingsfout');
+  }
+}
+
+function flashSync(msg) {
+  const el = document.getElementById('sync-status');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => el.style.opacity = '0', 2000);
+}
+
+// ══════════════════════════════════════════
+//  LOAD
+// ══════════════════════════════════════════
+async function loadAll() {
+  try {
+    const data = await api('load');
+    // intake
+    (data.intake||[]).forEach(r => S.intake[r.question_id] = r.answer);
+    // reflecties
+    (data.reflecties||[]).forEach(r => { S.reflecties[r.sessie_id] = r.reflectie; S.feedback[r.sessie_id] = {mc: r.feedback_mc, txt: r.feedback_txt}; });
+    // huiswerk
+    (data.huiswerk||[]).forEach(r => { if(r.done) S.hwDone.add(r.hw_id); });
+    // turven
+    if (data.turven?.length) S.turven = data.turven.map(r => ({w: r.woord, n: r.count}));
+    if (data.turvenNotities) S.turvenNotes = data.turvenNotities;
+    // voortgang
+    if (data.voortgang) { S.xp = data.voortgang.xp || 0; S.completed = new Set(data.voortgang.completed || []); }
+    // opstelling
+    (data.opstelling||[]).forEach(r => { if(!S.canvasPos[r.sessie_id]) S.canvasPos[r.sessie_id]={}; S.canvasPos[r.sessie_id][r.figuur_id] = {x:r.x, y:r.y}; });
+    // relaties
+    (data.relaties||[]).forEach(r => { if(!S.relaties[r.sessie_id]) S.relaties[r.sessie_id]={}; S.relaties[r.sessie_id][r.relatie] = r; });
+    // analyses
+    (data.analyses||[]).forEach(r => { S.analyses[r.sessie_id] = r.analyse_tekst; });
+    setSyncDot('ok');
+  } catch(e) {
+    setSyncDot('err');
+  }
+  restoreUI();
+  document.getElementById('loading').classList.add('hidden');
+}
+
+function restoreUI() {
+  updateXP();
+  restoreIntake();
+  renderTurven();
+  const tn = document.getElementById('tnotes');
+  if(tn) tn.value = S.turvenNotes;
+}
+
+// ══════════════════════════════════════════
+//  NAV
+// ══════════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+  if(id==='sessies') renderSessies();
+  if(id==='vinklijst') renderVinklijst();
+  if(id==='turven') renderTurven();
+  if(id==='relaties') renderRelaties();
+}
+
+// ══════════════════════════════════════════
+//  XP
+// ══════════════════════════════════════════
+function updateXP() {
+  document.getElementById('xp-total').textContent = S.xp;
+  const pct = Math.round((S.xp/TOTAL_XP)*100);
+  document.getElementById('prog-fill').style.width = pct+'%';
+  document.getElementById('pct-lbl').textContent = pct+'%';
+}
+
+// ══════════════════════════════════════════
+//  INTAKE
+// ══════════════════════════════════════════
+function selS(gid, btn, val) {
+  document.querySelectorAll('#'+gid+' .opt').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  S.intake[gid] = val;
+  syncSave('save_intake', {question_id: gid, answer: val});
+  updateIntakeProg();
+}
+function selM(gid, btn, val) {
+  btn.classList.toggle('msel');
+  if(!Array.isArray(S.intake[gid])) S.intake[gid]=[];
+  const i = S.intake[gid].indexOf(val);
+  if(i>-1) S.intake[gid].splice(i,1); else S.intake[gid].push(val);
+  syncSave('save_intake', {question_id: gid, answer: S.intake[gid]});
+  updateIntakeProg();
+}
+let taTimer = {};
+function saveTA(id) {
+  const el = document.getElementById(id);
+  if(!el) return;
+  S.intake[id] = el.value;
+  clearTimeout(taTimer[id]);
+  taTimer[id] = setTimeout(() => syncSave('save_intake', {question_id: id, answer: el.value}), 800);
+  updateIntakeProg();
+}
+function updateIntakeProg() {
+  const filled = Object.values(S.intake).filter(v => Array.isArray(v) ? v.length>0 : v && String(v).trim()!=='').length;
+  const pct = Math.min(100, Math.round((filled/15)*100));
+  document.getElementById('ip-pct').textContent = pct+'%';
+  document.getElementById('ip-fill').style.width = pct+'%';
+  document.getElementById('ip-status').textContent = pct<50 ? 'Ga verder...' : pct<100 ? 'Bijna klaar!' : 'Klaar om af te ronden';
+}
+function restoreIntake() {
+  const taIds = ['iq2t','iq5','iq7','iq10t','iq12','iq13','iq15'];
+  taIds.forEach(id => { const el=document.getElementById(id); if(el&&S.intake[id]) el.value=S.intake[id]; });
+  const singles = ['iq1','iq6','iq8','iq9','iq11'];
+  singles.forEach(gid => {
+    if(S.intake[gid]) {
+      document.querySelectorAll('#'+gid+' .opt').forEach(b => {
+        if(b.textContent.trim() === S.intake[gid]) b.classList.add('sel');
+      });
+    }
+  });
+  const multis = ['iq2','iq3','iq4','iq10','iq14'];
+  multis.forEach(gid => {
+    if(Array.isArray(S.intake[gid])) {
+      document.querySelectorAll('#'+gid+' .opt').forEach(b => {
+        if(S.intake[gid].includes(b.textContent.trim())) b.classList.add('msel');
+      });
+    }
+  });
+  updateIntakeProg();
+}
+async function completeIntake() {
+  if(S.completed.has('intake')) return;
+  S.completed.add('intake');
+  S.xp += XPV.intake;
+  updateXP();
+  await syncSave('save_voortgang', {xp: S.xp, completed: [...S.completed]});
+  showAch('📋 Intake afgerond!', 'Analyse wordt gemaakt voor sessie 1…');
+  // Trigger analyse op de achtergrond
+  triggerAnalyse('intake');
+  setTimeout(() => showPage('sessies'), 2200);
+}
+
+// ══════════════════════════════════════════
+//  SESSIES
+// ══════════════════════════════════════════
+function renderSessies() {
+  const c = document.getElementById('slist');
+  c.innerHTML = '';
+  SESSIE_DATA.forEach((s,i) => {
+    const done = S.completed.has('s'+s.id);
+    const unlocked = s.id===1 ? S.completed.has('intake') : S.completed.has('s'+(s.id-1));
+    const cls = done ? 'done' : unlocked ? 'active' : 'locked';
+    const numTxt = done ? '✓' : s.id;
+    const xpTxt = done ? '✓ gedaan' : !unlocked ? '🔒 +'+XPV['s'+s.id] : '+'+XPV['s'+s.id]+' XP';
+    const row = document.createElement('div');
+    row.className = 'srow '+cls;
+    row.setAttribute('data-sid', s.id);
+    if(!cls.includes('locked')) row.onclick = () => toggleDetail(s.id);
+    row.innerHTML = `
+      <div class="snum">${numTxt}</div>
+      <div>
+        <div class="stitle">${s.title}</div>
+        <div class="ssub">${s.sub}</div>
+        <div class="stags">${s.tags.map(t=>`<span class="tag ${t.c}">${t.l}</span>`).join('')}</div>
+        <div class="sdetail" id="sd-${s.id}">${buildDetail(s, done)}</div>
+      </div>
+      <div class="sxp">${xpTxt}</div>`;
+    c.appendChild(row);
+  });
+}
+
+function buildDetail(s, done) {
+  const fb = S.feedback[s.id] || {};
+  const claudeUrl = 'https://claude.ai/project/01973e33-e0b1-7cf6-8c71-3e61eba04728';
+  let h = `
+    <a href="${claudeUrl}" target="_blank" class="claude-link" style="margin-bottom:1rem">
+      <div class="claude-link-icon">🤖</div>
+      <div class="claude-link-body">
+        <div class="claude-link-label">Coachingsgesprek — Sessie ${s.id}</div>
+        <div class="claude-link-text">Open Claude voor begeleiding bij deze sessie</div>
+        <div class="claude-link-sub">Deel je reflectie of bespreek wat je waarnam</div>
+      </div>
+      <div style="margin-left:auto;color:var(--stone-l);font-size:0.9rem">↗</div>
+    </a>
+    <div style="margin-bottom:1rem"><div class="dtitle">Wat we doen</div><div style="font-size:0.84rem;line-height:1.6">${s.focus}</div></div>`;
+  if(s.ct) h += `<div style="margin-bottom:1rem"><div class="dtitle">Opstelling</div><button class="btn btn-p" style="font-size:0.76rem" onclick="openCt(${s.id});event.stopPropagation()">▶ Open opstelling</button><div class="ct-wrap" id="ct-${s.id}"><div class="ct-hdr"><strong>Opstelling sessie ${s.id}</strong><span>Sleep de figuren</span></div><div class="ct-canvas" id="cc-${s.id}"></div><div class="ct-vraag" id="cq-${s.id}">Laadt...</div><div class="ct-ctrl"><button class="ct-btn" onclick="nextCtQ(${s.id})">Volgende →</button><button class="ct-btn" onclick="resetCt(${s.id})">Reset</button><button class="ct-btn p" onclick="closeCt(${s.id})">✓ Sluiten</button></div></div></div>`;
+  h += `<div style="margin-bottom:1rem"><div class="dtitle">Huiswerkopdrachten</div><div class="hw-grid">`;
+  s.hw.forEach(hw => {
+    const d = S.hwDone.has(hw.id);
+    h += `<div class="hw-card ${hw.d}"><div class="hw-domain">${hw.jaap?'⭐ ':''} ${hw.d}</div><div class="hw-text">${hw.t}</div><label class="hw-check" onclick="event.stopPropagation()"><input type="checkbox" ${d?'checked':''} onchange="toggleHW('${hw.id}',this.checked)"><span>${d?'Gedaan ✓':'Markeer als gedaan'}</span></label></div>`;
+  });
+  h += `</div></div>`;
+  h += `<div style="margin-bottom:1rem"><div class="dtitle">Hoe ging het?</div><div class="fbmod" onclick="event.stopPropagation()"><div class="fb-opts" id="fm-${s.id}">${s.fbo.map(o=>`<button class="fb-opt ${fb.mc===o?'sel':''}" onclick="selFb(${s.id},'${o}')">${o}</button>`).join('')}</div><div class="dtitle" style="margin-top:0.5rem">Wat heb je waargenomen / reactie van de ander?</div><textarea style="min-height:60px;width:100%;border:1.5px solid var(--stone-l);border-radius:4px;padding:0.55rem 0.7rem;font-family:Inter,sans-serif;font-size:0.83rem;background:white;color:var(--ink);resize:vertical" id="fb-${s.id}" placeholder="Typ hier..." oninput="saveFbTxt(${s.id})">${fb.txt||''}</textarea><div class="upload-area" onclick="document.getElementById('fu-${s.id}').click()">📎 Screenshot of foto toevoegen</div><input type="file" accept="image/*" id="fu-${s.id}" class="hidden-file" onchange="handleUpload(${s.id},this)" multiple><div class="previews" id="fp-${s.id}"></div></div></div>`;
+  h += `<div style="margin-bottom:1rem"><div class="dtitle">Reflectie</div><textarea style="min-height:65px;width:100%;border:1.5px solid var(--stone-l);border-radius:4px;padding:0.55rem 0.7rem;font-family:Inter,sans-serif;font-size:0.83rem;background:white;color:var(--ink);resize:vertical" id="ref-${s.id}" placeholder="Wat valt je op? Wat verschuift er?" oninput="saveRef(${s.id})">${S.reflecties[s.id]||''}</textarea></div>`;
+  if(!done) h += `
+    <div class="btn-row">
+      <button class="btn btn-g" onclick="completeSessie(${s.id});event.stopPropagation()">✓ Sessie afronden (+${XPV['s'+s.id]} XP)</button>
+    </div>`;
+  // Analyse van vorige sessie tonen
+  const prevKey = s.id === 1 ? 'intake' : 's' + (s.id - 1);
+  const prevAnalyse = S.analyses && S.analyses[prevKey];
+  if (prevAnalyse) {
+    h += `<div style="margin-top:1rem;padding:1rem;background:#f7f4ef;border-radius:6px;border:1px solid var(--stone-l)">
+      <div class="dtitle" style="color:var(--stone)">📊 Analyse op basis van ${prevKey === 'intake' ? 'je intake' : 'sessie ' + (s.id-1)}</div>
+      <div style="font-size:0.82rem;line-height:1.65;white-space:pre-wrap;margin-top:0.5rem">${prevAnalyse}</div>
+    </div>`;
+  }
+  h += `<div style="margin-top:0.75rem;padding:0.65rem 0.9rem;background:var(--green-p);border-radius:4px;font-size:0.78rem;color:var(--green);border:1px solid var(--green-l)">✓ Alles wordt automatisch opgeslagen. Open Claude via de link hierboven — je data staat al klaar.</div>`;
+  return h;
+}
+
+function toggleDetail(sid) {
+  const d = document.getElementById('sd-'+sid);
+  if(!d) return;
+  const open = d.classList.contains('open');
+  document.querySelectorAll('.sdetail').forEach(x=>x.classList.remove('open'));
+  if(!open) d.classList.add('open');
+}
+
+// EXPORT INTAKE
+function exportIntake() {
+  const i = S.intake;
+  const arrTxt = (key) => Array.isArray(i[key]) ? i[key].join(', ') : (i[key]||'—');
+  const txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KOMPAS INTAKE — Griëtte
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+LEERVRAAG:
+"Hoe blijf ik aanwezig — met mijn behoefte, mijn positie, mijn enthousiasme — op het moment dat ik de neiging voel om terug te stappen, te sussen of het zelf op te lossen?"
+
+BLOK 1 — ENERGIEPEIL:
+Hoe sta ik er nu in: ${arrTxt('iq1')}
+Wat kost energie: ${arrTxt('iq2')}
+Toelichting: ${i['iq2t']||'—'}
+
+BLOK 2 — PATRONEN:
+Wanneer trek ik me terug: ${arrTxt('iq3')}
+Wat doe ik daarna: ${arrTxt('iq4')}
+Moment waarop ik NIET terugtrad: ${i['iq5']||'—'}
+
+BLOK 3 — RELATIES:
+Relatie Nathalie: ${arrTxt('iq6')}
+Wat mis ik in driehoek: ${i['iq7']||'—'}
+Dynamiek manager: ${arrTxt('iq8')}
+Contact Jaap: ${arrTxt('iq9')}
+
+BLOK 4 — FAMILIE:
+Plek in gezin van herkomst: ${arrTxt('iq10')}
+Toelichting: ${i['iq10t']||'—'}
+Patroon bij zussen: ${arrTxt('iq11')}
+Wat wil ik oefenen/loslaten: ${i['iq12']||'—'}
+
+BLOK 5 — ZELFBEELD:
+Overgenomen beeld van mezelf: ${i['iq13']||'—'}
+Waar ik naar verlang: ${arrTxt('iq14')}
+Wat ik anders wil na dit traject: ${i['iq15']||'—'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  syncSave('save_intake', {question_id: 'export-intake', answer: txt});
+
+  navigator.clipboard.writeText(txt).then(()=>{
+    showAch('📋 Intake gekopieerd!', 'Plak dit in Claude om te bespreken');
+  }).catch(()=>{
+    prompt('Kopieer en plak in Claude:', txt);
+  });
+}
+
+// EXPORT SESSIE
+function exportSessie(sid) {
+  const s = SESSIE_DATA.find(x=>x.id===sid);
+  const fb = S.feedback[sid]||{};
+  const ref = S.reflecties[sid]||'';
+  const hw = s.hw.map(h=>`  [${S.hwDone.has(h.id)?'✓':'○'}] ${h.d.toUpperCase()}: ${h.t}`).join('\n');
+  const relData = S.relaties[sid]||{};
+  const relTxt = Object.entries(relData).filter(([,v])=>v.observatie||v.wat_deed_ik||v.wat_deed_ander).map(([k,v])=>{
+    const rel = RELATIES.find(r=>r.id===k);
+    return `  ${rel?.icon||''} ${rel?.name||k}:\n    Waargenomen: ${v.observatie||'—'}\n    Wat deed ik: ${v.wat_deed_ik||'—'}\n    Reactie ander: ${v.wat_deed_ander||'—'}\n    Gevoel: ${v.hoe_voelde_het||'—'}\n    Patroon herkend: ${v.patroon_herkend?'ja':'nee'} | Nieuwe beweging: ${v.nieuwe_beweging?'ja':'nee'}`;
+  }).join('\n\n');
+
+  const txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KOMPAS SESSIE ${sid} — ${s.title}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+LEERVRAAG:
+"Hoe blijf ik aanwezig — met mijn behoefte, mijn positie, mijn enthousiasme — op het moment dat ik de neiging voel om terug te stappen, te sussen of het zelf op te lossen?"
+
+HOE GING HET:
+${fb.mc||'Nog niet ingevuld'}
+
+OBSERVATIE / REACTIE VAN DE ANDER:
+${fb.txt||'—'}
+
+HUISWERK:
+${hw||'—'}
+
+RELATIES DEZE SESSIE:
+${relTxt||'Nog niets ingevuld in de relatiekaart'}
+
+REFLECTIE:
+${ref||'—'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  // Save summary to DB as a reflectie note
+  syncSave('save_reflectie', {
+    sessie_id: 'export-s'+sid,
+    reflectie: txt,
+    feedback_mc: fb.mc||'',
+    feedback_txt: fb.txt||''
+  });
+
+  // Copy to clipboard
+  navigator.clipboard.writeText(txt).then(()=>{
+    showAch('📋 Gekopieerd!', 'Plak dit in Claude voor je coachingsgesprek');
+  }).catch(()=>{
+    // fallback: show in prompt
+    prompt('Kopieer deze tekst en plak in Claude:', txt);
+  });
+}
+
+async function completeSessie(sid) {
+  const key = 's'+sid;
+  if(S.completed.has(key)) return;
+  S.completed.add(key);
+  S.xp += XPV[key];
+  updateXP();
+  await syncSave('save_voortgang', {xp: S.xp, completed: [...S.completed]});
+  const t = {1:'🗺️ Systeem in kaart!',2:'🔍 Patroon herkend!',3:'⚡ Grens gezet!',4:'⚖️ Balans gevonden!',5:'🪞 Frame teruggegeven!',6:'🏆 Traject voltooid!'};
+  const sb = {1:'Analyse wordt gemaakt voor sessie 2…',2:'Analyse wordt gemaakt voor sessie 3…',3:'Analyse wordt gemaakt voor sessie 4…',4:'Analyse wordt gemaakt voor sessie 5…',5:'Analyse wordt gemaakt voor sessie 6…',6:'Je kompas is compleet.'};
+  showAch(t[sid], sb[sid]);
+  // Trigger analyse op de achtergrond
+  if(sid < 6) triggerAnalyse('s'+sid);
+  renderSessies();
+  renderVinklijst();
+}
+
+// HUISWERK
+async function toggleHW(id, done) {
+  if(done) S.hwDone.add(id); else S.hwDone.delete(id);
+  await syncSave('save_huiswerk', {hw_id: id, done});
+  renderVinklijst();
+}
+
+// FEEDBACK
+async function selFb(sid, val) {
+  if(!S.feedback[sid]) S.feedback[sid]={};
+  S.feedback[sid].mc = val;
+  document.querySelectorAll('#fm-'+sid+' .fb-opt').forEach(b=>b.classList.toggle('sel', b.textContent===val));
+  const txt = document.getElementById('fb-'+sid)?.value || '';
+  await syncSave('save_reflectie', {sessie_id: sid, reflectie: S.reflecties[sid]||'', feedback_mc: val, feedback_txt: txt});
+}
+let fbTimer={};
+function saveFbTxt(sid) {
+  const el = document.getElementById('fb-'+sid);
+  if(!el) return;
+  if(!S.feedback[sid]) S.feedback[sid]={};
+  S.feedback[sid].txt = el.value;
+  clearTimeout(fbTimer[sid]);
+  fbTimer[sid] = setTimeout(() => syncSave('save_reflectie', {sessie_id:sid, reflectie:S.reflecties[sid]||'', feedback_mc:S.feedback[sid]?.mc||'', feedback_txt:el.value}), 800);
+}
+function handleUpload(sid, input) {
+  const p = document.getElementById('fp-'+sid);
+  if(!p) return;
+  Array.from(input.files).forEach(f => { const r=new FileReader(); r.onload=e=>{const img=document.createElement('img');img.src=e.target.result;img.className='preview-img';p.appendChild(img);}; r.readAsDataURL(f); });
+}
+let refTimer={};
+function saveRef(sid) {
+  const el = document.getElementById('ref-'+sid);
+  if(!el) return;
+  S.reflecties[sid] = el.value;
+  clearTimeout(refTimer[sid]);
+  refTimer[sid] = setTimeout(() => syncSave('save_reflectie', {sessie_id:sid, reflectie:el.value, feedback_mc:S.feedback[sid]?.mc||'', feedback_txt:S.feedback[sid]?.txt||''}), 800);
+}
+
+// CONSTELLATION
+function openCt(sid) { const c=document.getElementById('ct-'+sid); if(c){c.classList.add('open');initCanvas(sid);updateCtQ(sid);} }
+function closeCt(sid) { const c=document.getElementById('ct-'+sid); if(c) c.classList.remove('open'); }
+function initCanvas(sid) {
+  const canvas = document.getElementById('cc-'+sid);
+  if(!canvas) return;
+  canvas.innerHTML='';
+  const figs = CT_FIGS[sid];
+  if(!figs) return;
+  const sp = S.canvasPos[sid]||{};
+  figs.forEach(f => {
+    const pos = sp[f.id]||{x:f.x,y:f.y};
+    const el = document.createElement('div');
+    el.className='figuur';
+    el.style.left=pos.x+'px';
+    el.style.top=pos.y+'px';
+    el.innerHTML=`<div class="fig-circle" style="border-color:${f.c};background:${f.bg}">${f.e}</div><div class="fig-label" style="color:${f.c}">${f.l}</div>`;
+    makeDrag(el,canvas,sid,f.id);
+    canvas.appendChild(el);
+  });
+}
+function makeDrag(el,container,sid,fid) {
+  let sx,sy,sl,st,on=false;
+  const dn=e=>{on=true;const p=e.touches?e.touches[0]:e;sx=p.clientX;sy=p.clientY;sl=parseInt(el.style.left)||0;st=parseInt(el.style.top)||0;e.stopPropagation()};
+  const mv=e=>{if(!on)return;const p=e.touches?e.touches[0]:e;const r=container.getBoundingClientRect();el.style.left=Math.max(0,Math.min(r.width-60,sl+p.clientX-sx))+'px';el.style.top=Math.max(0,Math.min(r.height-60,st+p.clientY-sy))+'px';e.preventDefault()};
+  const up=async()=>{if(!on)return;on=false;if(!S.canvasPos[sid])S.canvasPos[sid]={};const x=parseInt(el.style.left),y=parseInt(el.style.top);S.canvasPos[sid][fid]={x,y};await syncSave('save_opstelling',{sessie_id:sid,figuur_id:fid,x,y})};
+  el.addEventListener('mousedown',dn);el.addEventListener('touchstart',dn,{passive:false});
+  document.addEventListener('mousemove',mv);document.addEventListener('touchmove',mv,{passive:false});
+  document.addEventListener('mouseup',up);document.addEventListener('touchend',up);
+}
+function nextCtQ(sid){S.canvasQIdx[sid]=(S.canvasQIdx[sid]||0)+1;updateCtQ(sid);}
+function updateCtQ(sid){const qs=CT_Q[sid];if(!qs)return;const el=document.getElementById('cq-'+sid);if(!el)return;const i=S.canvasQIdx[sid]||0;el.textContent=i<qs.length?qs[i]:'Goed. Kijk naar het geheel. Wat zegt dit beeld jou?';}
+function resetCt(sid){S.canvasPos[sid]={};S.canvasQIdx[sid]=0;initCanvas(sid);updateCtQ(sid);}
+
+// ══════════════════════════════════════════
+//  RELATIES
+// ══════════════════════════════════════════
+function renderRelaties() {
+  // sessie selector
+  const ss = document.getElementById('rel-sessie-sel');
+  ss.innerHTML = '';
+  SESSIE_DATA.forEach(s => {
+    const btn = document.createElement('button');
+    btn.className = 'opt' + (S.relSessie===s.id?' sel':'');
+    btn.textContent = 'Sessie '+s.id;
+    btn.onclick = () => { S.relSessie=s.id; renderRelaties(); };
+    ss.appendChild(btn);
+  });
+  // relatie grid
+  const grid = document.getElementById('relatie-grid');
+  grid.innerHTML = '';
+  RELATIES.forEach(rel => {
+    const data = S.relaties[S.relSessie]?.[rel.id];
+    const hasData = data && (data.observatie||data.wat_deed_ik||data.wat_deed_ander);
+    const card = document.createElement('div');
+    card.className = 'rel-card' + (hasData?' has-data':'');
+    card.innerHTML = `<div class="rel-icon">${rel.icon}</div><div class="rel-name">${rel.name}</div><div class="rel-status">${rel.sub}${hasData?' · ingevuld':''}</div>`;
+    card.onclick = () => openRelDetail(rel);
+    grid.appendChild(card);
+  });
+  document.getElementById('rel-detail-wrap').innerHTML = '';
+}
+
+function openRelDetail(rel) {
+  const wrap = document.getElementById('rel-detail-wrap');
+  const existing = document.getElementById('reld-'+rel.id);
+  if(existing) { existing.classList.toggle('open'); return; }
+  const data = S.relaties[S.relSessie]?.[rel.id] || {};
+  const div = document.createElement('div');
+  div.className = 'rel-detail open';
+  div.id = 'reld-'+rel.id;
+  div.innerHTML = `
+    <div style="font-family:'DM Serif Display',serif;font-size:1rem;margin-bottom:0.75rem">${rel.icon} ${rel.name} — Sessie ${S.relSessie}</div>
+    <div class="rel-field"><div class="rel-field-label">Wat heb je waargenomen?</div><textarea id="ro-${rel.id}" placeholder="Situatie, moment, context..." oninput="saveRel('${rel.id}','observatie',this.value)">${data.observatie||''}</textarea></div>
+    <div class="rel-field"><div class="rel-field-label">Wat deed ík?</div><textarea id="ri-${rel.id}" placeholder="Jouw gedrag, woorden, keuze..." oninput="saveRel('${rel.id}','wat_deed_ik',this.value)">${data.wat_deed_ik||''}</textarea></div>
+    <div class="rel-field"><div class="rel-field-label">Wat deed de ander?</div><textarea id="ra-${rel.id}" placeholder="Reactie van de ander..." oninput="saveRel('${rel.id}','wat_deed_ander',this.value)">${data.wat_deed_ander||''}</textarea></div>
+    <div class="rel-field"><div class="rel-field-label">Hoe voelde het?</div><textarea id="rh-${rel.id}" placeholder="In je lijf, je hoofd, achteraf..." oninput="saveRel('${rel.id}','hoe_voelde_het',this.value)">${data.hoe_voelde_het||''}</textarea></div>
+    <div class="rel-checks">
+      <label class="rel-check"><input type="checkbox" ${data.patroon_herkend?'checked':''} onchange="saveRelCheck('${rel.id}','patroon_herkend',this.checked)"> Patroon herkend</label>
+      <label class="rel-check"><input type="checkbox" ${data.nieuwe_beweging?'checked':''} onchange="saveRelCheck('${rel.id}','nieuwe_beweging',this.checked)"> Nieuwe beweging gemaakt</label>
+    </div>
+    <button class="btn btn-ghost" style="margin-top:0.75rem;font-size:0.75rem" onclick="this.closest('.rel-detail').classList.remove('open')">Sluiten</button>`;
+  wrap.appendChild(div);
+}
+
+let relTimer = {};
+function saveRel(relId, field, val) {
+  if(!S.relaties[S.relSessie]) S.relaties[S.relSessie]={};
+  if(!S.relaties[S.relSessie][relId]) S.relaties[S.relSessie][relId]={};
+  S.relaties[S.relSessie][relId][field] = val;
+  const key = S.relSessie+'-'+relId;
+  clearTimeout(relTimer[key]);
+  relTimer[key] = setTimeout(() => {
+    const d = S.relaties[S.relSessie][relId];
+    syncSave('save_relatie', {sessie_id:S.relSessie, relatie:relId, observatie:d.observatie||'', wat_deed_ik:d.wat_deed_ik||'', wat_deed_ander:d.wat_deed_ander||'', hoe_voelde_het:d.hoe_voelde_het||'', patroon_herkend:!!d.patroon_herkend, nieuwe_beweging:!!d.nieuwe_beweging});
+  }, 800);
+}
+async function saveRelCheck(relId, field, val) {
+  if(!S.relaties[S.relSessie]) S.relaties[S.relSessie]={};
+  if(!S.relaties[S.relSessie][relId]) S.relaties[S.relSessie][relId]={};
+  S.relaties[S.relSessie][relId][field] = val;
+  const d = S.relaties[S.relSessie][relId];
+  await syncSave('save_relatie', {sessie_id:S.relSessie, relatie:relId, observatie:d.observatie||'', wat_deed_ik:d.wat_deed_ik||'', wat_deed_ander:d.wat_deed_ander||'', hoe_voelde_het:d.hoe_voelde_het||'', patroon_herkend:!!d.patroon_herkend, nieuwe_beweging:!!d.nieuwe_beweging});
+}
+
+// ══════════════════════════════════════════
+//  VINKLIJST
+// ══════════════════════════════════════════
+function renderVinklijst() {
+  const doms = {priority:[{id:'jaap-app',label:'⭐ Jaap terugappen — sparrvraag stellen',tag:'jaap'}], werk:[], thuis:[], netwerk:[], familie:[]};
+  SESSIE_DATA.forEach(s => {
+    const unlocked = s.id===1 ? S.completed.has('intake') : S.completed.has('s'+(s.id-1));
+    if(!unlocked) return;
+    s.hw.forEach(hw => {
+      const item = {id:hw.id, label:`S${s.id}: ${hw.t.substring(0,65)}…`, tag:hw.d};
+      if(hw.prio) doms.priority.push(item);
+      else if(doms[hw.d]) doms[hw.d].push(item);
+    });
+  });
+  Object.entries(doms).forEach(([dom,items]) => {
+    const el = document.getElementById('cl-'+dom);
+    if(!el) return;
+    el.innerHTML = items.length ? '' : '<div style="font-size:0.79rem;color:var(--stone);padding:0.4rem 0">Nog geen opdrachten vrijgespeeld</div>';
+    items.forEach(item => {
+      const done = S.hwDone.has(item.id);
+      const d = document.createElement('div');
+      d.className = 'ci'+(done?' done':'');
+      d.innerHTML = `<input type="checkbox" ${done?'checked':''} onchange="toggleHW('${item.id}',this.checked)"><span class="ci-label">${item.label}</span><span class="ci-tag ${item.tag}">${item.tag}</span>`;
+      el.appendChild(d);
+    });
+  });
+}
+
+// ══════════════════════════════════════════
+//  TURVEN
+// ══════════════════════════════════════════
+function renderTurven() {
+  const c = document.getElementById('trows');
+  if(!c) return;
+  c.innerHTML = '';
+  S.turven.forEach((t,i) => {
+    const row = document.createElement('div');
+    row.className = 'trow';
+    let dots = '';
+    for(let j=0;j<Math.max(t.n+3,8);j++) dots+=`<div class="dot ${j<t.n?'filled':''}" onclick="addTurven(${i})"></div>`;
+    row.innerHTML=`<div class="tlabel">${t.w}</div><div class="tdots">${dots}</div><div class="tcount">${t.n}×</div>`;
+    c.appendChild(row);
+  });
+}
+async function addTurven(i) {
+  S.turven[i].n++;
+  renderTurven();
+  await syncSave('save_turven', {woord: S.turven[i].w, count: S.turven[i].n});
+}
+async function addTurvenWord() {
+  const w = prompt('Welk woord wil je turven?');
+  if(w) { S.turven.push({w,n:0}); renderTurven(); await syncSave('save_turven', {woord:w, count:0}); }
+}
+let tnTimer;
+function saveTurvenNotes() {
+  const el = document.getElementById('tnotes');
+  if(!el) return;
+  S.turvenNotes = el.value;
+  clearTimeout(tnTimer);
+  tnTimer = setTimeout(() => syncSave('save_turven_notities', {notities: el.value}), 800);
+}
+
+// ══════════════════════════════════════════
+//  ACHIEVEMENT
+// ══════════════════════════════════════════
+function showAch(title, sub) {
+  const el = document.getElementById('ach');
+  document.getElementById('ach-t').textContent = title;
+  document.getElementById('ach-s').textContent = sub;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ══════════════════════════════════════════
+//  RESET
+// ══════════════════════════════════════════
+function resetAll() {
+  if(!confirm('Alle voortgang wissen? Dit kan niet ongedaan worden.')) return;
+  location.reload();
+}
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+loadAll();
+</script>
+</body>
+</html>
