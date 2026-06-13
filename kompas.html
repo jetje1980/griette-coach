@@ -1196,7 +1196,15 @@ async function doAuth() {
     err.style.color = '#c0392b';
     const msg = String(e.message || e);
     if(msg.includes('Invalid login')) err.textContent = 'Onjuiste e-mail of wachtwoord.';
-    else if(msg.includes('already registered')) err.textContent = 'Dit e-mailadres heeft al een account. Log in.';
+    else if(msg.includes('already registered') || msg.toLowerCase().includes('rate limit')) {
+      err.textContent = 'Dit e-mailadres heeft al een account. ';
+      const link = document.createElement('a');
+      link.href = '#';
+      link.textContent = 'Log hier in';
+      link.style.cssText = 'color:var(--copper);font-weight:600';
+      link.onclick = (ev) => { ev.preventDefault(); authMode='register'; toggleAuthMode(); };
+      err.appendChild(link);
+    }
     else if(msg.toLowerCase().includes('not confirmed') || msg.toLowerCase().includes('email not confirmed')) {
       err.style.color = 'var(--warn)';
       err.textContent = 'E-mail nog niet bevestigd. Check je inbox of ';
