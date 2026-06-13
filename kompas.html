@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
 <meta name="googlebot" content="noindex, nofollow">
 <title>Mijn Kompas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -210,10 +211,15 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 <div class="login-overlay" id="login-overlay">
   <div class="login-box">
     <div class="login-logo">🧭 Mijn Kompas</div>
-    <div class="login-sub">Voer je toegangscode in</div>
-    <input type="password" class="login-input" id="login-input" placeholder="••••••" onkeydown="if(event.key==='Enter')checkLogin()" autocomplete="off">
-    <button class="login-btn" onclick="checkLogin()">Openen</button>
+    <div class="login-sub" id="login-mode-sub">Log in met je account</div>
+    <input type="email" class="login-input" id="login-email" placeholder="E-mailadres" autocomplete="email">
+    <input type="password" class="login-input" id="login-password" placeholder="Wachtwoord" autocomplete="current-password" onkeydown="if(event.key==='Enter')doAuth()">
+    <button class="login-btn" id="login-btn" onclick="doAuth()">Inloggen</button>
     <div class="login-error" id="login-error"></div>
+    <div style="font-size:0.78rem;color:var(--stone);margin-top:1rem">
+      <span id="login-toggle-text">Nog geen account?</span>
+      <a href="#" onclick="toggleAuthMode();return false" style="color:var(--copper);font-weight:600;text-decoration:none" id="login-toggle-link">Registreer</a>
+    </div>
   </div>
 </div>
 
@@ -370,7 +376,9 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 //  CONFIG
 // ══════════════════════════════════════════
 const API = 'https://osuqtfsxmquwqsbgzlqn.supabase.co/functions/v1/kompas-api';
-const KEY = 'kompas_griette_2026';
+const SUPABASE_URL = 'https://osuqtfsxmquwqsbgzlqn.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_6T-JJKX10RgLkWGwBwYaxg_gFANhdHS';
+const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const XPV = {intake:50,s1:80,s2:90,s3:100,s4:110,s5:120,s6:150};
 const TOTAL_XP = Object.values(XPV).reduce((a,b)=>a+b,0);
 
@@ -437,7 +445,10 @@ const S = {
 //  API
 // ══════════════════════════════════════════
 async function api(action, body=null) {
-  const opts = { method: body ? 'POST' : 'GET', headers: {'x-kompas-key': KEY, 'Content-Type':'application/json'} };
+  const { data: { session } } = await supa.auth.getSession();
+  const token = session?.access_token;
+  if(!token) { throw new Error('Niet ingelogd'); }
+  const opts = { method: body ? 'POST' : 'GET', headers: {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} };
   if (body) opts.body = JSON.stringify(body);
   const url = `${API}?action=${action}`;
   const r = await fetch(url, opts);
@@ -989,6 +1000,19 @@ function saveTurvenNotes() {
 }
 
 // ══════════════════════════════════════════
+//  ANALYSE TRIGGER
+// ══════════════════════════════════════════
+async function triggerAnalyse(sessie_id) {
+  try {
+    const data = await api('analyseer', {sessie_id});
+    if(data.ok && data.analyse_tekst) {
+      S.analyses[sessie_id] = data.analyse_tekst;
+      if(document.getElementById('page-sessies').classList.contains('active')) renderSessies();
+    }
+  } catch(e) { console.warn('Analyse mislukt:', e); }
+}
+
+// ══════════════════════════════════════════
 //  COACH CHAT
 // ══════════════════════════════════════════
 const chatHistory = [];
@@ -1013,12 +1037,7 @@ async function sendChat() {
   sendBtn.disabled = true;
 
   try {
-    const r = await fetch(`${API}?action=chat`, {
-      method: 'POST',
-      headers: {'x-kompas-key': KEY, 'Content-Type': 'application/json'},
-      body: JSON.stringify({messages: chatHistory})
-    });
-    const data = await r.json();
+    const data = await api('chat', {messages: chatHistory});
     document.getElementById('chat-typing')?.remove();
     const reply = data.reply || 'Sorry, er ging iets mis. Probeer het nog eens.';
     addChatMsg('coach', reply);
@@ -1063,27 +1082,81 @@ function resetAll() {
 //  INIT
 // ══════════════════════════════════════════
 // ══════════════════════════════════════════
-//  LOGIN
+//  LOGIN — Supabase Auth
 // ══════════════════════════════════════════
-const TOEGANGSCODE = 'jet2026';
-function checkLogin() {
-  const val = document.getElementById('login-input').value.trim();
-  if(val === TOEGANGSCODE) {
-    sessionStorage.setItem('kompas_auth', 'ok');
-    document.getElementById('login-overlay').style.display = 'none';
-    document.getElementById('loading').classList.remove('hidden');
-    loadAll();
+let authMode = 'login'; // 'login' or 'register'
+
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'register' : 'login';
+  const sub = document.getElementById('login-mode-sub');
+  const btn = document.getElementById('login-btn');
+  const txt = document.getElementById('login-toggle-text');
+  const link = document.getElementById('login-toggle-link');
+  document.getElementById('login-error').textContent = '';
+  if(authMode === 'register') {
+    sub.textContent = 'Maak je account aan';
+    btn.textContent = 'Registreren';
+    txt.textContent = 'Al een account?';
+    link.textContent = 'Inloggen';
   } else {
-    document.getElementById('login-error').textContent = 'Onjuiste code, probeer opnieuw.';
-    document.getElementById('login-input').value = '';
+    sub.textContent = 'Log in met je account';
+    btn.textContent = 'Inloggen';
+    txt.textContent = 'Nog geen account?';
+    link.textContent = 'Registreer';
   }
 }
 
-// Auto-skip login if already authenticated this session
-if(sessionStorage.getItem('kompas_auth') === 'ok') {
+async function doAuth() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+  if(!email || !password) { err.textContent = 'Vul e-mail en wachtwoord in.'; return; }
+  if(password.length < 6) { err.textContent = 'Wachtwoord minimaal 6 tekens.'; return; }
+
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.textContent = 'Even geduld…';
+
+  try {
+    let result;
+    if(authMode === 'register') {
+      result = await supa.auth.signUp({ email, password });
+      if(result.error) throw result.error;
+      if(!result.data.session) {
+        err.style.color = 'var(--green)';
+        err.textContent = 'Account aangemaakt! Check je e-mail om te bevestigen, log daarna in.';
+        btn.disabled = false;
+        toggleAuthMode();
+        return;
+      }
+    } else {
+      result = await supa.auth.signInWithPassword({ email, password });
+      if(result.error) throw result.error;
+    }
+    enterApp();
+  } catch(e) {
+    err.style.color = '#c0392b';
+    const msg = String(e.message || e);
+    if(msg.includes('Invalid login')) err.textContent = 'Onjuiste e-mail of wachtwoord.';
+    else if(msg.includes('already registered')) err.textContent = 'Dit e-mailadres heeft al een account. Log in.';
+    else err.textContent = msg;
+    btn.disabled = false;
+    btn.textContent = authMode === 'register' ? 'Registreren' : 'Inloggen';
+  }
+}
+
+function enterApp() {
   document.getElementById('login-overlay').style.display = 'none';
   document.getElementById('loading').classList.remove('hidden');
   loadAll();
-}</script>
+}
+
+// Check if already logged in (Supabase persists session in localStorage)
+(async () => {
+  const { data: { session } } = await supa.auth.getSession();
+  if(session) enterApp();
+})();
+</script>
 </body>
 </html>
