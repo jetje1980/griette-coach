@@ -1510,30 +1510,7 @@ async function startOpstellingAnalyse() {
 
   const constellDesc = describeConstellationText(currentVSet);
 
-  const initPrompt = `Je bent een ervaren systemisch coach (organisatieopstellingen, Hellinger/Stam). Je analyseert de opstelling en begeleidt stap voor stap.
-
-HOE JE DE DATA LEEST:
-- Afstand tot Jij = emotionele/functionele nabijheid
-- Richting ("kijkt naar X") = aandacht, loyaliteit of conflict
-- "✕ weg van veld" = uitsluiting of vermijding
-- "◎ naar midden" = betrokkenheid op het geheel
-- Groot figuur = dominant of overbelast; klein = onzichtbaar of buitengesloten
-- Sfeer/kleur = emotionele toestand in dit systeem
-- Tags/kenmerken = systemische positie — altijd meenemen
-
-WERKWIJZE:
-1. Begin met twee of drie directe waarnemingen
-2. Vraag naar ontbrekende richtingen via meerkeuze
-3. Interpreteer: ordening, binding, balans geven/nemen
-4. Maximaal 4 zinnen analyse per stap, dan de vraag
-5. Eindig ELKE boodschap met precies dit formaat (geen uitzonderingen):
-   [MC: optie A | optie B | optie C]
-6. Verwerk het gekozen antwoord altijd in je volgende stap
-7. Toon: warm, direct, informeel (jij/je), Nederlands
-
-${constellDesc}
-
-START: Beschrijf wat je direct ziet. Benoem twee of drie opvallende dingen (afstand, richting, positie, kenmerken). Eindig met een meerkeuze-vraag over het eerste dat jou opvalt.`;
+  const initPrompt = `Dit is mijn opstelling:\n\n${constellDesc}\n\nBegin met direct waarnemen — benoem twee of drie opvallende feiten (positie, afstand, richting, kenmerken). Ga dan de diepte in via de drie principes. Sluit je eerste bericht altijd af met [MC: optie A | optie B | optie C].`;
 
   vctHistory.push({role:'user', content: initPrompt});
   addVCtMsg('coach', 'Ik analyseer de opstelling…', 'vct-typing');
