@@ -426,6 +426,23 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
     <div class="dtitle" style="margin-bottom:0.5rem;color:var(--stone)">Opgeslagen opstellingen</div>
     <div class="vsaved-list" id="vct-saved"></div>
   </div>
+
+  <!-- Analyse sectie -->
+  <div style="margin-top:1rem">
+    <button class="btn btn-p" id="vct-analyse-btn" onclick="startOpstellingAnalyse()" style="width:100%">🔍 Analyseer deze opstelling</button>
+  </div>
+  <div id="vct-analyse-section" style="display:none;margin-top:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+      <div class="dtitle" style="color:var(--copper)">📊 Begeleide analyse</div>
+      <button class="ct-btn" onclick="document.getElementById('vct-analyse-section').style.display='none'">✕ Sluiten</button>
+    </div>
+    <div class="chat-window" id="vct-chat-window" style="min-height:180px;max-height:50vh"></div>
+    <div id="vct-mc-btns" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin:0.5rem 0"></div>
+    <div class="chat-input-row">
+      <textarea id="vct-chat-input" placeholder="Typ je antwoord of kies hierboven…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendVCtChat()}"></textarea>
+      <button class="btn btn-p" onclick="sendVCtChat()">Stuur</button>
+    </div>
+  </div>
 </div>
 
 <!-- ═══ COACH CHAT ═══ -->
@@ -1161,6 +1178,189 @@ function loadVSnapshot(snap) {
   S.vpos[snap.set]   = snap.pos || {};
   S.vextra[snap.set] = snap.extra || [];
   initVrijeCanvas(snap.set);
+}
+
+// ══════════════════════════════════════════
+//  OPSTELLING ANALYSE (systemisch)
+// ══════════════════════════════════════════
+const vctHistory = [];
+
+function describeConstellationText(setId) {
+  const canvas = document.getElementById('vct-canvas');
+  const W = canvas ? canvas.offsetWidth : 400;
+  const H = 360;
+  const cx = W / 2, cy = H / 2;
+
+  const def = VSET_DEFS[setId];
+  const allFigs = [...def.figs, ...(S.vextra[setId]||[])];
+  const pos = S.vpos[setId] || {};
+
+  const data = allFigs.map(f => {
+    const p = pos[f.id] || {x:f.x, y:f.y};
+    const px = p.x + 19, py = p.y + 19;
+    return { ...f, px, py };
+  });
+
+  const jij = data.find(f => f.id === 'jij');
+
+  function hLabel(px) { return px/W < 0.33 ? 'links' : px/W > 0.66 ? 'rechts' : 'midden'; }
+  function vLabel(py) { return py/H < 0.33 ? 'bovenin' : py/H > 0.66 ? 'onderin' : 'midden'; }
+  function compass(dx, dy) {
+    const a = Math.atan2(dy, dx) * 180 / Math.PI;
+    if(a > -22.5 && a <= 22.5)   return 'rechts';
+    if(a > 22.5  && a <= 67.5)   return 'rechtsonder';
+    if(a > 67.5  && a <= 112.5)  return 'onder';
+    if(a > 112.5 && a <= 157.5)  return 'linksonder';
+    if(a > 157.5 || a <= -157.5) return 'links';
+    if(a > -157.5&& a <= -112.5) return 'linksboven';
+    if(a > -112.5&& a <= -67.5)  return 'boven';
+    return 'rechtsboven';
+  }
+  function distLabel(d) {
+    const ratio = d / (W * 0.5);
+    return ratio < 0.2 ? 'heel dichtbij' : ratio < 0.45 ? 'dichtbij' : ratio < 0.75 ? 'op afstand' : 'ver weg';
+  }
+
+  let txt = `OPSTELLING: ${def.title}\nCANVAS: ${W}×${H}px\n\nFIGUREN:\n`;
+  data.forEach(f => {
+    const h = hLabel(f.px), v = vLabel(f.py);
+    const pos2 = (h==='midden'&&v==='midden') ? 'centraal' : `${v}, ${h}`;
+    if(jij && f.id !== 'jij') {
+      const dx = f.px - jij.px, dy = f.py - jij.py;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      txt += `• ${f.l}: ${pos2} — ${distLabel(d)} van Jij, richting: ${compass(dx,dy)} van Jij\n`;
+    } else {
+      txt += `• ${f.l} (JIJ): ${pos2}\n`;
+    }
+  });
+
+  // Clusters
+  const close = [];
+  for(let i=0;i<data.length;i++) for(let j=i+1;j<data.length;j++) {
+    const a=data[i],b=data[j];
+    const d=Math.sqrt((a.px-b.px)**2+(a.py-b.py)**2);
+    if(d < W*0.22) close.push({a:a.l,b:b.l,d:Math.round(d)});
+  }
+  if(close.length) {
+    txt += '\nDICHT BIJ ELKAAR:\n';
+    close.sort((x,y)=>x.d-y.d).forEach(p=>txt+=`• ${p.a} ↔ ${p.b}\n`);
+  }
+
+  // Isolates (far from everyone)
+  const isolates = data.filter(f => {
+    const others = data.filter(o=>o.id!==f.id);
+    const minDist = Math.min(...others.map(o=>Math.sqrt((f.px-o.px)**2+(f.py-o.py)**2)));
+    return minDist > W * 0.45;
+  });
+  if(isolates.length) {
+    txt += '\nGEÏSOLEERD (ver van alle anderen):\n';
+    isolates.forEach(f=>txt+=`• ${f.l}\n`);
+  }
+
+  return txt;
+}
+
+async function startOpstellingAnalyse() {
+  const section = document.getElementById('vct-analyse-section');
+  section.style.display = '';
+  const win = document.getElementById('vct-chat-window');
+  win.innerHTML = '';
+  vctHistory.length = 0;
+  clearVCtMC();
+  section.scrollIntoView({behavior:'smooth', block:'nearest'});
+
+  const constellDesc = describeConstellationText(currentVSet);
+
+  const initPrompt = `Je bent een ervaren systemisch coach die een organisatie-opstelling analyseert en de gebruiker stap voor stap begeleidt.
+
+JOUW ROL:
+- Analyseer de posities die je hieronder ziet: afstanden, richting, clusters, wie is centraal, wie is perifeer, wie staat dicht bij wie
+- Interpreteer systemisch: ordening (wie staat op de juiste plek?), binding (loyaliteiten, verstrikkingen), balans in geven en nemen
+- Ga ervan uit dat figuren die dicht bij elkaar staan een relatie of spanning hebben
+- Figuren die ver staan zijn mogelijk buitengesloten, vermeden of overbelast
+- Jij in het midden = regie; Jij aan de rand = zelfuitsluiting of overbelasting
+- Begeleid stap voor stap — één stap per bericht
+- Eindig ELKE boodschap met een meerkeuze-vraag in precies dit formaat (geen uitzonderingen):
+  [MC: antwoord A | antwoord B | antwoord C]
+- Verwerk het gekozen antwoord altijd in je volgende waarneming
+- Toon: warm, direct, systemisch, informeel (jij/je), Nederlands
+
+${constellDesc}
+
+START: Beschrijf wat je direct ziet in dit beeld. Benoem twee of drie opvallende dingen (afstand, positie, wie staat waar). Eindig met een eerste meerkeuze-vraag over wat de gebruiker voelt bij de plek van Jij in het veld.`;
+
+  vctHistory.push({role:'user', content: initPrompt});
+  addVCtMsg('coach', 'Ik analyseer de opstelling…', 'vct-typing');
+
+  try {
+    const data = await api('chat', {messages: vctHistory});
+    document.getElementById('vct-typing')?.remove();
+    const reply = data.reply || 'Er ging iets mis. Probeer opnieuw.';
+    vctHistory.push({role:'assistant', content: reply});
+    addVCtMsg('coach', reply);
+    parseVCtMC(reply);
+  } catch(e) {
+    document.getElementById('vct-typing')?.remove();
+    addVCtMsg('coach', 'Geen verbinding. Controleer je internet en probeer opnieuw.');
+  }
+}
+
+async function sendVCtChat(preset) {
+  const input = document.getElementById('vct-chat-input');
+  const msg = preset || (input.value||'').trim();
+  if(!msg) return;
+  if(!preset) input.value = '';
+  clearVCtMC();
+  addVCtMsg('user', msg);
+  vctHistory.push({role:'user', content: msg});
+  addVCtMsg('coach', 'Coach denkt na…', 'vct-typing');
+
+  try {
+    const data = await api('chat', {messages: vctHistory});
+    document.getElementById('vct-typing')?.remove();
+    const reply = data.reply || 'Er ging iets mis.';
+    vctHistory.push({role:'assistant', content: reply});
+    addVCtMsg('coach', reply);
+    parseVCtMC(reply);
+  } catch(e) {
+    document.getElementById('vct-typing')?.remove();
+    addVCtMsg('coach', 'Geen verbinding. Probeer opnieuw.');
+  }
+}
+
+function addVCtMsg(who, text, id) {
+  const win = document.getElementById('vct-chat-window');
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + who;
+  if(id) div.id = id;
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+  // Verberg [MC: ...] marker in de bubble
+  bubble.textContent = text.replace(/\[MC:[^\]]*\]/g,'').trim();
+  div.appendChild(bubble);
+  win.appendChild(div);
+  win.scrollTop = win.scrollHeight;
+}
+
+function parseVCtMC(text) {
+  const match = text.match(/\[MC:\s*([^\]]+)\]/);
+  if(!match) return;
+  const opts = match[1].split('|').map(o=>o.trim()).filter(Boolean);
+  const bar = document.getElementById('vct-mc-btns');
+  bar.innerHTML = '';
+  opts.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'opt';
+    btn.style.cssText = 'font-size:0.8rem;padding:0.35rem 0.8rem';
+    btn.textContent = opt;
+    btn.onclick = () => sendVCtChat(opt);
+    bar.appendChild(btn);
+  });
+}
+
+function clearVCtMC() {
+  const b = document.getElementById('vct-mc-btns');
+  if(b) b.innerHTML = '';
 }
 
 // ══════════════════════════════════════════
