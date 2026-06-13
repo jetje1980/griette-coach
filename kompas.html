@@ -211,14 +211,34 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 <div class="login-overlay" id="login-overlay">
   <div class="login-box">
     <div class="login-logo">🧭 Mijn Kompas</div>
-    <div class="login-sub" id="login-mode-sub">Log in met je account</div>
-    <input type="email" class="login-input" id="login-email" placeholder="E-mailadres" autocomplete="email">
-    <input type="password" class="login-input" id="login-password" placeholder="Wachtwoord" autocomplete="current-password" onkeydown="if(event.key==='Enter')doAuth()">
-    <button class="login-btn" id="login-btn" onclick="doAuth()">Inloggen</button>
-    <div class="login-error" id="login-error"></div>
-    <div style="font-size:0.78rem;color:var(--stone);margin-top:1rem">
-      <span id="login-toggle-text">Nog geen account?</span>
-      <a href="#" onclick="toggleAuthMode();return false" style="color:var(--copper);font-weight:600;text-decoration:none" id="login-toggle-link">Registreer</a>
+
+    <!-- Login / Registreer formulier -->
+    <div id="login-form-wrap">
+      <div class="login-sub" id="login-mode-sub">Log in met je account</div>
+      <input type="email" class="login-input" id="login-email" placeholder="E-mailadres" autocomplete="email">
+      <input type="password" class="login-input" id="login-password" placeholder="Wachtwoord" autocomplete="current-password" onkeydown="if(event.key==='Enter')doAuth()">
+      <button class="login-btn" id="login-btn" onclick="doAuth()">Inloggen</button>
+      <div class="login-error" id="login-error"></div>
+      <div style="font-size:0.78rem;color:var(--stone);margin-top:1rem">
+        <span id="login-toggle-text">Nog geen account?</span>
+        <a href="#" onclick="toggleAuthMode();return false" style="color:var(--copper);font-weight:600;text-decoration:none" id="login-toggle-link">Registreer</a>
+      </div>
+    </div>
+
+    <!-- Bevestigingsmail scherm -->
+    <div id="login-confirm-wrap" style="display:none">
+      <div style="font-size:2.2rem;margin-bottom:0.75rem">📬</div>
+      <div style="font-family:'DM Serif Display',serif;font-size:1.15rem;margin-bottom:0.5rem">Check je e-mail</div>
+      <div style="font-size:0.82rem;color:var(--stone);margin-bottom:1.5rem;line-height:1.5">
+        We hebben een bevestigingslink gestuurd naar<br>
+        <strong id="confirm-email-display" style="color:var(--ink)"></strong>.<br><br>
+        Klik op de link in de e-mail om je account te activeren en automatisch in te loggen.
+      </div>
+      <button class="login-btn" id="resend-btn" onclick="resendConfirmation()">Opnieuw sturen</button>
+      <div class="login-error" id="resend-msg" style="min-height:1.2rem;margin-top:0.5rem"></div>
+      <div style="font-size:0.78rem;color:var(--stone);margin-top:1.25rem">
+        <a href="#" onclick="showLoginForm();return false" style="color:var(--copper);font-weight:600;text-decoration:none">← Terug naar inloggen</a>
+      </div>
     </div>
   </div>
 </div>
@@ -1081,10 +1101,11 @@ function resetAll() {
 // ══════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════
-// ══════════════════════════════════════════
 //  LOGIN — Supabase Auth
 // ══════════════════════════════════════════
-let authMode = 'login'; // 'login' or 'register'
+const KOMPAS_URL = 'https://jetje1980.github.io/griette-coach/kompas.html';
+let authMode = 'login';
+let pendingConfirmEmail = '';
 
 function toggleAuthMode() {
   authMode = authMode === 'login' ? 'register' : 'login';
@@ -1106,6 +1127,41 @@ function toggleAuthMode() {
   }
 }
 
+function showConfirmScreen(email) {
+  pendingConfirmEmail = email;
+  document.getElementById('login-form-wrap').style.display = 'none';
+  document.getElementById('login-confirm-wrap').style.display = 'block';
+  document.getElementById('confirm-email-display').textContent = email;
+}
+
+function showLoginForm() {
+  document.getElementById('login-confirm-wrap').style.display = 'none';
+  document.getElementById('login-form-wrap').style.display = 'block';
+}
+
+async function resendConfirmation() {
+  const btn = document.getElementById('resend-btn');
+  const msg = document.getElementById('resend-msg');
+  btn.disabled = true;
+  btn.textContent = 'Even geduld…';
+  msg.textContent = '';
+  try {
+    const { error } = await supa.auth.resend({
+      type: 'signup',
+      email: pendingConfirmEmail,
+      options: { emailRedirectTo: KOMPAS_URL }
+    });
+    if(error) throw error;
+    msg.style.color = 'var(--green)';
+    msg.textContent = 'E-mail opnieuw verstuurd!';
+  } catch(e) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Kon e-mail niet versturen. Probeer het later.';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Opnieuw sturen';
+}
+
 async function doAuth() {
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
@@ -1121,13 +1177,14 @@ async function doAuth() {
   try {
     let result;
     if(authMode === 'register') {
-      result = await supa.auth.signUp({ email, password });
+      result = await supa.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: KOMPAS_URL }
+      });
       if(result.error) throw result.error;
       if(!result.data.session) {
-        err.style.color = 'var(--green)';
-        err.textContent = 'Account aangemaakt! Check je e-mail om te bevestigen, log daarna in.';
-        btn.disabled = false;
-        toggleAuthMode();
+        showConfirmScreen(email);
         return;
       }
     } else {
@@ -1140,6 +1197,16 @@ async function doAuth() {
     const msg = String(e.message || e);
     if(msg.includes('Invalid login')) err.textContent = 'Onjuiste e-mail of wachtwoord.';
     else if(msg.includes('already registered')) err.textContent = 'Dit e-mailadres heeft al een account. Log in.';
+    else if(msg.toLowerCase().includes('not confirmed') || msg.toLowerCase().includes('email not confirmed')) {
+      err.style.color = 'var(--warn)';
+      err.textContent = 'E-mail nog niet bevestigd. Check je inbox of ';
+      const link = document.createElement('a');
+      link.href = '#';
+      link.textContent = 'stuur opnieuw';
+      link.style.cssText = 'color:var(--copper);font-weight:600';
+      link.onclick = (ev) => { ev.preventDefault(); showConfirmScreen(email); };
+      err.appendChild(link);
+    }
     else err.textContent = msg;
     btn.disabled = false;
     btn.textContent = authMode === 'register' ? 'Registreren' : 'Inloggen';
