@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<meta name="googlebot" content="noindex, nofollow">
 <title>Mijn Kompas</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700&display=swap');
@@ -188,6 +190,15 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 .chat-input-row{display:flex;gap:0.5rem;align-items:flex-end}
 .chat-input-row textarea{flex:1;min-height:42px;max-height:120px;resize:none}
 .chat-typing{font-size:0.78rem;color:var(--stone);font-style:italic;padding:0.3rem 0.5rem}
+.login-overlay{position:fixed;inset:0;background:var(--ink);display:flex;align-items:center;justify-content:center;z-index:2000;flex-direction:column;gap:1.25rem;padding:2rem}
+.login-box{background:var(--paper);border-radius:12px;padding:2rem;max-width:340px;width:100%;text-align:center}
+.login-logo{font-family:'DM Serif Display',serif;font-size:1.6rem;margin-bottom:0.3rem}
+.login-sub{font-size:0.82rem;color:var(--stone);margin-bottom:1.5rem}
+.login-input{width:100%;border:1.5px solid var(--stone-l);border-radius:6px;padding:0.7rem 0.85rem;font-family:'Inter',sans-serif;font-size:0.95rem;text-align:center;letter-spacing:0.1em;margin-bottom:0.75rem}
+.login-input:focus{outline:none;border-color:var(--copper)}
+.login-btn{width:100%;background:var(--copper);color:white;border:none;padding:0.7rem;border-radius:6px;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:600;cursor:pointer;transition:background 0.15s}
+.login-btn:hover{background:#9d5224}
+.login-error{font-size:0.78rem;color:#c0392b;margin-top:0.5rem;min-height:1rem}
 .loading-screen.hidden{display:none}
 .loading-dot{width:8px;height:8px;border-radius:50%;background:var(--copper);animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:0.3}50%{opacity:1}}
@@ -196,7 +207,17 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 </head>
 <body>
 
-<div class="loading-screen" id="loading">
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <div class="login-logo">🧭 Mijn Kompas</div>
+    <div class="login-sub">Voer je toegangscode in</div>
+    <input type="password" class="login-input" id="login-input" placeholder="••••••" onkeydown="if(event.key==='Enter')checkLogin()" autocomplete="off">
+    <button class="login-btn" onclick="checkLogin()">Openen</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div class="loading-screen hidden" id="loading">
   <div class="loading-dot"></div>
   <div>Kompas laden…</div>
 </div>
@@ -1041,7 +1062,28 @@ function resetAll() {
 // ══════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════
-loadAll();
-</script>
+// ══════════════════════════════════════════
+//  LOGIN
+// ══════════════════════════════════════════
+const TOEGANGSCODE = 'jet2026';
+function checkLogin() {
+  const val = document.getElementById('login-input').value.trim();
+  if(val === TOEGANGSCODE) {
+    sessionStorage.setItem('kompas_auth', 'ok');
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('loading').classList.remove('hidden');
+    loadAll();
+  } else {
+    document.getElementById('login-error').textContent = 'Onjuiste code, probeer opnieuw.';
+    document.getElementById('login-input').value = '';
+  }
+}
+
+// Auto-skip login if already authenticated this session
+if(sessionStorage.getItem('kompas_auth') === 'ok') {
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('loading').classList.remove('hidden');
+  loadAll();
+}</script>
 </body>
 </html>
