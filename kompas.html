@@ -164,6 +164,28 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 .ct-btn{font-size:0.68rem;padding:0.28rem 0.6rem;border:1.5px solid var(--stone-l);background:white;border-radius:3px;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.15s}
 .ct-btn:hover{border-color:var(--copper);color:var(--copper)}
 .ct-btn.p{background:var(--copper);color:white;border-color:var(--copper)}
+/* FIGUUR ANIMATIE */
+@keyframes figPop{0%{transform:scale(0.2);opacity:0}65%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+.figuur-new .fig-circle{animation:figPop 0.38s ease}
+/* VRIJE OPSTELLING */
+.vset-bar{display:flex;gap:0.4rem;margin-bottom:1rem;flex-wrap:wrap}
+.vset-btn{padding:0.35rem 0.85rem;border:1.5px solid var(--stone-l);border-radius:20px;font-size:0.8rem;font-weight:600;cursor:pointer;background:white;font-family:'Inter',sans-serif;transition:all 0.15s;display:inline-flex;align-items:center;gap:0.3rem}
+.vset-btn:hover{border-color:var(--copper);color:var(--copper)}
+.vset-btn.active{background:var(--copper);border-color:var(--copper);color:white}
+.vct-wrap{border:1px solid var(--stone-l);border-radius:8px;overflow:hidden;margin-bottom:1rem}
+.vct-hdr{background:var(--ink);color:var(--paper);padding:0.65rem 1rem;font-size:0.8rem;display:flex;justify-content:space-between;align-items:center}
+.vct-canvas{width:100%;height:360px;background:#f7f4ef;position:relative;overflow:hidden}
+.vct-ctrl{padding:0.55rem 1rem;background:white;border-top:1px solid var(--stone-l);display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center}
+.vct-add{display:flex;gap:0.4rem;flex:1;min-width:160px}
+.vct-add input{flex:1;border:1.5px solid var(--stone-l);border-radius:4px;padding:0.35rem 0.6rem;font-size:0.8rem;font-family:'Inter',sans-serif}
+.vct-add input:focus{outline:none;border-color:var(--copper)}
+.vct-save-row{padding:0.5rem 1rem;background:var(--fog);border-top:1px solid var(--stone-l);display:flex;gap:0.4rem;align-items:center}
+.vct-save-row input{flex:1;border:1.5px solid var(--stone-l);border-radius:4px;padding:0.35rem 0.6rem;font-size:0.8rem;font-family:'Inter',sans-serif}
+.vct-save-row input:focus{outline:none;border-color:var(--copper)}
+.vsaved-list{display:flex;flex-direction:column;gap:0.4rem;margin-top:0.5rem}
+.vsaved-item{display:flex;align-items:center;justify-content:space-between;padding:0.55rem 0.85rem;background:white;border:1px solid var(--stone-l);border-radius:5px;font-size:0.82rem;cursor:pointer;transition:all 0.15s}
+.vsaved-item:hover{border-color:var(--copper);background:var(--copper-p)}
+.vsaved-meta{color:var(--stone);font-size:0.7rem}
 /* ACH */
 .ach{display:none;position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);color:white;padding:0.9rem 1.2rem;border-radius:8px;border-left:4px solid var(--copper);font-size:0.8rem;box-shadow:0 8px 32px rgba(0,0,0,0.25);z-index:999;max-width:250px;animation:slideUp 0.3s ease}
 .ach.show{display:block}
@@ -257,6 +279,7 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
       <button class="nav-tab" onclick="showPage('relaties')" id="tab-relaties">Relaties</button>
       <button class="nav-tab" onclick="showPage('vinklijst')" id="tab-vinklijst">Vinklijst</button>
       <button class="nav-tab" onclick="showPage('turven')" id="tab-turven">Turven</button>
+      <button class="nav-tab" onclick="showPage('opstelling')" id="tab-opstelling">🗺️ Opstelling</button>
       <button class="nav-tab" onclick="showPage('coach')" id="tab-coach">💬 Coach</button>
     </div>
     <div class="nav-xp">⬡ <span id="xp-total">0</span></div>
@@ -372,6 +395,39 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
   <div class="card"><div class="card-label c">Notities</div><textarea id="tnotes" placeholder="Waar, met wie, wat had je nodig?" oninput="saveTurvenNotes()"></textarea></div>
 </div>
 
+<!-- ═══ VRIJE OPSTELLING ═══ -->
+<div class="page" id="page-opstelling">
+  <div class="page-title">Opstelling</div>
+  <div class="page-sub">Verken je systeem visueel. Kies een set of maak je eigen opstelling.</div>
+  <div class="vset-bar">
+    <button class="vset-btn active" id="vbtn-werk" onclick="switchVSet('werk',this)">💼 Werk</button>
+    <button class="vset-btn" id="vbtn-familie" onclick="switchVSet('familie',this)">👨‍👩‍👧 Familie</button>
+    <button class="vset-btn" id="vbtn-vrij" onclick="switchVSet('vrij',this)">✨ Vrij</button>
+  </div>
+  <div class="vct-wrap">
+    <div class="vct-hdr">
+      <strong id="vct-title">Werk-opstelling</strong>
+      <span id="vct-hint">Sleep de figuren</span>
+    </div>
+    <div class="vct-canvas" id="vct-canvas"></div>
+    <div class="vct-ctrl">
+      <div class="vct-add" id="vct-add-wrap" style="display:none">
+        <input type="text" id="vct-add-name" placeholder="Naam toevoegen…" maxlength="20" onkeydown="if(event.key==='Enter')addVrijFig()">
+        <button class="ct-btn p" onclick="addVrijFig()">+ Toevoegen</button>
+      </div>
+      <button class="ct-btn" onclick="resetVSet()" style="margin-left:auto">↺ Reset posities</button>
+    </div>
+    <div class="vct-save-row">
+      <input type="text" id="vct-label" placeholder="Naam opstelling (bijv. 'Werk — juni 2026')…">
+      <button class="ct-btn p" onclick="saveVOpstelling()">💾 Opslaan</button>
+    </div>
+  </div>
+  <div id="vct-saved-wrap" style="display:none">
+    <div class="dtitle" style="margin-bottom:0.5rem;color:var(--stone)">Opgeslagen opstellingen</div>
+    <div class="vsaved-list" id="vct-saved"></div>
+  </div>
+</div>
+
 <!-- ═══ COACH CHAT ═══ -->
 <div class="page" id="page-coach">
   <div class="page-title">Coach</div>
@@ -443,8 +499,50 @@ const CT_Q = {
   4:['Zet jezelf in het midden. Energie begint bij jou.','Wie trekt het meeste van je energie?','Waar geef je energie die je niet terugkrijgt?','Wat geeft jou energie? Zet dat dichtbij.','Wat zegt dit beeld?']
 };
 const CT_FIGS = {
-  1:[{id:'jij',e:'🟠',l:'Jij',c:'#b5622a',bg:'#f5ece4',x:140,y:140},{id:'nathalie',e:'🔵',l:'Nathalie',c:'#3d6b4f',bg:'#c8ddd0',x:260,y:100},{id:'ellis',e:'🟢',l:'Ellis',c:'#3d6b4f',bg:'#c8ddd0',x:360,y:175},{id:'jmgr',e:'⬛',l:'Jouw mgr',c:'#1a1a1a',bg:'#d4cfc9',x:85,y:50},{id:'nmgr',e:'⬜',l:'Nat.mgr',c:'#8a8078',bg:'#ede9e4',x:330,y:42}],
-  4:[{id:'jij',e:'🟠',l:'Jij',c:'#b5622a',bg:'#f5ece4',x:200,y:130},{id:'driehoek',e:'🔷',l:'Driehoek',c:'#3d6b4f',bg:'#c8ddd0',x:310,y:100},{id:'team',e:'👥',l:'Team',c:'#3d6b4f',bg:'#c8ddd0',x:105,y:185},{id:'st',e:'🔲',l:'ST',c:'#1a1a1a',bg:'#d4cfc9',x:340,y:205},{id:'thuis',e:'🏠',l:'Thuis',c:'#8a8078',bg:'#ede9e4',x:85,y:50}]
+  1:[
+    {id:'jij',    e:'🟠',l:'Jij',              c:'#b5622a',bg:'#f5ece4',x:185,y:145},
+    {id:'nathalie',e:'🔵',l:'Nathalie',         c:'#2a5b8a',bg:'#e4eef7',x:300,y:90},
+    {id:'ellis',  e:'🟢',l:'Ellis',             c:'#3d6b4f',bg:'#c8ddd0',x:375,y:180},
+    {id:'jmgr',   e:'⬛',l:'Jouw manager',      c:'#1a1a1a',bg:'#d4cfc9',x:75,y:55},
+    {id:'nmgr',   e:'⬜',l:'Manager Nathalie',  c:'#8a8078',bg:'#ede9e4',x:345,y:42},
+  ],
+  4:[
+    {id:'jij',      e:'🟠',l:'Jij',             c:'#b5622a',bg:'#f5ece4',x:200,y:140},
+    {id:'driehoek', e:'🔷',l:'Driehoek (werk)', c:'#2a5b8a',bg:'#e4eef7',x:320,y:90},
+    {id:'team',     e:'👥',l:'Jouw team',        c:'#3d6b4f',bg:'#c8ddd0',x:100,y:190},
+    {id:'st',       e:'🔲',l:'Strategisch team', c:'#1a1a1a',bg:'#d4cfc9',x:345,y:210},
+    {id:'thuis',    e:'🏠',l:'Thuis / privé',    c:'#8a6b2a',bg:'#f7f0e4',x:80,y:48},
+  ]
+};
+
+const VSET_DEFS = {
+  werk: {
+    title: 'Werk-opstelling',
+    figs: [
+      {id:'jij',      e:'🟠',l:'Jij',             c:'#b5622a',bg:'#f5ece4',x:195,y:160},
+      {id:'manager',  e:'⬛',l:'Jouw manager',     c:'#1a1a1a',bg:'#d4cfc9',x:195,y:50},
+      {id:'nathalie', e:'🔵',l:'Nathalie',         c:'#2a5b8a',bg:'#e4eef7',x:320,y:100},
+      {id:'ellis',    e:'🟢',l:'Ellis',             c:'#3d6b4f',bg:'#c8ddd0',x:360,y:200},
+      {id:'st',       e:'🏛️',l:'Strategisch team', c:'#6b3d8a',bg:'#f0e8f7',x:65,y:85},
+      {id:'eo',       e:'📺',l:'De EO',            c:'#8a6b2a',bg:'#f7f0e4',x:65,y:220},
+    ]
+  },
+  familie: {
+    title: 'Familie-opstelling',
+    figs: [
+      {id:'jij',  e:'🟠',l:'Jij',  c:'#b5622a',bg:'#f5ece4',x:195,y:170},
+      {id:'mama', e:'👩',l:'Mama', c:'#3d6b4f',bg:'#c8ddd0',x:110,y:80},
+      {id:'papa', e:'👨',l:'Papa', c:'#2a5b8a',bg:'#e4eef7',x:295,y:80},
+      {id:'zus1', e:'👧',l:'Zus 1',c:'#6b3d8a',bg:'#f0e8f7',x:65,y:215},
+      {id:'zus2', e:'👧',l:'Zus 2',c:'#8a6b2a',bg:'#f7f0e4',x:325,y:215},
+    ]
+  },
+  vrij: {
+    title: 'Vrije opstelling',
+    figs: [
+      {id:'jij',e:'🟠',l:'Jij',c:'#b5622a',bg:'#f5ece4',x:195,y:160},
+    ]
+  },
 };
 
 // ══════════════════════════════════════════
@@ -456,9 +554,12 @@ const S = {
   turven:[{w:'Gedoe',n:0},{w:'Te veel',n:0},{w:'Sst',n:0}],
   turvenNotes:'',
   canvasPos:{}, canvasQIdx:{},
-  relaties:{}, // {sessie_id: {relatie_id: {...}}}
+  relaties:{},
   relSessie: 1,
-  analyses:{}, // {sessie_id: analyse_tekst}
+  analyses:{},
+  vpos:{werk:{},familie:{},vrij:{}},
+  vextra:{werk:[],familie:[],vrij:[]},
+  vsaved:[],
 };
 
 // ══════════════════════════════════════════
@@ -518,8 +619,25 @@ async function loadAll() {
     if (data.turvenNotities) S.turvenNotes = data.turvenNotities;
     // voortgang
     if (data.voortgang) { S.xp = data.voortgang.xp || 0; S.completed = new Set(data.voortgang.completed || []); }
-    // opstelling
-    (data.opstelling||[]).forEach(r => { if(!S.canvasPos[r.sessie_id]) S.canvasPos[r.sessie_id]={}; S.canvasPos[r.sessie_id][r.figuur_id] = {x:r.x, y:r.y}; });
+    // opstelling (sessies + vrije sets)
+    (data.opstelling||[]).forEach(r => {
+      const sid = String(r.sessie_id);
+      if(sid.startsWith('v-')) {
+        const setId = sid.slice(2);
+        if(!S.vpos[setId]) S.vpos[setId]={};
+        S.vpos[setId][r.figuur_id] = {x:r.x, y:r.y};
+      } else {
+        if(!S.canvasPos[sid]) S.canvasPos[sid]={};
+        S.canvasPos[sid][r.figuur_id] = {x:r.x, y:r.y};
+      }
+    });
+    // vrije extra figuren (opgeslagen als intake entries)
+    ['werk','familie','vrij'].forEach(setId => {
+      const raw = S.intake['vextra-'+setId];
+      if(raw) { try { S.vextra[setId] = JSON.parse(raw); } catch(e){} }
+    });
+    // opgeslagen opstellingen (localStorage)
+    try { S.vsaved = JSON.parse(localStorage.getItem('kompas-vsaved')||'[]'); } catch(e){ S.vsaved=[]; }
     // relaties
     (data.relaties||[]).forEach(r => { if(!S.relaties[r.sessie_id]) S.relaties[r.sessie_id]={}; S.relaties[r.sessie_id][r.relatie] = r; });
     // analyses
@@ -552,6 +670,7 @@ function showPage(id) {
   if(id==='vinklijst') renderVinklijst();
   if(id==='turven') renderTurven();
   if(id==='relaties') renderRelaties();
+  if(id==='opstelling') renderOpstelling();
 }
 
 // ══════════════════════════════════════════
@@ -852,39 +971,197 @@ function saveRef(sid) {
   refTimer[sid] = setTimeout(() => syncSave('save_reflectie', {sessie_id:sid, reflectie:el.value, feedback_mc:S.feedback[sid]?.mc||'', feedback_txt:S.feedback[sid]?.txt||''}), 800);
 }
 
-// CONSTELLATION
-function openCt(sid) { const c=document.getElementById('ct-'+sid); if(c){c.classList.add('open');initCanvas(sid);updateCtQ(sid);} }
+// CONSTELLATION — begeleide opstelling
+function openCt(sid) {
+  const c = document.getElementById('ct-'+sid);
+  if(!c) return;
+  c.classList.add('open');
+  if(!(S.canvasQIdx[sid] >= 0)) S.canvasQIdx[sid] = 0;
+  initCanvas(sid);
+  updateCtQ(sid);
+}
 function closeCt(sid) { const c=document.getElementById('ct-'+sid); if(c) c.classList.remove('open'); }
+
 function initCanvas(sid) {
   const canvas = document.getElementById('cc-'+sid);
   if(!canvas) return;
-  canvas.innerHTML='';
+  canvas.innerHTML = '';
   const figs = CT_FIGS[sid];
   if(!figs) return;
-  const sp = S.canvasPos[sid]||{};
-  figs.forEach(f => {
-    const pos = sp[f.id]||{x:f.x,y:f.y};
-    const el = document.createElement('div');
-    el.className='figuur';
-    el.style.left=pos.x+'px';
-    el.style.top=pos.y+'px';
-    el.innerHTML=`<div class="fig-circle" style="border-color:${f.c};background:${f.bg}">${f.e}</div><div class="fig-label" style="color:${f.c}">${f.l}</div>`;
-    makeDrag(el,canvas,sid,f.id);
-    canvas.appendChild(el);
+  const sp = S.canvasPos[sid] || {};
+  const step = S.canvasQIdx[sid] || 0;
+  figs.slice(0, step + 1).forEach(f => {
+    const pos = sp[f.id] || {x:f.x, y:f.y};
+    addFigToCanvas(canvas, f, pos, sid, false);
   });
 }
-function makeDrag(el,container,sid,fid) {
-  let sx,sy,sl,st,on=false;
-  const dn=e=>{on=true;const p=e.touches?e.touches[0]:e;sx=p.clientX;sy=p.clientY;sl=parseInt(el.style.left)||0;st=parseInt(el.style.top)||0;e.stopPropagation()};
-  const mv=e=>{if(!on)return;const p=e.touches?e.touches[0]:e;const r=container.getBoundingClientRect();el.style.left=Math.max(0,Math.min(r.width-60,sl+p.clientX-sx))+'px';el.style.top=Math.max(0,Math.min(r.height-60,st+p.clientY-sy))+'px';e.preventDefault()};
-  const up=async()=>{if(!on)return;on=false;if(!S.canvasPos[sid])S.canvasPos[sid]={};const x=parseInt(el.style.left),y=parseInt(el.style.top);S.canvasPos[sid][fid]={x,y};await syncSave('save_opstelling',{sessie_id:sid,figuur_id:fid,x,y})};
-  el.addEventListener('mousedown',dn);el.addEventListener('touchstart',dn,{passive:false});
-  document.addEventListener('mousemove',mv);document.addEventListener('touchmove',mv,{passive:false});
-  document.addEventListener('mouseup',up);document.addEventListener('touchend',up);
+
+function addFigToCanvas(canvas, f, pos, sid, animate) {
+  if(document.getElementById('fig-'+sid+'-'+f.id)) return;
+  const el = document.createElement('div');
+  el.id = 'fig-'+sid+'-'+f.id;
+  el.className = 'figuur' + (animate ? ' figuur-new' : '');
+  el.style.left = pos.x+'px';
+  el.style.top  = pos.y+'px';
+  el.innerHTML = `<div class="fig-circle" style="border-color:${f.c};background:${f.bg}">${f.e}</div><div class="fig-label" style="color:${f.c}">${f.l}</div>`;
+  makeDrag(el, canvas, sid, f.id);
+  canvas.appendChild(el);
+  if(animate) setTimeout(() => el.classList.remove('figuur-new'), 500);
 }
-function nextCtQ(sid){S.canvasQIdx[sid]=(S.canvasQIdx[sid]||0)+1;updateCtQ(sid);}
-function updateCtQ(sid){const qs=CT_Q[sid];if(!qs)return;const el=document.getElementById('cq-'+sid);if(!el)return;const i=S.canvasQIdx[sid]||0;el.textContent=i<qs.length?qs[i]:'Goed. Kijk naar het geheel. Wat zegt dit beeld jou?';}
-function resetCt(sid){S.canvasPos[sid]={};S.canvasQIdx[sid]=0;initCanvas(sid);updateCtQ(sid);}
+
+function makeDrag(el, container, sid, fid) {
+  let sx,sy,sl,st,on=false;
+  const dn = e => { on=true; const p=e.touches?e.touches[0]:e; sx=p.clientX; sy=p.clientY; sl=parseInt(el.style.left)||0; st=parseInt(el.style.top)||0; e.stopPropagation(); };
+  const mv = e => { if(!on) return; const p=e.touches?e.touches[0]:e; const r=container.getBoundingClientRect(); el.style.left=Math.max(0,Math.min(r.width-62,sl+p.clientX-sx))+'px'; el.style.top=Math.max(0,Math.min(r.height-62,st+p.clientY-sy))+'px'; e.preventDefault(); };
+  const up = async () => { if(!on) return; on=false; if(!S.canvasPos[sid]) S.canvasPos[sid]={}; const x=parseInt(el.style.left),y=parseInt(el.style.top); S.canvasPos[sid][fid]={x,y}; await syncSave('save_opstelling',{sessie_id:sid,figuur_id:fid,x,y}); };
+  el.addEventListener('mousedown',dn); el.addEventListener('touchstart',dn,{passive:false});
+  document.addEventListener('mousemove',mv); document.addEventListener('touchmove',mv,{passive:false});
+  document.addEventListener('mouseup',up); document.addEventListener('touchend',up);
+}
+
+function nextCtQ(sid) {
+  const figs = CT_FIGS[sid];
+  const qs   = CT_Q[sid];
+  const idx  = S.canvasQIdx[sid] || 0;
+  if(qs && idx >= qs.length) return;
+  S.canvasQIdx[sid] = idx + 1;
+  const newIdx = S.canvasQIdx[sid];
+  if(figs && newIdx < figs.length) {
+    const canvas = document.getElementById('cc-'+sid);
+    if(canvas) {
+      const f = figs[newIdx];
+      const pos = (S.canvasPos[sid]||{})[f.id] || {x:f.x, y:f.y};
+      addFigToCanvas(canvas, f, pos, sid, true);
+    }
+  }
+  updateCtQ(sid);
+}
+function updateCtQ(sid) {
+  const qs = CT_Q[sid];
+  if(!qs) return;
+  const el = document.getElementById('cq-'+sid);
+  if(!el) return;
+  const i = S.canvasQIdx[sid] || 0;
+  el.textContent = i < qs.length ? qs[i] : 'Kijk naar het geheel — wie staat centraal? Wat zegt dit beeld jou?';
+}
+function resetCt(sid) { S.canvasPos[sid]={}; S.canvasQIdx[sid]=0; initCanvas(sid); updateCtQ(sid); }
+
+// ══════════════════════════════════════════
+//  VRIJE OPSTELLING
+// ══════════════════════════════════════════
+let currentVSet = 'werk';
+const V_COLORS = ['#2a5b8a','#3d6b4f','#6b3d8a','#8a6b2a','#8a8078','#1a1a1a'];
+const V_BGS    = ['#e4eef7','#c8ddd0','#f0e8f7','#f7f0e4','#d4cfc9','#eee'];
+const V_EMOJIS = ['🟡','🔴','🟣','🟤','⚪','🔶'];
+
+function renderOpstelling() {
+  initVrijeCanvas(currentVSet);
+  renderSavedList();
+}
+
+function switchVSet(setId, btn) {
+  currentVSet = setId;
+  document.querySelectorAll('.vset-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const def = VSET_DEFS[setId];
+  document.getElementById('vct-title').textContent = def.title;
+  document.getElementById('vct-add-wrap').style.display = setId === 'vrij' ? '' : 'none';
+  initVrijeCanvas(setId);
+}
+
+function initVrijeCanvas(setId) {
+  const canvas = document.getElementById('vct-canvas');
+  if(!canvas) return;
+  canvas.innerHTML = '';
+  const def = VSET_DEFS[setId];
+  const pos = S.vpos[setId] || {};
+  def.figs.forEach(f => addVFig(canvas, f, pos[f.id]||{x:f.x,y:f.y}, setId, false));
+  (S.vextra[setId]||[]).forEach(f => addVFig(canvas, f, pos[f.id]||{x:f.x,y:f.y}, setId, false));
+}
+
+function addVFig(canvas, f, pos, setId, animate) {
+  const el = document.createElement('div');
+  el.className = 'figuur' + (animate ? ' figuur-new' : '');
+  el.id = 'vfig-'+f.id;
+  el.style.left = pos.x+'px';
+  el.style.top  = pos.y+'px';
+  el.innerHTML = `<div class="fig-circle" style="border-color:${f.c};background:${f.bg}">${f.e}</div><div class="fig-label" style="color:${f.c}">${f.l}</div>`;
+  makeVDrag(el, canvas, setId, f.id);
+  canvas.appendChild(el);
+  if(animate) setTimeout(() => el.classList.remove('figuur-new'), 500);
+}
+
+function makeVDrag(el, container, setId, fid) {
+  let sx,sy,sl,st,on=false;
+  const dn = e => { on=true; const p=e.touches?e.touches[0]:e; sx=p.clientX; sy=p.clientY; sl=parseInt(el.style.left)||0; st=parseInt(el.style.top)||0; e.stopPropagation(); };
+  const mv = e => { if(!on) return; const p=e.touches?e.touches[0]:e; const r=container.getBoundingClientRect(); el.style.left=Math.max(0,Math.min(r.width-62,sl+p.clientX-sx))+'px'; el.style.top=Math.max(0,Math.min(r.height-62,st+p.clientY-sy))+'px'; e.preventDefault(); };
+  const up = async () => { if(!on) return; on=false; if(!S.vpos[setId]) S.vpos[setId]={}; const x=parseInt(el.style.left),y=parseInt(el.style.top); S.vpos[setId][fid]={x,y}; await syncSave('save_opstelling',{sessie_id:'v-'+setId,figuur_id:fid,x,y}); };
+  el.addEventListener('mousedown',dn); el.addEventListener('touchstart',dn,{passive:false});
+  document.addEventListener('mousemove',mv); document.addEventListener('touchmove',mv,{passive:false});
+  document.addEventListener('mouseup',up); document.addEventListener('touchend',up);
+}
+
+function addVrijFig() {
+  const inp = document.getElementById('vct-add-name');
+  const label = (inp.value||'').trim();
+  if(!label) return;
+  inp.value = '';
+  const i = (S.vextra[currentVSet]||[]).length;
+  const ci = i % V_COLORS.length;
+  const f = {id:'ex-'+Date.now(), e:V_EMOJIS[ci]||'⭕', l:label, c:V_COLORS[ci], bg:V_BGS[ci], x:60+Math.random()*250, y:60+Math.random()*200};
+  if(!S.vextra[currentVSet]) S.vextra[currentVSet]=[];
+  S.vextra[currentVSet].push(f);
+  const canvas = document.getElementById('vct-canvas');
+  addVFig(canvas, f, {x:f.x,y:f.y}, currentVSet, true);
+  syncSave('save_intake',{question_id:'vextra-'+currentVSet, answer:JSON.stringify(S.vextra[currentVSet])});
+}
+
+function resetVSet() {
+  if(!confirm('Posities terugzetten naar beginstand?')) return;
+  S.vpos[currentVSet] = {};
+  initVrijeCanvas(currentVSet);
+}
+
+function saveVOpstelling() {
+  const labelEl = document.getElementById('vct-label');
+  const label = (labelEl.value||'').trim() || (VSET_DEFS[currentVSet].title + ' — ' + new Date().toLocaleDateString('nl-NL'));
+  const snap = {
+    label,
+    set: currentVSet,
+    pos: JSON.parse(JSON.stringify(S.vpos[currentVSet]||{})),
+    extra: JSON.parse(JSON.stringify(S.vextra[currentVSet]||[])),
+    date: new Date().toISOString()
+  };
+  S.vsaved.push(snap);
+  try { localStorage.setItem('kompas-vsaved', JSON.stringify(S.vsaved)); } catch(e){}
+  labelEl.value = '';
+  renderSavedList();
+  showAch('💾 Opgeslagen!', label);
+}
+
+function renderSavedList() {
+  const wrap = document.getElementById('vct-saved-wrap');
+  const list = document.getElementById('vct-saved');
+  if(!wrap||!list) return;
+  if(!S.vsaved||!S.vsaved.length) { wrap.style.display='none'; return; }
+  wrap.style.display = '';
+  list.innerHTML = '';
+  S.vsaved.slice().reverse().forEach(snap => {
+    const d = document.createElement('div');
+    d.className = 'vsaved-item';
+    d.innerHTML = `<span>${snap.label}</span><span class="vsaved-meta">${VSET_DEFS[snap.set]?.title||snap.set} · ${new Date(snap.date).toLocaleDateString('nl-NL')}</span>`;
+    d.onclick = () => loadVSnapshot(snap);
+    list.appendChild(d);
+  });
+}
+
+function loadVSnapshot(snap) {
+  const btn = document.getElementById('vbtn-'+snap.set);
+  if(btn) switchVSet(snap.set, btn);
+  S.vpos[snap.set]   = snap.pos || {};
+  S.vextra[snap.set] = snap.extra || [];
+  initVrijeCanvas(snap.set);
+}
 
 // ══════════════════════════════════════════
 //  RELATIES
