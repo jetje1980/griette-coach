@@ -107,6 +107,9 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 .previews{display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.4rem}
 .preview-img{width:58px;height:58px;object-fit:cover;border-radius:3px;border:1px solid var(--stone-l)}
 .hidden-file{display:none}
+.hw-note{width:100%;border:1.5px solid rgba(0,0,0,0.1);border-radius:3px;padding:0.4rem 0.5rem;font-family:'Inter',sans-serif;font-size:0.77rem;line-height:1.5;resize:vertical;background:rgba(255,255,255,0.55);color:var(--ink);margin-top:0.45rem;min-height:54px;transition:border-color 0.15s}
+.hw-note:focus{outline:none;border-color:rgba(0,0,0,0.28);background:white}
+.hw-note::placeholder{color:rgba(0,0,0,0.35)}
 /* RELATIES */
 .relatie-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.65rem;margin-bottom:1rem}
 .rel-card{border:1.5px solid var(--stone-l);border-radius:6px;padding:0.9rem;cursor:pointer;transition:all 0.15s;background:white}
@@ -651,6 +654,7 @@ const S = {
   relaties:{},
   relSessie: 1,
   analyses:{},
+  hwNotes:{},
   vpos:{werk:{},familie:{},vrij:{}},
   vextra:{werk:[],familie:[],vrij:[]},
   vprops:{werk:{},familie:{},vrij:{}},
@@ -733,6 +737,10 @@ async function loadAll() {
       const rawP = S.intake['vprops-'+setId];
       if(rawP) { try { S.vprops[setId] = JSON.parse(rawP); } catch(e){} }
     });
+    // huiswerk notities
+    Object.keys(S.intake).filter(k=>k.startsWith('hwnote-')).forEach(k => {
+      S.hwNotes[k.replace('hwnote-','')] = S.intake[k];
+    });
     // opgeslagen opstellingen (localStorage)
     try { S.vsaved = JSON.parse(localStorage.getItem('kompas-vsaved')||'[]'); } catch(e){ S.vsaved=[]; }
     // relaties
@@ -797,6 +805,12 @@ function selM(gid, btn, val) {
   if(i>-1) S.intake[gid].splice(i,1); else S.intake[gid].push(val);
   syncSave('save_intake', {question_id: gid, answer: S.intake[gid]});
   updateIntakeProg();
+}
+let hwNoteTimer = {};
+function saveHWNote(hwId, value) {
+  S.hwNotes[hwId] = value;
+  clearTimeout(hwNoteTimer[hwId]);
+  hwNoteTimer[hwId] = setTimeout(() => syncSave('save_intake', {question_id:'hwnote-'+hwId, answer:value}), 800);
 }
 let taTimer = {};
 function saveTA(id) {
@@ -884,7 +898,8 @@ function buildDetail(s, done) {
   h += `<div style="margin-bottom:1rem"><div class="dtitle">Huiswerkopdrachten</div><div class="hw-grid">`;
   s.hw.forEach(hw => {
     const d = S.hwDone.has(hw.id);
-    h += `<div class="hw-card ${hw.d}"><div class="hw-domain">${hw.jaap?'⭐ ':''} ${hw.d}</div><div class="hw-text">${hw.t}</div><label class="hw-check" onclick="event.stopPropagation()"><input type="checkbox" ${d?'checked':''} onchange="toggleHW('${hw.id}',this.checked)"><span>${d?'Gedaan ✓':'Markeer als gedaan'}</span></label></div>`;
+    const note = S.hwNotes[hw.id] || '';
+    h += `<div class="hw-card ${hw.d}"><div class="hw-domain">${hw.jaap?'⭐ ':''} ${hw.d}</div><div class="hw-text">${hw.t}</div><textarea class="hw-note" id="hwnote-${hw.id}" placeholder="Wat heb je gedaan of waargenomen? Schrijf hier…" oninput="saveHWNote('${hw.id}',this.value)" onclick="event.stopPropagation()">${note}</textarea><label class="hw-check" onclick="event.stopPropagation()"><input type="checkbox" ${d?'checked':''} onchange="toggleHW('${hw.id}',this.checked)"><span>${d?'Gedaan ✓':'Markeer als gedaan'}</span></label></div>`;
   });
   h += `</div></div>`;
   h += `<div style="margin-bottom:1rem"><div class="dtitle">Hoe ging het?</div><div class="fbmod" onclick="event.stopPropagation()"><div class="fb-opts" id="fm-${s.id}">${s.fbo.map(o=>`<button class="fb-opt ${fb.mc===o?'sel':''}" onclick="selFb(${s.id},'${o}')">${o}</button>`).join('')}</div><div class="dtitle" style="margin-top:0.5rem">Wat heb je waargenomen / reactie van de ander?</div><textarea style="min-height:60px;width:100%;border:1.5px solid var(--stone-l);border-radius:4px;padding:0.55rem 0.7rem;font-family:Inter,sans-serif;font-size:0.83rem;background:white;color:var(--ink);resize:vertical" id="fb-${s.id}" placeholder="Typ hier..." oninput="saveFbTxt(${s.id})">${fb.txt||''}</textarea><div class="upload-area" onclick="document.getElementById('fu-${s.id}').click()">📎 Screenshot of foto toevoegen</div><input type="file" accept="image/*" id="fu-${s.id}" class="hidden-file" onchange="handleUpload(${s.id},this)" multiple><div class="previews" id="fp-${s.id}"></div></div></div>`;
