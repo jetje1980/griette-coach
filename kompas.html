@@ -178,6 +178,16 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 .claude-link-text{font-size:0.85rem;font-weight:600}
 .claude-link-sub{font-size:0.72rem;color:var(--stone-l);margin-top:0.1rem}
 .loading-screen{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;z-index:1000;font-family:'DM Serif Display',serif;font-size:1.2rem;color:var(--stone);flex-direction:column;gap:0.5rem}
+.chat-window{background:white;border:1px solid var(--stone-l);border-radius:8px;padding:1rem;min-height:300px;max-height:55vh;overflow-y:auto;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.75rem}
+.chat-msg{display:flex}
+.chat-msg.user{justify-content:flex-end}
+.chat-msg.coach{justify-content:flex-start}
+.chat-bubble{max-width:80%;padding:0.65rem 0.9rem;border-radius:12px;font-size:0.85rem;line-height:1.55;white-space:pre-wrap}
+.chat-msg.user .chat-bubble{background:var(--copper);color:white;border-bottom-right-radius:3px}
+.chat-msg.coach .chat-bubble{background:var(--fog);color:var(--ink);border-bottom-left-radius:3px}
+.chat-input-row{display:flex;gap:0.5rem;align-items:flex-end}
+.chat-input-row textarea{flex:1;min-height:42px;max-height:120px;resize:none}
+.chat-typing{font-size:0.78rem;color:var(--stone);font-style:italic;padding:0.3rem 0.5rem}
 .loading-screen.hidden{display:none}
 .loading-dot{width:8px;height:8px;border-radius:50%;background:var(--copper);animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:0.3}50%{opacity:1}}
@@ -200,6 +210,7 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
       <button class="nav-tab" onclick="showPage('relaties')" id="tab-relaties">Relaties</button>
       <button class="nav-tab" onclick="showPage('vinklijst')" id="tab-vinklijst">Vinklijst</button>
       <button class="nav-tab" onclick="showPage('turven')" id="tab-turven">Turven</button>
+      <button class="nav-tab" onclick="showPage('coach')" id="tab-coach">💬 Coach</button>
     </div>
     <div class="nav-xp">⬡ <span id="xp-total">0</span></div>
   </div>
@@ -216,15 +227,6 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
   <div class="page-title">Intakegesprek</div>
   <div class="page-sub">Vul dit in vóór sessie 1. Alles wordt opgeslagen in jouw beveiligde database.</div>
   <div class="leervraag"><div class="lq-label">Leervraag</div><p>"Hoe blijf ik aanwezig — met mijn behoefte, mijn positie, mijn enthousiasme — op het moment dat ik de neiging voel om terug te stappen, te sussen of het zelf op te lossen?"</p></div>
-  <a href="https://claude.ai/project/01973e33-e0b1-7cf6-8c71-3e61eba04728" target="_blank" class="claude-link">
-    <div class="claude-link-icon">🤖</div>
-    <div class="claude-link-body">
-      <div class="claude-link-label">Coachingsgesprek</div>
-      <div class="claude-link-text">Open Claude — bespreek je intake</div>
-      <div class="claude-link-sub">Plak je antwoorden of stel een vraag over wat je invult</div>
-    </div>
-    <div style="margin-left:auto;color:var(--stone-l);font-size:0.9rem">↗</div>
-  </a>
   <div class="intake-prog"><div class="ip-pct" id="ip-pct">0%</div><div class="ip-track"><div class="ip-fill" id="ip-fill" style="width:0%"></div></div><div class="ip-status" id="ip-status">Begin hieronder</div></div>
 
   <div class="card"><div class="card-label c">Blok 1 — Energiepeil</div>
@@ -281,7 +283,7 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
   <div class="btn-row">
     <button class="btn btn-p" onclick="completeIntake()">✓ Intake afronden (+50 XP)</button>
   </div>
-  <div style="margin-top:0.75rem;padding:0.65rem 0.9rem;background:var(--green-p);border-radius:4px;font-size:0.78rem;color:var(--green);border:1px solid var(--green-l)">✓ Je antwoorden worden automatisch opgeslagen. Klik de Claude-link hierboven — ik haal alles op uit je database.</div>
+  <div style="margin-top:0.75rem;padding:0.65rem 0.9rem;background:var(--green-p);border-radius:4px;font-size:0.78rem;color:var(--green);border:1px solid var(--green-l)">✓ Je antwoorden worden automatisch opgeslagen. Vragen tijdens het invullen? Ga naar het tabblad 💬 Coach.</div>
 </div>
 
 <!-- ═══ SESSIES ═══ -->
@@ -321,6 +323,21 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
   <div class="page-sub">Klik op een stip om een moment te turven.</div>
   <div class="card" style="margin-bottom:1rem"><div class="card-label c">Alarmwoorden</div><div id="trows"></div><button class="btn btn-ghost" style="margin-top:0.65rem;font-size:0.76rem" onclick="addTurvenWord()">+ Woord toevoegen</button></div>
   <div class="card"><div class="card-label c">Notities</div><textarea id="tnotes" placeholder="Waar, met wie, wat had je nodig?" oninput="saveTurvenNotes()"></textarea></div>
+</div>
+
+<!-- ═══ COACH CHAT ═══ -->
+<div class="page" id="page-coach">
+  <div class="page-title">Coach</div>
+  <div class="page-sub">Stel je vraag. Ik ken al je data uit de tool — intake, reflecties, turven, relatiekaart.</div>
+  <div class="chat-window" id="chat-window">
+    <div class="chat-msg coach">
+      <div class="chat-bubble">Hoi Jet. Ik heb alles voor me wat je tot nu toe hebt ingevuld. Waar wil je het over hebben — een sessie, een relatie, een patroon dat opspeelt?</div>
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <textarea id="chat-input" placeholder="Typ je bericht..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
+    <button class="btn btn-p" id="chat-send" onclick="sendChat()">Stuur</button>
+  </div>
 </div>
 
 <div class="ach" id="ach"><div class="ach-title" id="ach-t"></div><div class="ach-sub" id="ach-s"></div></div>
@@ -593,17 +610,7 @@ function renderSessies() {
 
 function buildDetail(s, done) {
   const fb = S.feedback[s.id] || {};
-  const claudeUrl = 'https://claude.ai/project/01973e33-e0b1-7cf6-8c71-3e61eba04728';
   let h = `
-    <a href="${claudeUrl}" target="_blank" class="claude-link" style="margin-bottom:1rem">
-      <div class="claude-link-icon">🤖</div>
-      <div class="claude-link-body">
-        <div class="claude-link-label">Coachingsgesprek — Sessie ${s.id}</div>
-        <div class="claude-link-text">Open Claude voor begeleiding bij deze sessie</div>
-        <div class="claude-link-sub">Deel je reflectie of bespreek wat je waarnam</div>
-      </div>
-      <div style="margin-left:auto;color:var(--stone-l);font-size:0.9rem">↗</div>
-    </a>
     <div style="margin-bottom:1rem"><div class="dtitle">Wat we doen</div><div style="font-size:0.84rem;line-height:1.6">${s.focus}</div></div>`;
   if(s.ct) h += `<div style="margin-bottom:1rem"><div class="dtitle">Opstelling</div><button class="btn btn-p" style="font-size:0.76rem" onclick="openCt(${s.id});event.stopPropagation()">▶ Open opstelling</button><div class="ct-wrap" id="ct-${s.id}"><div class="ct-hdr"><strong>Opstelling sessie ${s.id}</strong><span>Sleep de figuren</span></div><div class="ct-canvas" id="cc-${s.id}"></div><div class="ct-vraag" id="cq-${s.id}">Laadt...</div><div class="ct-ctrl"><button class="ct-btn" onclick="nextCtQ(${s.id})">Volgende →</button><button class="ct-btn" onclick="resetCt(${s.id})">Reset</button><button class="ct-btn p" onclick="closeCt(${s.id})">✓ Sluiten</button></div></div></div>`;
   h += `<div style="margin-bottom:1rem"><div class="dtitle">Huiswerkopdrachten</div><div class="hw-grid">`;
@@ -627,7 +634,7 @@ function buildDetail(s, done) {
       <div style="font-size:0.82rem;line-height:1.65;white-space:pre-wrap;margin-top:0.5rem">${prevAnalyse}</div>
     </div>`;
   }
-  h += `<div style="margin-top:0.75rem;padding:0.65rem 0.9rem;background:var(--green-p);border-radius:4px;font-size:0.78rem;color:var(--green);border:1px solid var(--green-l)">✓ Alles wordt automatisch opgeslagen. Open Claude via de link hierboven — je data staat al klaar.</div>`;
+  h += `<div style="margin-top:0.75rem;padding:0.65rem 0.9rem;background:var(--green-p);border-radius:4px;font-size:0.78rem;color:var(--green);border:1px solid var(--green-l)">✓ Alles wordt automatisch opgeslagen. Vragen? Ga naar het tabblad 💬 Coach — ik ken je data al.</div>`;
   return h;
 }
 
@@ -958,6 +965,58 @@ function saveTurvenNotes() {
   S.turvenNotes = el.value;
   clearTimeout(tnTimer);
   tnTimer = setTimeout(() => syncSave('save_turven_notities', {notities: el.value}), 800);
+}
+
+// ══════════════════════════════════════════
+//  COACH CHAT
+// ══════════════════════════════════════════
+const chatHistory = [];
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if(!text) return;
+  input.value = '';
+  addChatMsg('user', text);
+  chatHistory.push({role:'user', content:text});
+
+  // typing indicator
+  const win = document.getElementById('chat-window');
+  const typing = document.createElement('div');
+  typing.className = 'chat-typing';
+  typing.id = 'chat-typing';
+  typing.textContent = 'Coach denkt na…';
+  win.appendChild(typing);
+  win.scrollTop = win.scrollHeight;
+
+  const sendBtn = document.getElementById('chat-send');
+  sendBtn.disabled = true;
+
+  try {
+    const r = await fetch(`${API}?action=chat`, {
+      method: 'POST',
+      headers: {'x-kompas-key': KEY, 'Content-Type': 'application/json'},
+      body: JSON.stringify({messages: chatHistory})
+    });
+    const data = await r.json();
+    document.getElementById('chat-typing')?.remove();
+    const reply = data.reply || 'Sorry, er ging iets mis. Probeer het nog eens.';
+    addChatMsg('coach', reply);
+    chatHistory.push({role:'assistant', content:reply});
+  } catch(e) {
+    document.getElementById('chat-typing')?.remove();
+    addChatMsg('coach', 'Geen verbinding. Check je internet en probeer opnieuw.');
+  }
+  sendBtn.disabled = false;
+}
+
+function addChatMsg(who, text) {
+  const win = document.getElementById('chat-window');
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg ' + who;
+  msg.innerHTML = `<div class="chat-bubble"></div>`;
+  msg.querySelector('.chat-bubble').textContent = text;
+  win.appendChild(msg);
+  win.scrollTop = win.scrollHeight;
 }
 
 // ══════════════════════════════════════════
