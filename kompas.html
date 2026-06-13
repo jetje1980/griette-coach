@@ -646,7 +646,7 @@ const VSET_DEFS = {
 //  STATE
 // ══════════════════════════════════════════
 const S = {
-  xp:0, completed:new Set(), hwDone:new Set(),
+  xp:0, completed:new Set(), hwDone:new Set(), vctChats:{},
   intake:{}, reflecties:{}, feedback:{},
   turven:[{w:'Gedoe',n:0},{w:'Te veel',n:0},{w:'Sst',n:0}],
   turvenNotes:'',
@@ -740,6 +740,11 @@ async function loadAll() {
     // huiswerk notities
     Object.keys(S.intake).filter(k=>k.startsWith('hwnote-')).forEach(k => {
       S.hwNotes[k.replace('hwnote-','')] = S.intake[k];
+    });
+    // coach chat historie per opstelling-set
+    Object.keys(S.intake).filter(k=>k.startsWith('vct-chat-')).forEach(k => {
+      const setId = k.replace('vct-chat-','');
+      try { S.vctChats[setId] = JSON.parse(S.intake[k]); } catch(e) {}
     });
     // opgeslagen opstellingen (localStorage)
     try { S.vsaved = JSON.parse(localStorage.getItem('kompas-vsaved')||'[]'); } catch(e){ S.vsaved=[]; }
@@ -1388,13 +1393,26 @@ function renderSavedList() {
   if(!S.vsaved||!S.vsaved.length) { wrap.style.display='none'; return; }
   wrap.style.display = '';
   list.innerHTML = '';
-  S.vsaved.slice().reverse().forEach(snap => {
+  S.vsaved.slice().reverse().forEach((snap, ri) => {
+    const actualIdx = S.vsaved.length - 1 - ri;
     const d = document.createElement('div');
     d.className = 'vsaved-item';
     d.innerHTML = `<span>${snap.label}</span><span class="vsaved-meta">${VSET_DEFS[snap.set]?.title||snap.set} · ${new Date(snap.date).toLocaleDateString('nl-NL')}</span>`;
     d.onclick = () => loadVSnapshot(snap);
+    const del = document.createElement('button');
+    del.className = 'ct-btn';
+    del.style.cssText = 'padding:0.1rem 0.45rem;font-size:0.7rem;color:var(--stone);margin-left:0.5rem;flex-shrink:0';
+    del.textContent = '✕';
+    del.onclick = e => { e.stopPropagation(); deleteVSnapshot(actualIdx); };
+    d.appendChild(del);
     list.appendChild(d);
   });
+}
+
+function deleteVSnapshot(index) {
+  S.vsaved.splice(index, 1);
+  localStorage.setItem('kompas-vsaved', JSON.stringify(S.vsaved));
+  renderSavedList();
 }
 
 function loadVSnapshot(snap) {
@@ -1499,17 +1517,43 @@ function describeConstellationText(setId) {
   return txt;
 }
 
-async function startOpstellingAnalyse() {
+function saveVctHistory(setId) {
+  if(!vctHistory.length) return;
+  S.vctChats[setId] = vctHistory.slice();
+  syncSave('save_intake', {question_id:'vct-chat-'+setId, answer: JSON.stringify(vctHistory)});
+}
+
+async function startOpstellingAnalyse(forceNew) {
   const section = document.getElementById('vct-analyse-section');
   section.style.display = '';
-  const win = document.getElementById('vct-chat-window');
-  win.innerHTML = '';
-  vctHistory.length = 0;
   clearVCtMC();
   section.scrollIntoView({behavior:'smooth', block:'nearest'});
 
-  const constellDesc = describeConstellationText(currentVSet);
+  // Herstel eerder gesprek als dat er is
+  const saved = S.vctChats[currentVSet];
+  if(!forceNew && saved && saved.length > 1) {
+    const win = document.getElementById('vct-chat-window');
+    win.innerHTML = '';
+    vctHistory.length = 0;
+    saved.forEach(m => vctHistory.push(m));
+    // Toon berichten (sla initPrompt over, die staat op index 0)
+    saved.forEach((m, i) => { if(i > 0) addVCtMsg(m.role === 'user' ? 'user' : 'coach', m.content); });
+    const lastA = [...saved].reverse().find(m => m.role === 'assistant');
+    if(lastA) parseVCtMC(lastA.content);
+    // Optie om opnieuw te beginnen
+    const hint = document.createElement('div');
+    hint.className = 'chat-msg coach';
+    hint.innerHTML = `<div class="chat-bubble" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center"><span>Vorige sessie hersteld.</span><button class="ct-btn" onclick="startOpstellingAnalyse(true)">↺ Nieuwe analyse</button></div>`;
+    win.appendChild(hint);
+    win.scrollTop = win.scrollHeight;
+    return;
+  }
 
+  const win = document.getElementById('vct-chat-window');
+  win.innerHTML = '';
+  vctHistory.length = 0;
+
+  const constellDesc = describeConstellationText(currentVSet);
   const initPrompt = `Dit is mijn opstelling:\n\n${constellDesc}\n\nBegin met direct waarnemen — benoem twee of drie opvallende feiten (positie, afstand, richting, kenmerken). Ga dan de diepte in via de drie principes. Sluit je eerste bericht altijd af met [MC: optie A | optie B | optie C].`;
 
   vctHistory.push({role:'user', content: initPrompt});
@@ -1523,6 +1567,7 @@ async function startOpstellingAnalyse() {
     vctHistory.push({role:'assistant', content: reply});
     addVCtMsg('coach', reply);
     parseVCtMC(reply);
+    saveVctHistory(currentVSet);
   } catch(e) {
     document.getElementById('vct-typing')?.remove();
     addVCtMsg('coach', `Geen verbinding (${e.message}). Controleer je internet.`);
@@ -1546,6 +1591,7 @@ async function sendVCtChat(preset) {
     vctHistory.push({role:'assistant', content: reply});
     addVCtMsg('coach', reply);
     parseVCtMC(reply);
+    saveVctHistory(currentVSet);
   } catch(e) {
     document.getElementById('vct-typing')?.remove();
     addVCtMsg('coach', 'Geen verbinding. Probeer opnieuw.');
