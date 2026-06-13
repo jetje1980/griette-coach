@@ -1541,13 +1541,14 @@ START: Beschrijf wat je direct ziet. Benoem twee of drie opvallende dingen (afst
   try {
     const data = await api('chat', {messages: vctHistory});
     document.getElementById('vct-typing')?.remove();
+    if(data.error) { addVCtMsg('coach', `⚠️ Fout van server: ${data.error}`); return; }
     const reply = data.reply || 'Er ging iets mis. Probeer opnieuw.';
     vctHistory.push({role:'assistant', content: reply});
     addVCtMsg('coach', reply);
     parseVCtMC(reply);
   } catch(e) {
     document.getElementById('vct-typing')?.remove();
-    addVCtMsg('coach', 'Geen verbinding. Controleer je internet en probeer opnieuw.');
+    addVCtMsg('coach', `Geen verbinding (${e.message}). Controleer je internet.`);
   }
 }
 
