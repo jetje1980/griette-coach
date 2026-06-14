@@ -255,6 +255,10 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 .login-error{font-size:0.78rem;color:#c0392b;margin-top:0.5rem;min-height:1rem}
 .loading-screen.hidden{display:none}
 .loading-dot{width:8px;height:8px;border-radius:50%;background:var(--copper);animation:pulse 1s infinite}
+.load-err-banner{background:#fdf3f0;border:1.5px solid #e07060;border-radius:8px;padding:1rem 1.25rem;margin:1.5rem auto;max-width:520px;display:flex;align-items:center;gap:0.9rem;font-size:0.85rem}
+.load-err-banner .lerr-ico{font-size:1.5rem;flex-shrink:0}
+.load-err-banner .lerr-txt{flex:1;line-height:1.5;color:#8a3020}
+.load-err-banner button{background:var(--copper);color:white;border:none;border-radius:5px;padding:0.4rem 0.9rem;font-family:'Inter',sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer;white-space:nowrap}
 @keyframes pulse{0%,100%{opacity:0.3}50%{opacity:1}}
 @media(max-width:600px){.nav-logo{padding:0.7rem 0.9rem;font-size:0.9rem}.nav-tab{padding:0 0.7rem;font-size:0.66rem}.page{padding:1.25rem 1rem 5rem}.srow{grid-template-columns:2rem 1fr;gap:0.7rem}.sxp{display:none}.hw-grid{grid-template-columns:1fr}.relatie-grid{grid-template-columns:1fr 1fr}}
 </style>
@@ -299,6 +303,13 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 <div class="loading-screen hidden" id="loading">
   <div class="loading-dot"></div>
   <div>Kompas laden…</div>
+</div>
+<div id="load-err-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:500;padding:1rem">
+  <div class="load-err-banner">
+    <div class="lerr-ico">⚠️</div>
+    <div class="lerr-txt"><strong>Laden mislukt.</strong> Je data staat veilig in de cloud — er was even geen verbinding. Klik op Herlaad om opnieuw te proberen.</div>
+    <button onclick="location.reload()">↺ Herlaad</button>
+  </div>
 </div>
 
 <nav>
@@ -855,6 +866,13 @@ async function loadAll() {
     setSyncDot('ok');
   } catch(e) {
     setSyncDot('err');
+    document.getElementById('loading').classList.add('hidden');
+    if(e.message && e.message.includes('ingelogd')) {
+      document.getElementById('login-overlay').style.display = '';
+    } else {
+      document.getElementById('load-err-banner').style.display = '';
+    }
+    return;
   }
   restoreUI();
   document.getElementById('loading').classList.add('hidden');
