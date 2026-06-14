@@ -836,8 +836,18 @@ async function loadAll() {
       const setId = k.replace('vct-chat-','');
       try { S.vctChats[setId] = JSON.parse(S.intake[k]); } catch(e) {}
     });
-    // opgeslagen opstellingen (localStorage)
-    try { S.vsaved = JSON.parse(localStorage.getItem('kompas-vsaved')||'[]'); } catch(e){ S.vsaved=[]; }
+    // opgeslagen opstellingen — eerst Supabase, dan localStorage als fallback
+    const rawVsaved = S.intake['vsaved'];
+    if(rawVsaved) {
+      try { S.vsaved = JSON.parse(rawVsaved); } catch(e){ S.vsaved=[]; }
+    } else {
+      try { S.vsaved = JSON.parse(localStorage.getItem('kompas-vsaved')||'[]'); } catch(e){ S.vsaved=[]; }
+    }
+    // vpos per set (figuurposities)
+    ['werk','familie','vrij','anderen'].forEach(setId => {
+      const rawV = S.intake['vpos-'+setId];
+      if(rawV) { try { S.vpos[setId] = JSON.parse(rawV); } catch(e){} }
+    });
     // relaties
     (data.relaties||[]).forEach(r => { if(!S.relaties[r.sessie_id]) S.relaties[r.sessie_id]={}; S.relaties[r.sessie_id][r.relatie] = r; });
     // analyses
@@ -902,6 +912,13 @@ function selM(gid, btn, val) {
   updateIntakeProg();
 }
 let hwNoteTimer = {};
+let vposTimer = {};
+function saveVPosDebounced(setId) {
+  clearTimeout(vposTimer[setId]);
+  vposTimer[setId] = setTimeout(() => {
+    syncSave('save_intake', {question_id:'vpos-'+setId, answer:JSON.stringify(S.vpos[setId]||{})});
+  }, 600);
+}
 function saveHWNote(hwId, value) {
   S.hwNotes[hwId] = value;
   clearTimeout(hwNoteTimer[hwId]);
@@ -1334,7 +1351,7 @@ function makeVDrag(el, container, setId, fid) {
     const x=parseInt(el.style.left),y=parseInt(el.style.top);
     S.vpos[setId][fid]={x,y};
     renderConnections(setId);
-    await syncSave('save_opstelling',{sessie_id:'v-'+setId,figuur_id:fid,x,y});
+    saveVPosDebounced(setId);
   };
   el.addEventListener('mousedown',dn); el.addEventListener('touchstart',dn,{passive:false});
   document.addEventListener('mousemove',mv); document.addEventListener('touchmove',mv,{passive:false});
@@ -1696,6 +1713,11 @@ function resetVSet() {
   initVrijeCanvas(currentVSet);
 }
 
+function saveVsavedToCloud() {
+  try { localStorage.setItem('kompas-vsaved', JSON.stringify(S.vsaved)); } catch(e){}
+  syncSave('save_intake', {question_id:'vsaved', answer: JSON.stringify(S.vsaved)});
+}
+
 function saveVOpstelling() {
   const labelEl = document.getElementById('vct-label');
   const label = (labelEl.value||'').trim() || (VSET_DEFS[currentVSet].title + ' — ' + new Date().toLocaleDateString('nl-NL'));
@@ -1707,7 +1729,7 @@ function saveVOpstelling() {
     date: new Date().toISOString()
   };
   S.vsaved.push(snap);
-  try { localStorage.setItem('kompas-vsaved', JSON.stringify(S.vsaved)); } catch(e){}
+  saveVsavedToCloud();
   labelEl.value = '';
   renderSavedList();
   showAch('💾 Opgeslagen!', label);
@@ -1738,7 +1760,7 @@ function renderSavedList() {
 
 function deleteVSnapshot(index) {
   S.vsaved.splice(index, 1);
-  localStorage.setItem('kompas-vsaved', JSON.stringify(S.vsaved));
+  saveVsavedToCloud();
   renderSavedList();
 }
 
