@@ -796,7 +796,52 @@ let saveTimer;
 async function syncSave(action, body) {
   setSyncDot('saving');
   try {
-    await api(action, body);
+    const { data: { session } } = await supa.auth.getSession();
+    if(!session) throw new Error('Niet ingelogd');
+    const uid = session.user.id;
+    let error;
+    if(action === 'save_intake') {
+      ({error} = await supa.from('kompas_intake').upsert(
+        {user_uuid: uid, question_id: body.question_id, answer: body.answer},
+        {onConflict: 'user_uuid,question_id'}
+      ));
+    } else if(action === 'save_voortgang') {
+      ({error} = await supa.from('kompas_voortgang').upsert(
+        {user_uuid: uid, xp: body.xp, completed: body.completed},
+        {onConflict: 'user_uuid'}
+      ));
+    } else if(action === 'save_reflectie') {
+      ({error} = await supa.from('kompas_reflecties').upsert(
+        {user_uuid: uid, sessie_id: body.sessie_id, reflectie: body.reflectie, feedback_mc: body.feedback_mc, feedback_txt: body.feedback_txt},
+        {onConflict: 'user_uuid,sessie_id'}
+      ));
+    } else if(action === 'save_huiswerk') {
+      ({error} = await supa.from('kompas_huiswerk').upsert(
+        {user_uuid: uid, hw_id: body.hw_id, done: body.done},
+        {onConflict: 'user_uuid,hw_id'}
+      ));
+    } else if(action === 'save_opstelling') {
+      ({error} = await supa.from('kompas_opstelling').upsert(
+        {user_uuid: uid, sessie_id: body.sessie_id, figuur_id: body.figuur_id, x: body.x, y: body.y},
+        {onConflict: 'user_uuid,sessie_id,figuur_id'}
+      ));
+    } else if(action === 'save_turven') {
+      ({error} = await supa.from('kompas_turven').upsert(
+        {user_uuid: uid, woord: body.woord, count: body.count},
+        {onConflict: 'user_uuid,woord'}
+      ));
+    } else if(action === 'save_turven_notities') {
+      ({error} = await supa.from('kompas_turven_notities').upsert(
+        {user_uuid: uid, notities: body.notities},
+        {onConflict: 'user_uuid'}
+      ));
+    } else if(action === 'save_relatie') {
+      ({error} = await supa.from('kompas_relaties').upsert(
+        {user_uuid: uid, sessie_id: body.sessie_id, relatie: body.relatie, observatie: body.observatie, wat_deed_ik: body.wat_deed_ik, wat_deed_ander: body.wat_deed_ander, hoe_voelde_het: body.hoe_voelde_het, patroon_herkend: body.patroon_herkend, nieuwe_beweging: body.nieuwe_beweging},
+        {onConflict: 'user_uuid,sessie_id,relatie'}
+      ));
+    }
+    if(error) throw new Error(error.message);
     setSyncDot('ok');
     flashSync('✓ Opgeslagen');
   } catch(e) {
@@ -818,20 +863,45 @@ function flashSync(msg) {
 // ══════════════════════════════════════════
 async function loadAll() {
   try {
-    const data = await api('load');
+    const { data: { session } } = await supa.auth.getSession();
+    if(!session) { document.getElementById('login-overlay').style.display = ''; return; }
+    const uid = session.user.id;
+    const [
+      {data: intake,         error: e1},
+      {data: reflecties,     error: e2},
+      {data: huiswerk,       error: e3},
+      {data: turven,         error: e4},
+      {data: turvenNot,      error: e5},
+      {data: voortgang,      error: e6},
+      {data: opstelling,     error: e7},
+      {data: relaties,       error: e8},
+      {data: analyses,       error: e9}
+    ] = await Promise.all([
+      supa.from('kompas_intake').select('question_id,answer').eq('user_uuid', uid),
+      supa.from('kompas_reflecties').select('sessie_id,reflectie,feedback_mc,feedback_txt').eq('user_uuid', uid),
+      supa.from('kompas_huiswerk').select('hw_id,done').eq('user_uuid', uid),
+      supa.from('kompas_turven').select('woord,count').eq('user_uuid', uid),
+      supa.from('kompas_turven_notities').select('notities').eq('user_uuid', uid),
+      supa.from('kompas_voortgang').select('xp,completed').eq('user_uuid', uid),
+      supa.from('kompas_opstelling').select('sessie_id,figuur_id,x,y').eq('user_uuid', uid),
+      supa.from('kompas_relaties').select('sessie_id,relatie,observatie,wat_deed_ik,wat_deed_ander,hoe_voelde_het,patroon_herkend,nieuwe_beweging').eq('user_uuid', uid),
+      supa.from('kompas_analyses').select('sessie_id,analyse_tekst').eq('user_uuid', uid),
+    ]);
+    const anyError = e1||e2||e3||e4||e5||e6||e7||e8||e9;
+    if(anyError) throw new Error(anyError.message);
     // intake
-    (data.intake||[]).forEach(r => S.intake[r.question_id] = r.answer);
+    (intake||[]).forEach(r => S.intake[r.question_id] = r.answer);
     // reflecties
-    (data.reflecties||[]).forEach(r => { S.reflecties[r.sessie_id] = r.reflectie; S.feedback[r.sessie_id] = {mc: r.feedback_mc, txt: r.feedback_txt}; });
+    (reflecties||[]).forEach(r => { S.reflecties[r.sessie_id] = r.reflectie; S.feedback[r.sessie_id] = {mc: r.feedback_mc, txt: r.feedback_txt}; });
     // huiswerk
-    (data.huiswerk||[]).forEach(r => { if(r.done) S.hwDone.add(r.hw_id); });
+    (huiswerk||[]).forEach(r => { if(r.done) S.hwDone.add(r.hw_id); });
     // turven
-    if (data.turven?.length) S.turven = data.turven.map(r => ({w: r.woord, n: r.count}));
-    if (data.turvenNotities) S.turvenNotes = data.turvenNotities;
+    if(turven?.length) S.turven = turven.map(r => ({w: r.woord, n: r.count}));
+    if(turvenNot?.length) S.turvenNotes = turvenNot[0].notities || '';
     // voortgang
-    if (data.voortgang) { S.xp = data.voortgang.xp || 0; S.completed = new Set(data.voortgang.completed || []); }
-    // opstelling (sessies + vrije sets)
-    (data.opstelling||[]).forEach(r => {
+    if(voortgang?.length) { S.xp = voortgang[0].xp || 0; S.completed = new Set(voortgang[0].completed || []); }
+    // opstelling
+    (opstelling||[]).forEach(r => {
       const sid = String(r.sessie_id);
       if(sid.startsWith('v-')) {
         const setId = sid.slice(2);
@@ -845,13 +915,13 @@ async function loadAll() {
     // vrije extra figuren (opgeslagen als intake entries)
     ['werk','familie','vrij','anderen'].forEach(setId => {
       const raw = S.intake['vextra-'+setId];
-      if(raw) { try { S.vextra[setId] = JSON.parse(raw); } catch(e){} }
+      if(raw) { try { S.vextra[setId] = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e){} }
       const rawP = S.intake['vprops-'+setId];
-      if(rawP) { try { S.vprops[setId] = JSON.parse(rawP); } catch(e){} }
+      if(rawP) { try { S.vprops[setId] = typeof rawP === 'string' ? JSON.parse(rawP) : rawP; } catch(e){} }
       const rawC = S.intake['vconn-'+setId];
-      if(rawC) { try { S.vconnections[setId] = JSON.parse(rawC); } catch(e){} }
+      if(rawC) { try { S.vconnections[setId] = typeof rawC === 'string' ? JSON.parse(rawC) : rawC; } catch(e){} }
       const rawA = S.intake['varchive-'+setId];
-      if(rawA) { try { S.vctArchive[setId] = JSON.parse(rawA); } catch(e){} }
+      if(rawA) { try { S.vctArchive[setId] = typeof rawA === 'string' ? JSON.parse(rawA) : rawA; } catch(e){} }
     });
     // huiswerk notities
     Object.keys(S.intake).filter(k=>k.startsWith('hwnote-')).forEach(k => {
@@ -860,24 +930,25 @@ async function loadAll() {
     // coach chat historie per opstelling-set
     Object.keys(S.intake).filter(k=>k.startsWith('vct-chat-')).forEach(k => {
       const setId = k.replace('vct-chat-','');
-      try { S.vctChats[setId] = JSON.parse(S.intake[k]); } catch(e) {}
+      const raw = S.intake[k];
+      try { S.vctChats[setId] = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e) {}
     });
     // opgeslagen opstellingen — eerst Supabase, dan localStorage als fallback
     const rawVsaved = S.intake['vsaved'];
     if(rawVsaved) {
-      try { S.vsaved = JSON.parse(rawVsaved); } catch(e){ S.vsaved=[]; }
+      try { S.vsaved = typeof rawVsaved === 'string' ? JSON.parse(rawVsaved) : rawVsaved; } catch(e){ S.vsaved=[]; }
     } else {
       try { S.vsaved = JSON.parse(localStorage.getItem('kompas-vsaved')||'[]'); } catch(e){ S.vsaved=[]; }
     }
     // vpos per set (figuurposities)
     ['werk','familie','vrij','anderen'].forEach(setId => {
       const rawV = S.intake['vpos-'+setId];
-      if(rawV) { try { S.vpos[setId] = JSON.parse(rawV); } catch(e){} }
+      if(rawV) { try { S.vpos[setId] = typeof rawV === 'string' ? JSON.parse(rawV) : rawV; } catch(e){} }
     });
     // relaties
-    (data.relaties||[]).forEach(r => { if(!S.relaties[r.sessie_id]) S.relaties[r.sessie_id]={}; S.relaties[r.sessie_id][r.relatie] = r; });
+    (relaties||[]).forEach(r => { if(!S.relaties[r.sessie_id]) S.relaties[r.sessie_id]={}; S.relaties[r.sessie_id][r.relatie] = r; });
     // analyses
-    (data.analyses||[]).forEach(r => { S.analyses[r.sessie_id] = r.analyse_tekst; });
+    (analyses||[]).forEach(r => { S.analyses[r.sessie_id] = r.analyse_tekst; });
     setSyncDot('ok');
   } catch(e) {
     setSyncDot('err');
