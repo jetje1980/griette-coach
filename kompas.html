@@ -307,7 +307,7 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 <div id="load-err-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:500;padding:1rem">
   <div class="load-err-banner">
     <div class="lerr-ico">⚠️</div>
-    <div class="lerr-txt"><strong>Laden mislukt.</strong> Je data staat veilig in de cloud — er was even geen verbinding. Klik op Herlaad om opnieuw te proberen.</div>
+    <div class="lerr-txt"><strong>Laden mislukt.</strong> Je data staat veilig in de cloud. Klik op Herlaad. <span id="lerr-detail" style="font-size:0.75rem;opacity:0.7"></span></div>
     <button onclick="location.reload()">↺ Herlaad</button>
   </div>
 </div>
@@ -870,6 +870,8 @@ async function loadAll() {
     if(e.message && e.message.includes('ingelogd')) {
       document.getElementById('login-overlay').style.display = '';
     } else {
+      const errEl = document.getElementById('lerr-detail');
+      if(errEl) errEl.textContent = '(' + (e.message || String(e)) + ')';
       document.getElementById('load-err-banner').style.display = '';
     }
     return;
