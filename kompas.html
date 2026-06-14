@@ -949,6 +949,11 @@ async function loadAll() {
     (relaties||[]).forEach(r => { if(!S.relaties[r.sessie_id]) S.relaties[r.sessie_id]={}; S.relaties[r.sessie_id][r.relatie] = r; });
     // analyses
     (analyses||[]).forEach(r => { S.analyses[r.sessie_id] = r.analyse_tekst; });
+    // Auto-trigger ontbrekende analyses voor afgeronde sessies
+    setTimeout(() => {
+      if(S.completed.has('intake') && !S.analyses['intake']) triggerAnalyse('intake');
+      for(let i=1;i<=5;i++){const k='s'+i;if(S.completed.has(k)&&!S.analyses[k])triggerAnalyse(k);}
+    }, 800);
     setSyncDot('ok');
   } catch(e) {
     setSyncDot('err');
@@ -2253,6 +2258,14 @@ async function triggerAnalyse(sessie_id) {
     const data = await api('analyseer', {sessie_id});
     if(data.ok && data.analyse_tekst) {
       S.analyses[sessie_id] = data.analyse_tekst;
+      // Sla ook op vanuit client voor zekerheid
+      const { data: { session } } = await supa.auth.getSession();
+      if(session) {
+        await supa.from('kompas_analyses').upsert(
+          {user_uuid: session.user.id, sessie_id, analyse_tekst: data.analyse_tekst},
+          {onConflict: 'user_uuid,sessie_id'}
+        );
+      }
       if(document.getElementById('page-sessies').classList.contains('active')) renderSessies();
     }
   } catch(e) { console.warn('Analyse mislukt:', e); }
