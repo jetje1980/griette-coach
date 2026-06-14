@@ -181,6 +181,23 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
 .fig-richting{font-size:0.9rem;line-height:1;text-align:center;margin-bottom:1px}
 .fig-tags{display:flex;flex-wrap:wrap;gap:2px;max-width:70px;justify-content:center;margin-top:2px}
 .fig-tag{font-size:0.47rem;background:var(--copper-l);color:var(--copper);padding:0.08rem 0.28rem;border-radius:2px;font-weight:700;letter-spacing:0.03em;white-space:nowrap}
+.fig-tag.rel{background:var(--green-l);color:var(--green)}
+/* Genogram shapes */
+.fig-shape-man .fig-circle{border-radius:5px!important}
+.fig-shape-onbekend .fig-circle{border-radius:5px!important;transform:rotate(45deg)!important}
+.fig-shape-onbekend .fig-circle>*{display:inline-block;transform:rotate(-45deg)}
+.fig-shape-overledene .fig-circle{position:relative}
+.fig-shape-overledene .fig-circle::before,.fig-shape-overledene .fig-circle::after{content:'';position:absolute;background:rgba(0,0,0,0.5);pointer-events:none;border-radius:1px}
+.fig-shape-overledene .fig-circle::before{width:2px;height:80%;top:10%;left:calc(50% - 1px)}
+.fig-shape-overledene .fig-circle::after{height:2px;width:80%;left:10%;top:calc(50% - 1px)}
+/* Connection lines + connect mode */
+.vct-canvas.conn-mode .figuur .fig-circle{outline:2px dashed var(--copper);outline-offset:3px;cursor:crosshair!important}
+.figuur.conn-sel .fig-circle{outline:3px solid var(--copper)!important;outline-offset:2px}
+#conn-type-panel{background:white;border:1.5px solid var(--copper-l);border-radius:8px;padding:0.8rem;margin-top:0.5rem;display:none}
+/* AI archive */
+.vct-archive-list{display:flex;flex-direction:column;gap:0.35rem;margin-top:0.5rem}
+.vct-archive-item{padding:0.45rem 0.75rem;border:1px solid var(--stone-l);border-radius:5px;cursor:pointer;font-size:0.78rem;display:flex;justify-content:space-between;align-items:center;gap:0.5rem;transition:background 0.15s}
+.vct-archive-item:hover{background:var(--fog);border-color:var(--copper-l)}
 /* FIGUUR ANIMATIE */
 @keyframes figPop{0%{transform:scale(0.2);opacity:0}65%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
 .figuur-new .fig-circle{animation:figPop 0.38s ease}
@@ -433,8 +450,11 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
         <input type="text" id="vct-add-name" placeholder="Persoon toevoegen…" maxlength="22" onkeydown="if(event.key==='Enter')addVrijFig()">
         <button class="ct-btn p" onclick="addVrijFig()">+ Toevoegen</button>
       </div>
+      <button class="ct-btn" id="conn-mode-btn" onclick="toggleConnectMode()" title="Verbindingslijnen tekenen tussen figuren">🔗 Verbindingen</button>
       <button class="ct-btn" onclick="resetVSet()" style="margin-left:auto">↺ Reset</button>
     </div>
+    <div id="conn-hint" style="display:none;font-size:0.72rem;color:var(--copper);padding:0.3rem 1rem;background:var(--copper-p)">Klik eerste figuur → klik tweede figuur om verbinding te tekenen. Klik midden van lijn om te verwijderen.</div>
+    <div id="conn-type-panel"></div>
     <div class="vct-save-row">
       <input type="text" id="vct-label" placeholder="Naam opstelling (bijv. 'Werk — juni 2026')…">
       <button class="ct-btn p" onclick="saveVOpstelling()">💾 Opslaan</button>
@@ -445,6 +465,39 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem">
       <div style="font-family:'DM Serif Display',serif;font-size:1rem" id="vprop-name">Figuur</div>
       <button class="ct-btn" onclick="closePropPanel()">✕ Sluiten</button>
+    </div>
+    <div class="vprop-row">
+      <div class="vprop-label">Genogram vorm</div>
+      <div class="vprop-opts" id="vprop-geslacht">
+        <button class="vprop-opt sel" data-v="" onclick="setPropV('geslacht',this)">● Vrouw</button>
+        <button class="vprop-opt" data-v="man" onclick="setPropV('geslacht',this)">■ Man</button>
+        <button class="vprop-opt" data-v="onbekend" onclick="setPropV('geslacht',this)">◆ Onbekend</button>
+        <button class="vprop-opt" data-v="overledene" onclick="setPropV('geslacht',this)">✝ Overledene</button>
+      </div>
+    </div>
+    <div class="vprop-row">
+      <div class="vprop-label">Bloedband / relatiepositie (meerdere mogelijk)</div>
+      <div class="vprop-opts" id="vprop-reltags">
+        <button class="vprop-opt" data-v="biologisch kind" onclick="togglePropRelTag(this)">Bio. kind</button>
+        <button class="vprop-opt" data-v="stiefkind" onclick="togglePropRelTag(this)">Stiefkind</button>
+        <button class="vprop-opt" data-v="adoptiefkind" onclick="togglePropRelTag(this)">Adopt. kind</button>
+        <button class="vprop-opt" data-v="pleegkind" onclick="togglePropRelTag(this)">Pleegkind</button>
+        <button class="vprop-opt" data-v="biologische ouder" onclick="togglePropRelTag(this)">Bio. ouder</button>
+        <button class="vprop-opt" data-v="stiefouder" onclick="togglePropRelTag(this)">Stiefouder</button>
+        <button class="vprop-opt" data-v="adoptieouder" onclick="togglePropRelTag(this)">Adopt. ouder</button>
+        <button class="vprop-opt" data-v="grootouder" onclick="togglePropRelTag(this)">Grootouder</button>
+        <button class="vprop-opt" data-v="broer/zus" onclick="togglePropRelTag(this)">Broer/zus</button>
+        <button class="vprop-opt" data-v="halfbroer/zus" onclick="togglePropRelTag(this)">Halfbroer/zus</button>
+        <button class="vprop-opt" data-v="oom/tante" onclick="togglePropRelTag(this)">Oom/tante</button>
+        <button class="vprop-opt" data-v="neef/nicht" onclick="togglePropRelTag(this)">Neef/nicht</button>
+        <button class="vprop-opt" data-v="partner" onclick="togglePropRelTag(this)">Partner</button>
+        <button class="vprop-opt" data-v="getrouwd" onclick="togglePropRelTag(this)">Getrouwd</button>
+        <button class="vprop-opt" data-v="gescheiden" onclick="togglePropRelTag(this)">Gescheiden</button>
+        <button class="vprop-opt" data-v="weduwe/weduwnaar" onclick="togglePropRelTag(this)">Weduwe/wnr</button>
+        <button class="vprop-opt" data-v="overledene" onclick="togglePropRelTag(this)">✝ Overledene</button>
+        <button class="vprop-opt" data-v="miskraam" onclick="togglePropRelTag(this)">Miskraam</button>
+        <button class="vprop-opt" data-v="abortus" onclick="togglePropRelTag(this)">Abortus</button>
+      </div>
     </div>
     <div class="vprop-row">
       <div class="vprop-label">Kijkt naar (richting)</div>
@@ -506,6 +559,14 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
   <div id="vct-saved-wrap" style="display:none">
     <div class="dtitle" style="margin-bottom:0.5rem;color:var(--stone)">Opgeslagen opstellingen</div>
     <div class="vsaved-list" id="vct-saved"></div>
+  </div>
+
+  <!-- Archief vorige analyses -->
+  <div id="vct-archive-wrap" style="display:none;margin-top:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="dtitle" style="color:var(--stone)">📚 Vorige gesprekken</div>
+    </div>
+    <div class="vct-archive-list" id="vct-archive-list"></div>
   </div>
 
   <!-- Analyse sectie -->
@@ -664,6 +725,8 @@ const S = {
   vpos:{werk:{},familie:{},vrij:{},anderen:{}},
   vextra:{werk:[],familie:[],vrij:[],anderen:[]},
   vprops:{werk:{},familie:{},vrij:{},anderen:{}},
+  vconnections:{werk:[],familie:[],vrij:[],anderen:[]},
+  vctArchive:{werk:[],familie:[],vrij:[],anderen:[]},
   vsaved:[],
 };
 
@@ -742,6 +805,10 @@ async function loadAll() {
       if(raw) { try { S.vextra[setId] = JSON.parse(raw); } catch(e){} }
       const rawP = S.intake['vprops-'+setId];
       if(rawP) { try { S.vprops[setId] = JSON.parse(rawP); } catch(e){} }
+      const rawC = S.intake['vconn-'+setId];
+      if(rawC) { try { S.vconnections[setId] = JSON.parse(rawC); } catch(e){} }
+      const rawA = S.intake['varchive-'+setId];
+      if(rawA) { try { S.vctArchive[setId] = JSON.parse(rawA); } catch(e){} }
     });
     // huiswerk notities
     Object.keys(S.intake).filter(k=>k.startsWith('hwnote-')).forEach(k => {
@@ -1180,6 +1247,8 @@ const V_EMOJIS = ['🟡','🔴','🟣','🟤','⚪','🔶'];
 function renderOpstelling() {
   initVrijeCanvas(currentVSet);
   renderSavedList();
+  renderArchive(currentVSet);
+  setTimeout(() => renderConnections(currentVSet), 50);
 }
 
 function switchVSet(setId, btn) {
@@ -1189,13 +1258,19 @@ function switchVSet(setId, btn) {
   const def = VSET_DEFS[setId];
   document.getElementById('vct-title').textContent = def.title;
   closePropPanel();
+  // Exit connect mode when switching
+  if(_connMode) toggleConnectMode();
   initVrijeCanvas(setId);
+  setTimeout(() => {
+    renderConnections(setId);
+    renderArchive(setId);
+  }, 50);
 }
 
 function initVrijeCanvas(setId) {
   const canvas = document.getElementById('vct-canvas');
   if(!canvas) return;
-  canvas.innerHTML = '';
+  canvas.innerHTML = '<svg id="vct-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;overflow:visible"></svg>';
   const def = VSET_DEFS[setId];
   const pos = S.vpos[setId] || {};
   def.figs.forEach(f => addVFig(canvas, f, pos[f.id]||{x:f.x,y:f.y}, setId, false));
@@ -1209,6 +1284,10 @@ function addVFig(canvas, f, pos, setId, animate) {
   el.style.left = pos.x+'px';
   el.style.top  = pos.y+'px';
   el.innerHTML = `<div class="fig-circle" style="border-color:${f.c};background:${f.bg}">${f.e}</div><div class="fig-label" style="color:${f.c}">${f.l}</div>`;
+  el.addEventListener('click', (e) => {
+    if(figureConnectClick(f.id, setId)) { e.stopPropagation(); return; }
+    openPropPanel(f.id, setId);
+  });
   makeVDrag(el, canvas, setId, f.id);
   canvas.appendChild(el);
   if(animate) setTimeout(() => el.classList.remove('figuur-new'), 500);
@@ -1235,10 +1314,11 @@ function makeVDrag(el, container, setId, fid) {
   };
   const up = async () => {
     if(!on) return; on=false;
-    if(!dragged) { openPropPanel(fid, setId); return; }
+    if(!dragged) return; // click handled separately via addEventListener
     if(!S.vpos[setId]) S.vpos[setId]={};
     const x=parseInt(el.style.left),y=parseInt(el.style.top);
     S.vpos[setId][fid]={x,y};
+    renderConnections(setId);
     await syncSave('save_opstelling',{sessie_id:'v-'+setId,figuur_id:fid,x,y});
   };
   el.addEventListener('mousedown',dn); el.addEventListener('touchstart',dn,{passive:false});
@@ -1254,7 +1334,7 @@ const RICHTING_ARROW = {'↑ omhoog':'↑','↗ rechtsboven':'↗','→ rechts':
 
 function _getProps(setId, figId) {
   if(!S.vprops[setId]) S.vprops[setId]={};
-  if(!S.vprops[setId][figId]) S.vprops[setId][figId]={richting:'',grootte:'normaal',kleur:'neutraal',kleurHex:'',tags:[],notitie:''};
+  if(!S.vprops[setId][figId]) S.vprops[setId][figId]={richting:'',grootte:'normaal',kleur:'neutraal',kleurHex:'',geslacht:'',tags:[],relTags:[],notitie:''};
   return S.vprops[setId][figId];
 }
 
@@ -1266,12 +1346,16 @@ function openPropPanel(figId, setId) {
   document.getElementById('vprop-name').textContent = fig ? fig.l : figId;
   document.getElementById('vprop-panel').style.display = '';
   document.getElementById('vprop-hint-txt').style.display = 'none';
+  // Restore geslacht
+  document.querySelectorAll('#vprop-geslacht .vprop-opt').forEach(b => b.classList.toggle('sel', b.dataset.v===(p.geslacht||'')));
   // Restore richting
   document.querySelectorAll('#vprop-richting .vprop-opt').forEach(b => b.classList.toggle('sel', b.dataset.v===p.richting));
   // Restore grootte
   document.querySelectorAll('#vprop-grootte .vprop-opt').forEach(b => b.classList.toggle('sel', b.dataset.v===p.grootte));
   // Restore kleur
   document.querySelectorAll('#vprop-kleur .vprop-opt').forEach(b => b.classList.toggle('sel', b.dataset.v===p.kleur));
+  // Restore relTags
+  document.querySelectorAll('#vprop-reltags .vprop-opt').forEach(b => b.classList.toggle('msel', (p.relTags||[]).includes(b.dataset.v)));
   // Restore tags
   document.querySelectorAll('#vprop-tags .vprop-opt').forEach(b => b.classList.toggle('msel', (p.tags||[]).includes(b.dataset.v)));
   // Restore notitie
@@ -1317,6 +1401,23 @@ function togglePropTag(btn) {
   saveVProps(_propSet);
 }
 
+function togglePropRelTag(btn) {
+  if(!_propFig) return;
+  const p = _getProps(_propSet, _propFig);
+  if(!Array.isArray(p.relTags)) p.relTags=[];
+  const v = btn.dataset.v;
+  const i = p.relTags.indexOf(v);
+  if(i>-1) p.relTags.splice(i,1); else p.relTags.push(v);
+  btn.classList.toggle('msel', p.relTags.includes(v));
+  // auto-set geslacht for overledene
+  if(v==='overledene' && p.relTags.includes('overledene') && !p.geslacht) {
+    p.geslacht = 'overledene';
+    document.querySelectorAll('#vprop-geslacht .vprop-opt').forEach(b => b.classList.toggle('sel', b.dataset.v==='overledene'));
+  }
+  applyFigureProps(_propFig, _propSet);
+  saveVProps(_propSet);
+}
+
 function savePropNotitie() {
   if(!_propFig) return;
   _getProps(_propSet, _propFig).notitie = document.getElementById('vprop-notitie').value;
@@ -1331,6 +1432,9 @@ function applyFigureProps(figId, setId) {
   el.classList.remove('sz-s','sz-l');
   if(p.grootte==='klein') el.classList.add('sz-s');
   if(p.grootte==='groot') el.classList.add('sz-l');
+  // Genogram shape
+  el.classList.remove('fig-shape-man','fig-shape-onbekend','fig-shape-overledene');
+  if(p.geslacht) el.classList.add('fig-shape-'+p.geslacht);
   // Color
   const circle = el.querySelector('.fig-circle');
   if(circle && p.kleurHex) circle.style.borderColor = p.kleurHex;
@@ -1342,16 +1446,202 @@ function applyFigureProps(figId, setId) {
     ra.textContent = RICHTING_ARROW[p.richting]||'';
     ra.title = p.richting;
   } else if(ra) ra.remove();
-  // Tags
+  // Tags (systemic) + relTags (bloedband) — show max 3 combined
   let te = el.querySelector('.fig-tags');
-  if(p.tags && p.tags.length) {
+  const allTags = [...(p.relTags||[]).map(t=>({t,rel:true})), ...(p.tags||[]).map(t=>({t,rel:false}))];
+  if(allTags.length) {
     if(!te){te=document.createElement('div');te.className='fig-tags';el.appendChild(te);}
-    te.innerHTML = p.tags.slice(0,2).map(t=>`<span class="fig-tag">${t}</span>`).join('');
+    te.innerHTML = allTags.slice(0,3).map(({t,rel})=>`<span class="fig-tag${rel?' rel':''}">${t}</span>`).join('');
   } else if(te) te.remove();
 }
 
 function saveVProps(setId) {
   syncSave('save_intake',{question_id:'vprops-'+setId, answer:JSON.stringify(S.vprops[setId]||{})});
+}
+
+// ══════════════════════════════════════════
+//  GENOGRAM VERBINDINGEN
+// ══════════════════════════════════════════
+let _connMode = false;
+let _connFirst = null;
+
+function toggleConnectMode() {
+  _connMode = !_connMode;
+  _connFirst = null;
+  const btn = document.getElementById('conn-mode-btn');
+  if(btn) btn.classList.toggle('p', _connMode);
+  const canvas = document.getElementById('vct-canvas');
+  if(canvas) canvas.classList.toggle('conn-mode', _connMode);
+  document.getElementById('conn-type-panel').style.display = 'none';
+  document.getElementById('conn-hint').style.display = _connMode ? '' : 'none';
+}
+
+function figureConnectClick(figId, setId) {
+  if(!_connMode) return false;
+  if(!_connFirst) {
+    _connFirst = figId;
+    document.getElementById('vfig-'+figId)?.classList.add('conn-sel');
+    return true;
+  }
+  if(_connFirst === figId) {
+    document.getElementById('vfig-'+figId)?.classList.remove('conn-sel');
+    _connFirst = null;
+    return true;
+  }
+  // Two figures selected — show type picker
+  const fromId = _connFirst;
+  _connFirst = null;
+  document.querySelector('.conn-sel')?.classList.remove('conn-sel');
+  showConnTypePicker(fromId, figId, setId);
+  return true;
+}
+
+function showConnTypePicker(fromId, toId, setId) {
+  const panel = document.getElementById('conn-type-panel');
+  panel.style.display = '';
+  const def = VSET_DEFS[setId];
+  const allFigs = [...def.figs, ...(S.vextra[setId]||[])];
+  const fromLabel = allFigs.find(f=>f.id===fromId)?.l || fromId;
+  const toLabel   = allFigs.find(f=>f.id===toId)?.l   || toId;
+  panel.innerHTML = `
+    <div class="vprop-label" style="margin-bottom:0.5rem">Verbind: <strong>${fromLabel}</strong> → <strong>${toLabel}</strong></div>
+    <div class="vprop-opts" style="gap:0.35rem">
+      <button class="vprop-opt" onclick="addVConn('${fromId}','${toId}','${setId}','partner',this)">💑 Partners</button>
+      <button class="vprop-opt" onclick="addVConn('${fromId}','${toId}','${setId}','getrouwd',this)">💍 Getrouwd</button>
+      <button class="vprop-opt" onclick="addVConn('${fromId}','${toId}','${setId}','gescheiden',this)">✂️ Gescheiden</button>
+      <button class="vprop-opt" onclick="addVConn('${fromId}','${toId}','${setId}','ouderkind',this)">👇 Ouder→Kind</button>
+      <button class="vprop-opt" onclick="addVConn('${fromId}','${toId}','${setId}','bloedlijn',this)">🩸 Bloedlijn</button>
+      <button class="vprop-opt" onclick="addVConn('${fromId}','${toId}','${setId}','conflict',this)">⚡ Conflict</button>
+    </div>
+    <button class="ct-btn" style="margin-top:0.5rem" onclick="document.getElementById('conn-type-panel').style.display='none'">Annuleer</button>`;
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function addVConn(fromId, toId, setId, type) {
+  if(!S.vconnections[setId]) S.vconnections[setId]=[];
+  // Avoid duplicate
+  const exists = S.vconnections[setId].find(c=>(c.from===fromId&&c.to===toId)||(c.from===toId&&c.to===fromId&&c.type===type));
+  if(!exists) S.vconnections[setId].push({from:fromId, to:toId, type});
+  document.getElementById('conn-type-panel').style.display = 'none';
+  renderConnections(setId);
+  syncSave('save_intake',{question_id:'vconn-'+setId, answer:JSON.stringify(S.vconnections[setId])});
+}
+
+function removeVConn(setId, idx) {
+  S.vconnections[setId].splice(idx,1);
+  renderConnections(setId);
+  syncSave('save_intake',{question_id:'vconn-'+setId, answer:JSON.stringify(S.vconnections[setId])});
+}
+
+function renderConnections(setId) {
+  const svg = document.getElementById('vct-svg');
+  if(!svg) return;
+  svg.innerHTML = '';
+  const conns = S.vconnections[setId] || [];
+  if(!conns.length) return;
+  const canvas = document.getElementById('vct-canvas');
+  const W = canvas ? canvas.offsetWidth : 400;
+
+  const CONN_STYLES = {
+    partner:    {stroke:'#1a1a1a', strokeWidth:2, dash:'', label:''},
+    getrouwd:   {stroke:'#1a1a1a', strokeWidth:3, dash:'', label:'💍'},
+    gescheiden: {stroke:'#c0392b', strokeWidth:2, dash:'8,4', label:'✂'},
+    ouderkind:  {stroke:'#3d6b4f', strokeWidth:2, dash:'', label:''},
+    bloedlijn:  {stroke:'#8a6b2a', strokeWidth:2, dash:'4,2', label:''},
+    conflict:   {stroke:'#c0392b', strokeWidth:2, dash:'3,3', label:'⚡'},
+  };
+
+  conns.forEach((c, idx) => {
+    const fromEl = document.getElementById('vfig-'+c.from);
+    const toEl   = document.getElementById('vfig-'+c.to);
+    if(!fromEl || !toEl) return;
+    const fr = fromEl.getBoundingClientRect();
+    const tr = toEl.getBoundingClientRect();
+    const cr = canvas.getBoundingClientRect();
+    const fx = fr.left - cr.left + fr.width/2;
+    const fy = fr.top  - cr.top  + fr.height/2;
+    const tx = tr.left - cr.left + tr.width/2;
+    const ty = tr.top  - cr.top  + tr.height/2;
+
+    const s = CONN_STYLES[c.type] || CONN_STYLES.bloedlijn;
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', fx); line.setAttribute('y1', fy);
+    line.setAttribute('x2', tx); line.setAttribute('y2', ty);
+    line.setAttribute('stroke', s.stroke);
+    line.setAttribute('stroke-width', s.strokeWidth);
+    if(s.dash) line.setAttribute('stroke-dasharray', s.dash);
+    svg.appendChild(line);
+
+    // Small delete circle at midpoint
+    const mx = (fx+tx)/2, my = (fy+ty)/2;
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.style.cursor = 'pointer';
+    g.setAttribute('pointer-events','all');
+    g.onclick = () => removeVConn(setId, idx);
+
+    const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circ.setAttribute('cx', mx); circ.setAttribute('cy', my);
+    circ.setAttribute('r', '9'); circ.setAttribute('fill','white');
+    circ.setAttribute('stroke', s.stroke); circ.setAttribute('stroke-width','1.5');
+
+    const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+    txt.setAttribute('x', mx); txt.setAttribute('y', my+4);
+    txt.setAttribute('text-anchor','middle');
+    txt.setAttribute('font-size','10');
+    txt.setAttribute('fill',s.stroke);
+    txt.textContent = s.label || '×';
+
+    g.appendChild(circ); g.appendChild(txt);
+    svg.appendChild(g);
+  });
+}
+
+// ══════════════════════════════════════════
+//  AI ANALYSE ARCHIEF
+// ══════════════════════════════════════════
+function archiveCurrentChat(setId) {
+  const chat = S.vctChats[setId];
+  if(!chat || chat.length < 2) return;
+  if(!S.vctArchive[setId]) S.vctArchive[setId] = [];
+  const date = new Date().toLocaleString('nl-NL',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  S.vctArchive[setId].unshift({date, messages: chat.slice()});
+  S.vctArchive[setId] = S.vctArchive[setId].slice(0, 10); // keep max 10
+  syncSave('save_intake',{question_id:'varchive-'+setId, answer:JSON.stringify(S.vctArchive[setId])});
+}
+
+function renderArchive(setId) {
+  const list = document.getElementById('vct-archive-list');
+  const wrap = document.getElementById('vct-archive-wrap');
+  if(!list) return;
+  const arch = S.vctArchive[setId] || [];
+  if(!arch.length) { wrap.style.display='none'; return; }
+  wrap.style.display='';
+  list.innerHTML = arch.map((a,i)=>`
+    <div class="vct-archive-item" onclick="loadArchiveSession(${i},'${setId}')">
+      <span>📅 ${a.date}</span>
+      <span style="color:var(--stone);font-size:0.7rem">${a.messages.filter(m=>m.role==='assistant').length} antwoorden</span>
+    </div>`).join('');
+}
+
+function loadArchiveSession(idx, setId) {
+  const arch = S.vctArchive[setId]?.[idx];
+  if(!arch) return;
+  const win = document.getElementById('vct-chat-window');
+  win.innerHTML = '';
+  vctHistory.length = 0;
+  arch.messages.forEach(m => vctHistory.push(m));
+  arch.messages.forEach((m,i) => { if(i>0) addVCtMsg(m.role==='user'?'user':'coach', m.content); });
+  const lastA = [...arch.messages].reverse().find(m=>m.role==='assistant');
+  if(lastA) parseVCtMC(lastA.content);
+  const section = document.getElementById('vct-analyse-section');
+  section.style.display = '';
+  const hint = document.createElement('div');
+  hint.className = 'chat-msg coach';
+  hint.innerHTML = `<div class="chat-bubble"><span>Archief geladen: ${arch.date}</span></div>`;
+  win.appendChild(hint);
+  win.scrollTop = win.scrollHeight;
+  section.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
 function addVrijFig() {
@@ -1480,7 +1770,9 @@ function describeConstellationText(setId) {
     if(pp.grootte==='groot') extra.push('grote aanwezigheid/gewicht');
     if(pp.grootte==='klein') extra.push('kleine aanwezigheid');
     if(pp.kleur && pp.kleur!=='neutraal') extra.push(`sfeer: ${pp.kleur}`);
-    if(pp.tags && pp.tags.length) extra.push(`kenmerken: ${pp.tags.join(', ')}`);
+    if(pp.geslacht) extra.push(`genogram: ${pp.geslacht==='man'?'man (vierkant)':pp.geslacht==='overledene'?'overledene (✝)':pp.geslacht==='onbekend'?'onbekend (ruit)':'vrouw (cirkel)'}`);
+    if(pp.relTags && pp.relTags.length) extra.push(`bloedband/relatie: ${pp.relTags.join(', ')}`);
+    if(pp.tags && pp.tags.length) extra.push(`systemisch: ${pp.tags.join(', ')}`);
 
     if(jij && f.id !== 'jij') {
       const dx = f.px - jij.px, dy = f.py - jij.py;
@@ -1520,6 +1812,19 @@ function describeConstellationText(setId) {
     isolates.forEach(f=>txt+=`• ${f.l}\n`);
   }
 
+  // Verbindingen
+  const conns = S.vconnections[setId] || [];
+  if(conns.length) {
+    txt += '\nGENOGRAM VERBINDINGEN:\n';
+    const allFigs2 = [...def.figs, ...(S.vextra[setId]||[])];
+    conns.forEach(c => {
+      const fl = allFigs2.find(f=>f.id===c.from)?.l || c.from;
+      const tl = allFigs2.find(f=>f.id===c.to)?.l || c.to;
+      const typeLabels = {partner:'partners',getrouwd:'getrouwd',gescheiden:'gescheiden van',ouderkind:'ouder van',bloedlijn:'bloedlijn met',conflict:'in conflict met'};
+      txt += `• ${fl} — ${typeLabels[c.type]||c.type} → ${tl}\n`;
+    });
+  }
+
   return txt;
 }
 
@@ -1554,6 +1859,8 @@ async function startOpstellingAnalyse(forceNew) {
     win.scrollTop = win.scrollHeight;
     return;
   }
+
+  archiveCurrentChat(currentVSet);
 
   const win = document.getElementById('vct-chat-window');
   win.innerHTML = '';
