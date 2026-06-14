@@ -420,6 +420,7 @@ textarea:focus,input[type=text]:focus{outline:none;border-color:var(--copper)}
     <button class="vset-btn active" id="vbtn-werk" onclick="switchVSet('werk',this)">💼 Werk</button>
     <button class="vset-btn" id="vbtn-familie" onclick="switchVSet('familie',this)">👨‍👩‍👧 Familie</button>
     <button class="vset-btn" id="vbtn-vrij" onclick="switchVSet('vrij',this)">✨ Vrij</button>
+    <button class="vset-btn" id="vbtn-anderen" onclick="switchVSet('anderen',this)">👥 Anderen</button>
   </div>
   <div class="vct-wrap">
     <div class="vct-hdr">
@@ -640,6 +641,11 @@ const VSET_DEFS = {
       {id:'jij',e:'🟠',l:'Jij',c:'#b5622a',bg:'#f5ece4',x:195,y:160},
     ]
   },
+  anderen: {
+    title: 'Anderen-opstelling',
+    noPersonalContext: true,
+    figs: []
+  },
 };
 
 // ══════════════════════════════════════════
@@ -655,9 +661,9 @@ const S = {
   relSessie: 1,
   analyses:{},
   hwNotes:{},
-  vpos:{werk:{},familie:{},vrij:{}},
-  vextra:{werk:[],familie:[],vrij:[]},
-  vprops:{werk:{},familie:{},vrij:{}},
+  vpos:{werk:{},familie:{},vrij:{},anderen:{}},
+  vextra:{werk:[],familie:[],vrij:[],anderen:[]},
+  vprops:{werk:{},familie:{},vrij:{},anderen:{}},
   vsaved:[],
 };
 
@@ -731,7 +737,7 @@ async function loadAll() {
       }
     });
     // vrije extra figuren (opgeslagen als intake entries)
-    ['werk','familie','vrij'].forEach(setId => {
+    ['werk','familie','vrij','anderen'].forEach(setId => {
       const raw = S.intake['vextra-'+setId];
       if(raw) { try { S.vextra[setId] = JSON.parse(raw); } catch(e){} }
       const rawP = S.intake['vprops-'+setId];
@@ -1554,13 +1560,18 @@ async function startOpstellingAnalyse(forceNew) {
   vctHistory.length = 0;
 
   const constellDesc = describeConstellationText(currentVSet);
-  const initPrompt = `Dit is mijn opstelling:\n\n${constellDesc}\n\nBegin met direct waarnemen — benoem twee of drie opvallende feiten (positie, afstand, richting, kenmerken). Ga dan de diepte in via de drie principes. Sluit je eerste bericht altijd af met [MC: optie A | optie B | optie C].`;
+  const isAnderen = !!VSET_DEFS[currentVSet]?.noPersonalContext;
+  const initPrompt = isAnderen
+    ? `Dit is een opstelling van een systeem waar ik zelf geen deel van uitmaak. Ik ben waarnemer, niet deelnemer.\n\n${constellDesc}\n\nBegin met direct waarnemen — benoem twee of drie opvallende feiten (positie, afstand, richting, kenmerken). Ga dan de diepte in via de drie principes. Sluit je eerste bericht altijd af met [MC: optie A | optie B | optie C].`
+    : `Dit is mijn opstelling:\n\n${constellDesc}\n\nBegin met direct waarnemen — benoem twee of drie opvallende feiten (positie, afstand, richting, kenmerken). Ga dan de diepte in via de drie principes. Sluit je eerste bericht altijd af met [MC: optie A | optie B | optie C].`;
 
   vctHistory.push({role:'user', content: initPrompt});
   addVCtMsg('coach', 'Ik analyseer de opstelling…', 'vct-typing');
 
   try {
-    const data = await api('chat', {messages: vctHistory});
+    const apiBody = {messages: vctHistory};
+    if(isAnderen) apiBody.noContext = true;
+    const data = await api('chat', apiBody);
     document.getElementById('vct-typing')?.remove();
     if(data.error) { addVCtMsg('coach', `⚠️ Fout van server: ${data.error}`); return; }
     const reply = data.reply || 'Er ging iets mis. Probeer opnieuw.';
@@ -1585,7 +1596,9 @@ async function sendVCtChat(preset) {
   addVCtMsg('coach', 'Coach denkt na…', 'vct-typing');
 
   try {
-    const data = await api('chat', {messages: vctHistory});
+    const chatBody = {messages: vctHistory};
+    if(VSET_DEFS[currentVSet]?.noPersonalContext) chatBody.noContext = true;
+    const data = await api('chat', chatBody);
     document.getElementById('vct-typing')?.remove();
     const reply = data.reply || 'Er ging iets mis.';
     vctHistory.push({role:'assistant', content: reply});
