@@ -9,6 +9,7 @@
 <meta name="theme-color" content="#0f172a">
 <link rel="manifest" href="manifest.json">
 <title>Griette's Coach</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f1f5f9;max-width:430px;margin:0 auto;padding-bottom:90px}
@@ -199,6 +200,7 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
   </div>
 </div>
 
+<div id="cloud-bar" style="background:#0f172a;text-align:center;padding:3px 0;font-size:10px;color:#64748b;letter-spacing:.5px" onclick="syncToCloud()">☁️ <span id="cloud-status">Verbinden…</span></div>
 <div class="tabs">
   <button class="tab on" onclick="sw(0)">Vandaag</button>
   <button class="tab" onclick="sw(1)">Kalender</button>
@@ -451,7 +453,7 @@ var DAYPLAN={0:[{t:"run",l:"🏃 Lopen (verplicht)",bg:"#e0f2fe",tc:"#0369a1"}],
 
 // STORAGE — zelfde sleutels als vorige versie
 function ld(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
-function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}scheduleCloudSync();}
 function td(d){return d.toISOString().split("T")[0];}
 function today(){return td(new Date());}
 function ago(n){var d=new Date();d.setDate(d.getDate()-n);return td(d);}
@@ -466,6 +468,68 @@ var nextRun=ld("gcf_nr",9);
 var krachtCycle=ld("gcf_kc","A");
 var cycleStarts=ld("gcf_cy",[]);
 var photos=ld("gcf_photos",{});
+
+// ── SUPABASE CLOUD SYNC ───────────────────────────────────────────
+var SB_URL='https://osuqtfsxmquwqsbgzlqn.supabase.co';
+var SB_KEY='sb_publishable_6T-JJKX10RgLkWGwBwYaxg_gFANhdHS';
+var sbClient=null;var cloudSyncTimer=null;var cloudFromLoad=false;
+
+var CLOUD_MAP={
+  'coach-logs':{g:function(){return logs;},s:function(v){logs=v;localStorage.setItem('gcf_logs',JSON.stringify(v));}},
+  'coach-w':{g:function(){return weights;},s:function(v){weights=v;localStorage.setItem('gcf_w',JSON.stringify(v));}},
+  'coach-bp':{g:function(){return bps;},s:function(v){bps=v;localStorage.setItem('gcf_bp',JSON.stringify(v));}},
+  'coach-steps':{g:function(){return stepsLog;},s:function(v){stepsLog=v;localStorage.setItem('gcf_steps',JSON.stringify(v));}},
+  'coach-badges':{g:function(){return badges;},s:function(v){badges=v;localStorage.setItem('gcf_b',JSON.stringify(v));}},
+  'coach-nr':{g:function(){return nextRun;},s:function(v){nextRun=v;localStorage.setItem('gcf_nr',JSON.stringify(v));}},
+  'coach-kc':{g:function(){return krachtCycle;},s:function(v){krachtCycle=v;localStorage.setItem('gcf_kc',JSON.stringify(v));}},
+  'coach-cy':{g:function(){return cycleStarts;},s:function(v){cycleStarts=v;localStorage.setItem('gcf_cy',JSON.stringify(v));}},
+  'coach-photos':{g:function(){return photos;},s:function(v){photos=v;localStorage.setItem('gcf_photos',JSON.stringify(v));}}
+};
+
+function initCloud(){
+  try{if(window.supabase)sbClient=window.supabase.createClient(SB_URL,SB_KEY);}catch(e){}
+  setCloudStatus('connecting');
+}
+
+function setCloudStatus(st){
+  var el=document.getElementById('cloud-status');if(!el)return;
+  if(st==='ok'){el.textContent='Gesynchroniseerd ✓';document.getElementById('cloud-bar').style.color='var(--teal)';}
+  else if(st==='saving'){el.textContent='Opslaan…';document.getElementById('cloud-bar').style.color='#94a3b8';}
+  else if(st==='connecting'){el.textContent='Verbinden…';document.getElementById('cloud-bar').style.color='#94a3b8';}
+  else{el.textContent='Sync mislukt – tik om opnieuw te proberen';document.getElementById('cloud-bar').style.color='var(--acc)';}
+}
+
+function scheduleCloudSync(){
+  if(cloudFromLoad)return;
+  clearTimeout(cloudSyncTimer);
+  cloudSyncTimer=setTimeout(syncToCloud,3000);
+}
+
+async function loadFromCloud(){
+  if(!sbClient){setCloudStatus('err');return;}
+  try{
+    setCloudStatus('connecting');
+    var res=await sbClient.from('griette_data').select('key,value').in('key',Object.keys(CLOUD_MAP));
+    if(res.error||!res.data){setCloudStatus('err');return;}
+    cloudFromLoad=true;
+    res.data.forEach(function(row){
+      if(CLOUD_MAP[row.key]){try{CLOUD_MAP[row.key].s(JSON.parse(row.value));}catch(e){}}
+    });
+    cloudFromLoad=false;
+    setCloudStatus('ok');
+  }catch(e){cloudFromLoad=false;setCloudStatus('err');}
+}
+
+async function syncToCloud(){
+  if(!sbClient){setCloudStatus('err');return;}
+  setCloudStatus('saving');
+  try{
+    var items=Object.keys(CLOUD_MAP).map(function(k){return{key:k,value:JSON.stringify(CLOUD_MAP[k].g()),updated_at:new Date().toISOString()};});
+    var {error}=await sbClient.from('griette_data').upsert(items,{onConflict:'key'});
+    setCloudStatus(error?'err':'ok');
+  }catch(e){setCloudStatus('err');}
+}
+
 var calOff=0;
 var selDay=null;
 var apIdx=0,apLeft=0,apTotal=0,apPaused=false,apTick=null;
@@ -494,8 +558,11 @@ function parseIntervals(schemaStr){
 }
 
 window.addEventListener("load",function(){
+  initCloud();
   initHabits();initChecklist();initSchema();initKracht();initAP();initIT();initButtons();initExport();initArchief();render();
   checkWeekSummary();
+  loadFromCloud().then(function(){render();scheduleCloudSync();});
+  window.addEventListener('beforeunload',function(){syncToCloud();});
 });
 
 function render(){
