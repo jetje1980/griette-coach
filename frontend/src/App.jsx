@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { USER } from './config';
 import { store } from './store';
 import { restoreFromCloud } from './sync';
+import { photoStore } from './photoStore';
 import { QUOTES } from './data/quotes';
 import { TIPS } from './data/tips';
 
@@ -78,11 +79,12 @@ export default function App() {
     setStreak(s);
   }, []);
 
-  // On first mount: restore data from cloud, then reload local state
+  // On first mount: restore data + photos from cloud
   useEffect(() => {
     restoreFromCloud().then(count => {
       if (count > 0) { loadLog(currentDate); loadLogs(); }
     });
+    photoStore.restoreFromCloud(); // restore missing photos in background
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
