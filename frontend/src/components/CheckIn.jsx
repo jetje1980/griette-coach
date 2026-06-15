@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HABITS, MEDS, BP, PERSONAL_EVENTS, PRN_MEDS, SUPPLEMENTS } from '../config';
+import { HABITS, MEDS, BP, PERSONAL_EVENTS, PRN_MEDS, SUPPLEMENTS, USER } from '../config';
 
 const AJOVI_KEY    = 'gc_ajovi_next';
 const AJOVI_HIST   = 'gc_ajovi_history';
@@ -521,11 +521,21 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
                   .sort((a, b) => a.date.localeCompare(b.date));
                 const lastW = eventWeightEntries.length ? eventWeightEntries[eventWeightEntries.length - 1].weight : null;
                 const projAtEvent = (() => {
-                  if (eventWeightEntries.length < 2 || !e.daysTo) return null;
-                  const first = eventWeightEntries[0], last2 = eventWeightEntries[eventWeightEntries.length - 1];
-                  const days = Math.max(1, Math.floor((new Date(last2.date) - new Date(first.date)) / 86400000));
-                  const rate = Math.max((last2.weight - first.weight) / days, -0.143);
-                  return +(last2.weight + rate * e.daysTo).toFixed(1);
+                  if (!e.daysTo && !e.active) return null;
+                  const daysAhead = e.active ? 0 : e.daysTo;
+                  if (eventWeightEntries.length >= 2) {
+                    // Use actual logged trend
+                    const first = eventWeightEntries[0], last2 = eventWeightEntries[eventWeightEntries.length - 1];
+                    const days = Math.max(1, Math.floor((new Date(last2.date) - new Date(first.date)) / 86400000));
+                    const rate = Math.max((last2.weight - first.weight) / days, -0.143);
+                    return +(last2.weight + rate * daysAhead).toFixed(1);
+                  }
+                  // Fallback: use start weight + expected programme rate
+                  const programDays = Math.max(1, Math.floor((new Date(todayStr) - new Date(START_DATE)) / 86400000));
+                  const expectedRate = (GOAL_WEIGHT - USER.startWeight) / USER.durationDays; // e.g. (55-62.7)/70
+                  const estNow = +(USER.startWeight + expectedRate * programDays).toFixed(1);
+                  const proj = +(estNow + Math.max(expectedRate, -0.143) * daysAhead).toFixed(1);
+                  return proj;
                 })();
                 const wkNeeded = lastW && e.daysTo > 0 ? +(((lastW - GOAL_WEIGHT) / e.daysTo) * 7).toFixed(2) : null;
 
@@ -587,6 +597,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
                       {projAtEvent && (
                         <div style={{ marginBottom: 3 }}>
                           📊 Prognose op {e.startDate.slice(5).replace('-', '/')}: <strong style={{ color: projAtEvent < MIN_WEIGHT ? 'var(--alert)' : e.color }}>{projAtEvent} kg</strong>
+                          {eventWeightEntries.length < 2 && <span style={{ color: 'var(--muted)', fontSize: 10 }}> (schatting o.b.v. startgewicht)</span>}
                           {projAtEvent < MIN_WEIGHT
                             ? <span style={{ color: 'var(--alert)', fontWeight: 700 }}> ⚠️ onder jouw minimum (45 kg) — tempo mag omlaag</span>
                             : wkNeeded > 0 && <span style={{ color: 'var(--muted)' }}> · nodig: −{wkNeeded} kg/wk</span>
