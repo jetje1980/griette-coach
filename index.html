@@ -388,6 +388,11 @@ input[type=number]:focus{outline:none;border-color:var(--teal)}
 
 <!-- 5 PATRONEN -->
 <div class="pane" id="p5">
+  <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--pur)"></div><div class="cttl">🤖 AI Analyse</div></div><div class="cbdy">
+    <div style="font-size:11px;color:#334155;line-height:1.6;margin-bottom:10px">Laat AI jouw gewicht, bloeddruk, trainingen en gewoontes analyseren. Persoonlijke inzichten op basis van jouw echte data.</div>
+    <button class="btn full" style="background:var(--pur)" id="ai-analyse-btn" onclick="runAiAnalyse()">🤖 Analyseer mijn patronen</button>
+    <div id="ai-analyse-result" style="margin-top:12px"></div>
+  </div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--teal)"></div><div class="cttl">📊 Gewicht — 14 dagen</div></div><div class="cbdy"><svg style="width:100%;overflow:visible" id="wchart" viewBox="0 0 340 90" height="90"></svg><div id="wtrend" style="margin-top:6px;font-size:12px;font-weight:700"></div></div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--red)"></div><div class="cttl">❤️ Bloeddruk — 14 dagen</div></div><div class="cbdy"><svg style="width:100%;overflow:visible" id="bpchart" viewBox="0 0 340 90" height="90"></svg><div style="display:flex;gap:13px;font-size:10px;color:var(--mut);margin-top:5px"><span><span style="color:var(--red)">●</span> Sys</span><span><span style="color:var(--acc)">●</span> Dia</span><span style="color:var(--red)">— 160</span></div></div></div>
   <div class="card"><div class="card-hdr"><div class="cbar" style="background:var(--amb)"></div><div class="cttl">👟 Stappen — 14 dagen</div></div><div class="cbdy"><svg style="width:100%;overflow:visible" id="stchart" viewBox="0 0 340 80" height="80"></svg></div></div>
@@ -1179,6 +1184,76 @@ function openFoto(date){
 function deleteFoto(date){
   delete photos[date];sv("gcf_photos",photos);
   closeModal();flash("🗑","Foto verwijderd");rArchief();
+}
+
+// ── AI ANALYSE ────────────────────────────────────────────────────
+var FITNESS_AI_URL = 'https://osuqtfsxmquwqsbgzlqn.supabase.co/functions/v1/fitness-ai';
+var FITNESS_AI_KEY = 'gfc-ai-griette-2026';
+
+async function runAiAnalyse() {
+  var btn = document.getElementById('ai-analyse-btn');
+  var res = document.getElementById('ai-analyse-result');
+  btn.disabled = true;
+  btn.textContent = '🤖 Analyseren…';
+  res.innerHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--mut)">Even geduld — AI analyseert jouw data…</div>';
+
+  try {
+    // Collect last 30 days weight
+    var gewicht = Object.entries(weights).filter(function(e){return e[0]>=ago(30);}).sort().map(function(e){return{date:e[0],w:e[1]};});
+    // Collect last 30 days BP
+    var bloeddruk = Object.entries(bps).filter(function(e){return e[0]>=ago(30);}).sort().map(function(e){return{date:e[0],s:e[1].s,d:e[1].d};});
+    // Training stats
+    var trainEntries = Object.entries(logs).filter(function(e){return e[0]>=ago(30);});
+    var training = {
+      runs: trainEntries.filter(function(e){return e[1].done_run;}).length,
+      kracht: trainEntries.filter(function(e){return e[1].done_kracht;}).length,
+      pilates: trainEntries.filter(function(e){return e[1].done_ap;}).length,
+      lm: trainEntries.filter(function(e){return e[1].done_lm;}).length,
+      bonus: trainEntries.filter(function(e){return e[1].done_bonus;}).length,
+      streak: (function(){var s=0;for(var i=0;i<30;i++){if((logs[ago(i)]||{}).trained)s++;else break;}return s;})()
+    };
+    // Habits (7 day average)
+    var gwnt = {};
+    HABITS.forEach(function(h){
+      gwnt[h.id] = Array.from({length:7},function(_,i){return ((logs[ago(6-i)]||{}).habits||{})[h.id]?1:0;}).reduce(function(a,b){return a+b;},0);
+    });
+    // Steps
+    var stVals = Object.entries(stepsLog).filter(function(e){return e[0]>=ago(30);}).map(function(e){return e[1];});
+    var stappen = stVals.length ? {avg: Math.round(stVals.reduce(function(a,b){return a+b;},0)/stVals.length), max: Math.max.apply(null,stVals)} : null;
+    // Cyclus
+    var recentLog = logs[ago(0)] || logs[ago(1)] || {};
+    var cyclus = recentLog.cycle || null;
+
+    var resp = await fetch(FITNESS_AI_URL + '?action=analyse', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-gfc-key': FITNESS_AI_KEY },
+      body: JSON.stringify({ gewicht: gewicht, bloeddruk: bloeddruk, training: training, gewoontes: gwnt, stappen: stappen, cyclus: cyclus })
+    });
+
+    if (!resp.ok) throw new Error('API error ' + resp.status);
+    var data = await resp.json();
+    var text = data.analyse || 'Geen analyse beschikbaar.';
+
+    // Format the response
+    var lines = text.split('\n').filter(function(l){return l.trim();});
+    var html = '<div style="background:rgba(139,92,246,.05);border:1px solid rgba(139,92,246,.2);border-radius:12px;padding:14px">';
+    lines.forEach(function(line){
+      var clean = line.replace(/^\*+\s*/,'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+      if(clean.match(/^\d+\.\s/)||clean.startsWith('-')||clean.startsWith('•')){
+        html += '<div style="display:flex;gap:8px;margin-bottom:8px;font-size:12px;color:#334155;line-height:1.6"><span style="color:var(--pur);flex-shrink:0">▸</span><span>'+clean.replace(/^\d+\.\s|^[-•]\s*/,'')+'</span></div>';
+      } else if(clean.length > 0) {
+        html += '<div style="font-size:12px;color:#334155;line-height:1.6;margin-bottom:6px">'+clean+'</div>';
+      }
+    });
+    html += '<div style="font-size:10px;color:var(--mut);margin-top:10px;border-top:1px solid rgba(139,92,246,.15);padding-top:8px">Analyse op basis van jouw data van de laatste 30 dagen</div></div>';
+    res.innerHTML = html;
+
+  } catch(e) {
+    res.innerHTML = '<div style="background:#fee2e2;border-radius:10px;padding:12px;font-size:12px;color:#7f1d1d">Analyse niet gelukt. Controleer je verbinding en probeer opnieuw.</div>';
+  }
+
+  btn.disabled = false;
+  btn.textContent = '🤖 Opnieuw analyseren';
 }
 
 function sw(i){document.querySelectorAll(".tab").forEach(function(t,j){t.classList.toggle("on",i===j);});document.querySelectorAll(".pane").forEach(function(p,j){p.classList.toggle("on",i===j);});render();window.scrollTo(0,0);}
