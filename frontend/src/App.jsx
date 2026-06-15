@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { USER } from './config';
 import { store } from './store';
+import { restoreFromCloud } from './sync';
 import { QUOTES } from './data/quotes';
 import { TIPS } from './data/tips';
 
@@ -76,6 +77,13 @@ export default function App() {
     }
     setStreak(s);
   }, []);
+
+  // On first mount: restore data from cloud, then reload local state
+  useEffect(() => {
+    restoreFromCloud().then(count => {
+      if (count > 0) { loadLog(currentDate); loadLogs(); }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadLog(currentDate);
