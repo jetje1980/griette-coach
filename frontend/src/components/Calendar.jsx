@@ -32,8 +32,9 @@ function getEventForDay(dk) {
   return PERSONAL_EVENTS.find(e => dk >= e.startDate && dk <= e.endDate) || null;
 }
 
-export default function Calendar({ currentDate, logs, onSelectDate }) {
+export default function Calendar({ currentDate, logs, onSelectDate, maxDate }) {
   const today = new Date().toISOString().slice(0, 10);
+  const max = maxDate || today;
   const [viewDate, setViewDate] = useState(new Date(currentDate));
 
   const year = viewDate.getFullYear();
@@ -49,14 +50,18 @@ export default function Calendar({ currentDate, logs, onSelectDate }) {
   }
   function nextMonth() {
     const next = new Date(year, month + 1, 1);
-    if (next <= new Date()) setViewDate(next);
+    const nextKey = `${next.getFullYear()}-${pad2(next.getMonth() + 1)}-01`;
+    if (nextKey <= max) setViewDate(next);
   }
 
   const cells = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
   for (let d = 1; d <= days; d++) cells.push(d);
 
-  const nextIsInFuture = new Date(year, month + 1, 1) > new Date();
+  const nextMonthKey = `${year}-${pad2(month + 2 > 12 ? 1 : month + 2)}-01`;
+  const nextMonthYear = month === 11 ? year + 1 : year;
+  const nextMonthKeyFull = `${nextMonthYear}-${pad2(month + 2 > 12 ? 1 : month + 2)}-01`;
+  const nextIsOverMax = nextMonthKeyFull > max;
 
   return (
     <div className="pane">
@@ -65,7 +70,7 @@ export default function Calendar({ currentDate, logs, onSelectDate }) {
           <div className="cal-nav">
             <button onClick={prevMonth}>‹</button>
             <span className="cal-title">{NL_MONTHS[month]} {year}</span>
-            <button onClick={nextMonth} disabled={nextIsInFuture}>›</button>
+            <button onClick={nextMonth} disabled={nextIsOverMax}>›</button>
           </div>
 
           <div className="cal-grid">
@@ -74,27 +79,30 @@ export default function Calendar({ currentDate, logs, onSelectDate }) {
               if (!day) return <div key={`e-${idx}`} />;
               const dk = dateKey(day);
               const isFuture = dk > today;
+              const isOverMax = dk > max;
               const isToday = dk === today;
               const isSel = dk === currentDate;
               const log = logs[dk];
               const complete = isDayComplete(log);
               const dots = logDots(log);
               const event = getEventForDay(dk);
+              const hasPlanned = isFuture && log && Object.keys(log).filter(k => k !== 'date').length > 0;
 
               return (
                 <div
                   key={dk}
                   className={`cal-day ${isToday ? 'today' : ''} ${isSel && !isToday ? 'selected' : ''} ${dk < today && !isToday ? 'past' : ''}`}
-                  onClick={() => !isFuture && onSelectDate(dk)}
+                  onClick={() => !isOverMax && onSelectDate(dk)}
                   style={{
-                    cursor: isFuture ? 'default' : 'pointer',
-                    opacity: isFuture ? 0.3 : undefined,
-                    background: event ? `${event.color}18` : undefined,
-                    outline: event ? `2px solid ${event.color}` : undefined,
+                    cursor: isOverMax ? 'default' : 'pointer',
+                    opacity: isOverMax ? 0.2 : isFuture ? 0.7 : undefined,
+                    background: event ? `${event.color}18` : isFuture && !isOverMax ? 'rgba(251,191,36,0.06)' : undefined,
+                    outline: event ? `2px solid ${event.color}` : isFuture && hasPlanned ? '2px solid #F59E0B' : undefined,
                     outlineOffset: -2,
                   }}
                 >
                   {complete && <span className="cal-done-mark">✓</span>}
+                  {hasPlanned && <span className="cal-done-mark" style={{ color: '#F59E0B' }}>📅</span>}
                   <div className="cal-date">{day}</div>
                   {event && (
                     <div style={{ fontSize: 10, lineHeight: 1, textAlign: 'center', marginTop: 1 }}>
