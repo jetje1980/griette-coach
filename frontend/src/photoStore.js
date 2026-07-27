@@ -125,7 +125,7 @@ export const photoStore = {
 
       let restored = 0;
       for (const folder of files) {
-        if (!folder.id) continue; // skip non-folder entries
+        if (folder.id) continue; // skip files at root, only process date-folders (id === null)
         const { data: photos } = await supabase.storage.from(BUCKET).list(folder.name);
         if (!photos) continue;
         for (const file of photos) {
