@@ -176,7 +176,7 @@ function GlassTracker({ glasses, onChange }) {
   );
 }
 
-export default function CheckIn({ log, saveField, saveFields, currentDate, logs, tip }) {
+export default function CheckIn({ log, saveField, saveFields, currentDate, logs, tip, isFuture, deleteLog, syncStatus }) {
   const [weight, setWeight] = useState('');
   const [bpSys, setBpSys] = useState('');
   const [bpDia, setBpDia] = useState('');
@@ -429,8 +429,29 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
   ];
   const checkedEiwit = eiwitItems.filter(e => log?.[e.id]).length;
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setConfirmDelete(false);
+    if (deleteLog) await deleteLog();
+  };
+
   return (
     <div className="pane">
+
+      {/* Toekomstige datum banner */}
+      {isFuture && (
+        <div style={{ background: '#FEF3C7', border: '1.5px solid #F59E0B', borderRadius: 12, padding: '10px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 20 }}>📅</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E' }}>Toekomstige datum</div>
+            <div style={{ fontSize: 11, color: '#78350F', lineHeight: 1.5 }}>
+              Je plant hier van tevoren — bijv. Mounjaro-prik of afspraak. De AI neemt geplande prikken mee in de analyse.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sprint-widget */}
       {daysToVacation > 0 && (
@@ -1169,16 +1190,23 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
           <div className="card-title">💊 Medicatie</div>
         </div>
         <div className="card-body">
-          {MEDS.map(med => (
-            <div key={med.id} className={`med-item ${log?.[med.id] ? 'checked' : ''}`} onClick={() => toggleMed(med.id)}>
-              <div className={`checkbox ${log?.[med.id] ? '' : ''}`}>{log?.[med.id] ? '✓' : ''}</div>
-              <div style={{ flex: 1 }}>
-                <div className="med-label">{med.label}</div>
-                <div className="med-detail">{med.detail}</div>
+          {MEDS.map(med => {
+            const isPlanned = isFuture && med.id === 'mounjaro' && log?.[med.id];
+            return (
+              <div key={med.id} className={`med-item ${log?.[med.id] ? 'checked' : ''}`} onClick={() => toggleMed(med.id)}
+                style={isPlanned ? { background: '#FEF3C7', borderColor: '#F59E0B' } : {}}>
+                <div className={`checkbox`}>{log?.[med.id] ? '✓' : ''}</div>
+                <div style={{ flex: 1 }}>
+                  <div className="med-label">{med.label}</div>
+                  <div className="med-detail">{med.detail}</div>
+                </div>
+                {isPlanned
+                  ? <span style={{ fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FDE68A', padding: '2px 8px', borderRadius: 99 }}>📅 gepland</span>
+                  : med.weekly && <span style={{ fontSize: 10, color: 'var(--muted)', background: 'var(--border)', padding: '2px 6px', borderRadius: 99 }}>wekelijks</span>
+                }
               </div>
-              {med.weekly && <span style={{ fontSize: 10, color: 'var(--muted)', background: 'var(--border)', padding: '2px 6px', borderRadius: 99 }}>wekelijks</span>}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -1391,6 +1419,34 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
           <div className="tip-box">{tip}</div>
         </div>
       </div>
+
+      {/* Verwijder dagdata */}
+      {log && Object.keys(log).filter(k => k !== 'date').length > 0 && (
+        <div style={{ padding: '4px 0 16px', textAlign: 'center' }}>
+          {!confirmDelete ? (
+            <button onClick={handleDelete} style={{
+              background: 'transparent', border: '1px solid var(--border)',
+              color: 'var(--muted)', fontSize: 11, padding: '6px 16px',
+              borderRadius: 99, cursor: 'pointer',
+            }}>
+              🗑️ Verwijder alle data voor deze dag
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'var(--alert)' }}>Zeker weten? Dit verwijdert ook uit de cloud.</span>
+              <button onClick={handleDelete} style={{
+                background: 'var(--alert)', border: 'none', color: 'white',
+                fontSize: 11, padding: '6px 14px', borderRadius: 99, cursor: 'pointer',
+              }}>Ja, verwijder</button>
+              <button onClick={() => setConfirmDelete(false)} style={{
+                background: 'var(--bg)', border: '1px solid var(--border)',
+                color: 'var(--text)', fontSize: 11, padding: '6px 14px',
+                borderRadius: 99, cursor: 'pointer',
+              }}>Annuleer</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

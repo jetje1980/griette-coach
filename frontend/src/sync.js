@@ -14,6 +14,21 @@ function shouldSync(key) {
   return !SKIP_PREFIXES.some(p => key.startsWith(p));
 }
 
+// Sync status: 'idle' | 'pending' | 'ok' | 'error'
+let _status = 'idle';
+const _listeners = new Set();
+
+function setStatus(s) {
+  _status = s;
+  _listeners.forEach(fn => fn(s));
+}
+
+export function getSyncStatus() { return _status; }
+export function onSyncStatus(fn) {
+  _listeners.add(fn);
+  return () => _listeners.delete(fn);
+}
+
 // Intercept all localStorage writes so every component auto-syncs
 const _origSet = localStorage.setItem.bind(localStorage);
 localStorage.setItem = function (key, value) {
@@ -23,6 +38,7 @@ localStorage.setItem = function (key, value) {
 
 let _syncTimer = null;
 function scheduleSync() {
+  setStatus('pending');
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(pushAllToCloud, 2000);
 }
@@ -35,11 +51,13 @@ async function pushAllToCloud() {
       rows.push({ key, value: localStorage.getItem(key), updated_at: new Date().toISOString() });
     }
   }
-  if (!rows.length) return;
+  if (!rows.length) { setStatus('ok'); return; }
   try {
     const { error } = await supabase.from(TABLE).upsert(rows, { onConflict: 'key' });
+    setStatus(error ? 'error' : 'ok');
     if (error) console.warn('Cloud sync fout:', error.message);
   } catch (e) {
+    setStatus('error');
     console.warn('Cloud sync mislukt:', e.message);
   }
 }

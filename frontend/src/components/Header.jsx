@@ -9,8 +9,17 @@ function formatDate(dateStr) {
   return `${NL_DAYS[d.getDay()]} ${d.getDate()} ${NL_MONTHS[d.getMonth()]}`;
 }
 
-export default function Header({ currentDate, log, streak, latestWeight, progressPct, quote, isToday, onShiftDay, dayNum, onSettings }) {
+function SyncBadge({ status }) {
+  if (status === 'pending') return <span style={{ fontSize: 10, color: 'rgba(251,248,242,0.6)', marginLeft: 6 }}>☁️ opslaan…</span>;
+  if (status === 'ok')      return <span style={{ fontSize: 10, color: '#86efac',              marginLeft: 6 }}>☁️ ✓</span>;
+  if (status === 'error')   return <span style={{ fontSize: 10, color: '#fca5a5',              marginLeft: 6 }}>☁️ ⚠️</span>;
+  return null;
+}
+
+export default function Header({ currentDate, log, streak, latestWeight, progressPct, quote, isToday, isFuture, onShiftDay, dayNum, onSettings, syncStatus }) {
   const today = new Date().toISOString().slice(0, 10);
+  const maxFuture = (() => { const d = new Date(); d.setDate(d.getDate() + 90); return d.toISOString().slice(0, 10); })();
+
   const bpColor = (() => {
     if (!log?.bp_sys) return null;
     if (log.bp_sys >= 160 || log.bp_dia >= 100) return 'var(--alert)';
@@ -22,8 +31,14 @@ export default function Header({ currentDate, log, streak, latestWeight, progres
     <div className="app-header">
       <div className="header-top">
         <div>
-          <div className="header-label">GRIETTE'S COACH · DAG {dayNum}</div>
-          <div className="header-date">{formatDate(currentDate)}</div>
+          <div className="header-label" style={{ display: 'flex', alignItems: 'center' }}>
+            GRIETTE'S COACH · DAG {dayNum}
+            <SyncBadge status={syncStatus} />
+          </div>
+          <div className="header-date">
+            {formatDate(currentDate)}
+            {isFuture && <span style={{ fontSize: 10, marginLeft: 8, background: 'rgba(251,191,36,0.25)', color: '#fbbf24', padding: '1px 7px', borderRadius: 99, fontFamily: 'var(--font-mono)' }}>📅 gepland</span>}
+          </div>
         </div>
         <div className="header-streak">
           <button onClick={onSettings} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, color: '#FBF8F2', fontSize: 14, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4, marginLeft: 'auto' }}>⚙️</button>
@@ -76,8 +91,10 @@ export default function Header({ currentDate, log, streak, latestWeight, progres
 
       <div className="day-nav">
         <button onClick={() => onShiftDay(-1)}>‹</button>
-        <span className="day-nav-label">{isToday ? 'Vandaag' : formatDate(currentDate)}</span>
-        <button onClick={() => onShiftDay(1)} disabled={isToday}>›</button>
+        <span className="day-nav-label">
+          {isToday ? 'Vandaag' : isFuture ? `📅 ${formatDate(currentDate)}` : formatDate(currentDate)}
+        </span>
+        <button onClick={() => onShiftDay(1)} disabled={currentDate >= maxFuture}>›</button>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { USER } from './config';
 import { store } from './store';
-import { restoreFromCloud } from './sync';
+import { restoreFromCloud, onSyncStatus, getSyncStatus } from './sync';
 import { photoStore } from './photoStore';
 import { QUOTES } from './data/quotes';
 import { TIPS } from './data/tips';
@@ -23,6 +23,7 @@ import Onboarding from './components/Onboarding';
 import StravaCallback from './components/StravaCallback';
 
 const TABS = ['Vandaag', 'Kalender', 'Training', 'Eten', 'Lichaam', 'Trends', 'Coach', 'Progressie', '✨ Glow', '🏅'];
+const MAX_FUTURE_DAYS = 90;
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -42,6 +43,7 @@ export default function App() {
   const [streak, setStreak] = useState(0);
   const [flash, setFlash] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(() => getSyncStatus());
   const [onboardingDone, setOnboardingDone] = useState(
     () => !!localStorage.getItem('gc_onboarding_done')
   );
@@ -50,6 +52,11 @@ export default function App() {
   const dayNum = dayNumber(currentDate);
   const quote = QUOTES[(dayNum - 1) % QUOTES.length];
   const tip = TIPS[(dayNum - 1) % TIPS.length];
+
+  useEffect(() => {
+    const unsub = onSyncStatus(setSyncStatus);
+    return unsub;
+  }, []);
 
   const showFlash = useCallback((icon, text) => {
     if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -84,7 +91,7 @@ export default function App() {
     restoreFromCloud().then(count => {
       if (count > 0) { loadLog(currentDate); loadLogs(); }
     });
-    photoStore.restoreFromCloud(); // restore missing photos in background
+    photoStore.restoreFromCloud();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -104,14 +111,28 @@ export default function App() {
     loadLogs();
   }, [currentDate, loadLogs]);
 
+  const deleteLog = useCallback(async () => {
+    await store.deleteLog(currentDate);
+    setLog(null);
+    loadLogs();
+    showFlash('🗑️', `Dagdata ${currentDate} verwijderd`);
+  }, [currentDate, loadLogs, showFlash]);
+
+  const maxFutureDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + MAX_FUTURE_DAYS);
+    return d.toISOString().slice(0, 10);
+  })();
+
   const shiftDay = (delta) => {
     const d = new Date(currentDate);
     d.setDate(d.getDate() + delta);
     const newDate = d.toISOString().slice(0, 10);
-    if (newDate <= today()) setCurrentDate(newDate);
+    if (newDate <= maxFutureDate) setCurrentDate(newDate);
   };
 
   const isToday = currentDate === today();
+  const isFuture = currentDate > today();
 
   const progressPct = (() => {
     const sorted = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
@@ -140,7 +161,7 @@ export default function App() {
     return <Onboarding onDone={() => { setOnboardingDone(true); loadLogs(); }} />;
   }
 
-  const sharedProps = { log, saveField, saveFields, currentDate, logs, dayNum, showFlash };
+  const sharedProps = { log, saveField, saveFields, currentDate, logs, dayNum, showFlash, isFuture, deleteLog, syncStatus };
 
   return (
     <>
@@ -159,16 +180,18 @@ export default function App() {
         progressPct={progressPct}
         quote={quote}
         isToday={isToday}
+        isFuture={isFuture}
         onShiftDay={shiftDay}
         dayNum={dayNum}
         onSettings={() => setShowSettings(true)}
+        syncStatus={syncStatus}
       />
 
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       <div>
         {tab === 0 && <CheckIn {...sharedProps} tip={tip} />}
-        {tab === 1 && <Calendar currentDate={currentDate} logs={logs} onSelectDate={(d) => { setCurrentDate(d); setTab(0); }} />}
+        {tab === 1 && <Calendar currentDate={currentDate} logs={logs} onSelectDate={(d) => { setCurrentDate(d); setTab(0); }} maxDate={maxFutureDate} />}
         {tab === 2 && <Training {...sharedProps} />}
         {tab === 3 && <Eten tip={tip} dayNum={dayNum} log={log} />}
         {tab === 4 && <Lichaam {...sharedProps} logs={logs} />}
