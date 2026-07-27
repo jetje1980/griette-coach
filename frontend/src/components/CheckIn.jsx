@@ -187,6 +187,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
   const [sleepHours, setSleepHours] = useState('');
   const [batteryStart, setBatteryStart] = useState('');
   const [batteryEnd, setBatteryEnd] = useState('');
+  const [trainingDuration, setTrainingDuration] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
   const [noteTimer, setNoteTimer] = useState(null);
   const [cycleStart, setCycleStart] = useState(() => localStorage.getItem('gc_cycle_start') || null);
@@ -207,6 +208,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
     setSleepHours(log?.sleep_hours ?? '');
     setBatteryStart(log?.battery_start ?? '');
     setBatteryEnd(log?.battery_end ?? '');
+    setTrainingDuration(log?.training_duration ?? '');
   }, [log, currentDate]);
 
   // Sprint calculations
@@ -397,6 +399,11 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
   };
 
   const saveSleepHours = (v) => saveField('sleep_hours', parseFloat(v));
+
+  const saveTrainingDuration = () => {
+    const v = parseInt(trainingDuration);
+    if (!isNaN(v) && v > 0) saveField('training_duration', v);
+  };
 
   function batteryColor(v) {
     if (v == null) return 'var(--border)';
@@ -700,6 +707,60 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         </div>
       </div>
 
+      {/* Lichaamssignalen */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#8B5CF6' }} />
+          <div className="card-title">🫁 Lichaamssignalen</div>
+          {(log?.body_bloat > 0 || log?.body_hotflash || log?.body_nightsweat) && (
+            <span style={{ fontSize: 10, background: '#F3E8FF', color: '#7C3AED', padding: '2px 8px', borderRadius: 99 }}>gelogd</span>
+          )}
+        </div>
+        <div className="card-body">
+          <div className="scale-label">OPGEBLAZEN GEVOEL</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 4, marginBottom: 12 }}>
+            {[
+              { v: 0, label: 'Geen',  emoji: '😊' },
+              { v: 1, label: 'Licht', emoji: '😐' },
+              { v: 2, label: 'Matig', emoji: '😕' },
+              { v: 3, label: 'Sterk', emoji: '😣' },
+            ].map(opt => (
+              <button key={opt.v} className="btn" style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                padding: '8px 4px', gap: 2,
+                background: log?.body_bloat === opt.v ? '#F3E8FF' : 'var(--bg)',
+                borderColor: log?.body_bloat === opt.v ? '#8B5CF6' : 'var(--border)',
+                color: log?.body_bloat === opt.v ? '#6D28D9' : 'var(--text)',
+              }} onClick={() => saveField('body_bloat', log?.body_bloat === opt.v ? null : opt.v)}>
+                <span style={{ fontSize: 14 }}>{opt.emoji}</span>
+                <span style={{ fontSize: 10 }}>{opt.label}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { id: 'body_hotflash',   label: 'Opvliegers vandaag',            emoji: '🔥' },
+              { id: 'body_nightsweat', label: 'Nachtelijk zweten (gisternacht)', emoji: '💦' },
+            ].map(item => (
+              <div key={item.id}
+                className={`habit-btn ${log?.[item.id] ? 'on' : ''}`}
+                style={{
+                  width: '100%', justifyContent: 'flex-start', gap: 10,
+                  ...(log?.[item.id] ? { background: '#F3E8FF', borderColor: '#8B5CF6', color: '#6D28D9' } : {}),
+                }}
+                onClick={() => saveField(item.id, log?.[item.id] ? 0 : 1)}
+              >
+                <div className="habit-emoji">{item.emoji}</div>
+                <div className="habit-label">{item.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 8 }}>
+            Opgeblazen gevoel en opvliegers corrigeren het gewichtspatroon voor vocht en perimenopauzale schommelingen.
+          </div>
+        </div>
+      </div>
+
       {/* Cyclus */}
       <div className="card">
         <div className="card-header">
@@ -968,6 +1029,54 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
                 : `✓ Battery +${log.battery_end - log.battery_start}% — goed herstel vandaag`}
             </div>
           )}
+
+          <div className="scale-label" style={{ marginTop: 14 }}>🏋️ TRAINING VANDAAG</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+            {[
+              { v: 'A',    label: 'Zone A',  sub: 'Herstel'   },
+              { v: 'B',    label: 'Zone B',  sub: 'Aerobic'   },
+              { v: 'C',    label: 'Zone C',  sub: 'Intensief' },
+              { v: 'rust', label: 'Rust',    sub: 'Geen'      },
+            ].map(opt => (
+              <button key={opt.v} className="btn" style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                padding: '8px 4px', gap: 2,
+                background: log?.training_zone === opt.v ? 'var(--sage-l)' : 'var(--bg)',
+                borderColor: log?.training_zone === opt.v ? 'var(--sage)' : 'var(--border)',
+                color: log?.training_zone === opt.v ? 'var(--sage)' : 'var(--text)',
+              }} onClick={() => saveField('training_zone', log?.training_zone === opt.v ? null : opt.v)}>
+                <span style={{ fontWeight: 800, fontSize: 13 }}>{opt.label}</span>
+                <span style={{ fontSize: 10, opacity: 0.7 }}>{opt.sub}</span>
+              </button>
+            ))}
+          </div>
+          {log?.training_zone && log.training_zone !== 'rust' && (
+            <div className="input-row" style={{ marginTop: 8 }}>
+              <input
+                type="number"
+                placeholder="minuten"
+                value={trainingDuration}
+                onChange={e => setTrainingDuration(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveTrainingDuration()}
+                onBlur={saveTrainingDuration}
+                style={{ flex: 1 }}
+              />
+              <span className="unit">min</span>
+              <button className="btn btn-rust btn-sm" onClick={saveTrainingDuration}>✓</button>
+            </div>
+          )}
+          {log?.training_duration > 0 && <div className="saved-note">✓ {log.training_duration} min — Zone {log.training_zone}</div>}
+
+          <div className="scale-label" style={{ marginTop: 12 }}>😤 HERSTELGEVOEL NA GISTEREN</div>
+          <div className="scale-row">
+            {['😴 Goed', '😐 Matig', '⚡ PEM-achtig'].map((l, i) => (
+              <button key={i}
+                className={`scale-btn ${log?.training_recovery === i ? 'selected-s' : ''}`}
+                style={{ fontSize: 11, padding: '6px 8px' }}
+                onClick={() => saveField('training_recovery', log?.training_recovery === i ? null : i)}
+              >{l}</button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -1231,6 +1340,73 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         </div>
       </div>
 
+      {/* Mounjaro details */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#06B6D4' }} />
+          <div className="card-title">💉 Mounjaro details</div>
+        </div>
+        <div className="card-body">
+          <div className="scale-label">VERZADIGING VANDAAG (eetlust)</div>
+          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+            {[
+              { v: 1, emoji: '🚫', label: 'Geen eetlust'   },
+              { v: 2, emoji: '😌', label: 'Heel weinig'    },
+              { v: 3, emoji: '😐', label: 'Matig'          },
+              { v: 4, emoji: '🍽️', label: 'Normaal'        },
+              { v: 5, emoji: '😋', label: 'Volle eetlust'  },
+            ].map(opt => (
+              <button key={opt.v} className="btn" style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                padding: '6px 2px', gap: 2,
+                background: log?.mounjaro_satiation === opt.v ? '#CFFAFE' : 'var(--bg)',
+                borderColor: log?.mounjaro_satiation === opt.v ? '#06B6D4' : 'var(--border)',
+                color: log?.mounjaro_satiation === opt.v ? '#0E7490' : 'var(--text)',
+              }} onClick={() => saveField('mounjaro_satiation', log?.mounjaro_satiation === opt.v ? null : opt.v)}>
+                <span style={{ fontSize: 14 }}>{opt.emoji}</span>
+                <span style={{ fontSize: 9, textAlign: 'center', lineHeight: 1.2 }}>{opt.label}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, marginBottom: 10 }}>
+            1 = Mounjaro werkt sterk · 5 = eetlust bijna normaal. Varieert per dag na injectie.
+          </div>
+          {log?.mounjaro && (
+            <>
+              <div className="scale-label">BIJWERKINGEN NA PRIK</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                {[
+                  { id: 'misselijkheid', emoji: '🤢', label: 'Misselijkheid' },
+                  { id: 'vermoeidheid',  emoji: '😴', label: 'Vermoeidheid'  },
+                  { id: 'maagklachten', emoji: '🫄', label: 'Maagklachten'  },
+                  { id: 'geen',         emoji: '✓',  label: 'Geen'          },
+                ].map(se => {
+                  const cur = log?.mounjaro_side_effects || [];
+                  const isOn = cur.includes(se.id);
+                  return (
+                    <button key={se.id} className="btn" style={{
+                      padding: '6px 12px', fontSize: 12,
+                      background: isOn ? '#CFFAFE' : 'var(--bg)',
+                      color: isOn ? '#0E7490' : 'var(--text)',
+                      border: `1.5px solid ${isOn ? '#06B6D4' : 'var(--border)'}`,
+                    }} onClick={() => {
+                      if (se.id === 'geen') {
+                        saveField('mounjaro_side_effects', isOn ? [] : ['geen']);
+                      } else {
+                        const without = cur.filter(x => x !== 'geen' && x !== se.id);
+                        saveField('mounjaro_side_effects', isOn ? without : [...without, se.id]);
+                      }
+                    }}>
+                      {se.emoji} {se.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* PRN Medicatie */}
       <div className="card">
         <div className="card-header">
@@ -1344,6 +1520,60 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
           </div>
           <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
             Eiwitgewoontes zijn je anker — ook op vakantie zonder Mounjaro op volle kracht.
+          </div>
+        </div>
+      </div>
+
+      {/* Eetgedrag */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: '#F97316' }} />
+          <div className="card-title">🍽️ Eetgedrag</div>
+          {(log?.eating_late || log?.eating_emotional) && (
+            <span style={{ fontSize: 10, background: 'var(--gold-l)', color: '#92400E', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>let op</span>
+          )}
+        </div>
+        <div className="card-body">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { id: 'eating_late',      label: 'Gegeten na 20:00',    emoji: '🌙' },
+              { id: 'eating_emotional', label: 'Emotie-eten vandaag', emoji: '😔' },
+            ].map(item => (
+              <div key={item.id}
+                className={`habit-btn ${log?.[item.id] ? 'on' : ''}`}
+                style={{
+                  width: '100%', justifyContent: 'flex-start', gap: 10,
+                  ...(log?.[item.id] ? { background: 'var(--gold-l)', borderColor: 'var(--gold)', color: '#92400E' } : {}),
+                }}
+                onClick={() => saveField(item.id, log?.[item.id] ? 0 : 1)}
+              >
+                <div className="habit-emoji">{item.emoji}</div>
+                <div className="habit-label">{item.label}</div>
+              </div>
+            ))}
+          </div>
+          <div className="scale-label" style={{ marginTop: 12 }}>CRAVING</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+            {[
+              { v: 'geen',  emoji: '✓',  label: 'Geen'     },
+              { v: 'zoet',  emoji: '🍫', label: 'Zoet'     },
+              { v: 'zout',  emoji: '🥨', label: 'Zout'     },
+              { v: 'alles', emoji: '🤤', label: 'Alles'    },
+            ].map(opt => (
+              <button key={opt.v} className="btn" style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                padding: '8px 4px', gap: 2,
+                background: log?.eating_craving === opt.v ? 'var(--gold-l)' : 'var(--bg)',
+                borderColor: log?.eating_craving === opt.v ? 'var(--gold)' : 'var(--border)',
+                color: log?.eating_craving === opt.v ? '#92400E' : 'var(--text)',
+              }} onClick={() => saveField('eating_craving', log?.eating_craving === opt.v ? null : opt.v)}>
+                <span style={{ fontSize: 14 }}>{opt.emoji}</span>
+                <span style={{ fontSize: 10 }}>{opt.label}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 8 }}>
+            Laat eten en emotie-eten correleren sterk met gewichtsstagnatie. Craving varieert met cyclusdag en Mounjaro-effect.
           </div>
         </div>
       </div>
