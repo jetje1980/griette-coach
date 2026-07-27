@@ -437,21 +437,42 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
     if (deleteLog) await deleteLog();
   };
 
+  const NL_DAYS_FULL   = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+  const NL_MONTHS_FULL = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+  const parsedDate = new Date(currentDate + 'T12:00:00');
+  const dateLabel  = `${NL_DAYS_FULL[parsedDate.getDay()]} ${parsedDate.getDate()} ${NL_MONTHS_FULL[parsedDate.getMonth()]} ${parsedDate.getFullYear()}`;
+  const isActuallyToday = currentDate === todayStr;
+  const isPast = currentDate < todayStr;
+
   return (
     <div className="pane">
 
-      {/* Toekomstige datum banner */}
-      {isFuture && (
-        <div style={{ background: '#FEF3C7', border: '1.5px solid #F59E0B', borderRadius: 12, padding: '10px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 20 }}>📅</span>
+      {/* Datum banner — altijd zichtbaar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: isFuture ? '#FEF3C7' : isPast ? 'var(--card)' : 'var(--sage-l)',
+        border: `1.5px solid ${isFuture ? '#F59E0B' : isPast ? 'var(--border)' : 'var(--sage)'}`,
+        borderRadius: 12, padding: '10px 14px', marginBottom: 10,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 20 }}>
+            {isFuture ? '📅' : isPast ? '📋' : '✏️'}
+          </span>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E' }}>Toekomstige datum</div>
-            <div style={{ fontSize: 11, color: '#78350F', lineHeight: 1.5 }}>
-              Je plant hier van tevoren — bijv. Mounjaro-prik of afspraak. De AI neemt geplande prikken mee in de analyse.
+            <div style={{ fontWeight: 700, fontSize: 13, color: isFuture ? '#92400E' : 'var(--text)' }}>
+              {isFuture ? 'Toekomstige datum — plannen' : isPast ? 'Eerdere dag — aanvullen of corrigeren' : 'Vandaag invullen'}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: isFuture ? '#78350F' : 'var(--text)', marginTop: 1 }}>
+              {dateLabel}
             </div>
           </div>
         </div>
-      )}
+        {isFuture && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FDE68A', padding: '3px 10px', borderRadius: 99 }}>
+            gepland
+          </span>
+        )}
+      </div>
 
       {/* Sprint-widget */}
       {daysToVacation > 0 && (
