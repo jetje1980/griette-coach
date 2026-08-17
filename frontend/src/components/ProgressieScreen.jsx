@@ -27,6 +27,37 @@ function getNextRunNr(logs) {
   return RUNS.length;
 }
 
+function getRunWeekStreak(logs) {
+  function weekMonday(d) {
+    const day = d.getDay();
+    const diff = d.getDate() - (day === 0 ? 6 : day - 1);
+    return new Date(d.getFullYear(), d.getMonth(), diff);
+  }
+  const now = new Date();
+  const currentMonday = weekMonday(now);
+  const runDates = new Set(
+    Object.values(logs).filter(l => l.run_done && l.date).map(l => l.date)
+  );
+  let streak = 0;
+  for (let w = 0; w < 8; w++) {
+    const mon = new Date(currentMonday);
+    mon.setDate(currentMonday.getDate() - w * 7);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    const monStr = mon.toISOString().slice(0, 10);
+    const sunStr = sun.toISOString().slice(0, 10);
+    const hasRun = [...runDates].some(d => d >= monStr && d <= sunStr);
+    if (hasRun) {
+      streak++;
+    } else if (w === 0) {
+      continue; // current week may not have a run yet — don't break the streak
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 // ── Shared components ───────────────────────────────────────────
 function ProgressBar({ pct, color = 'var(--sage)' }) {
   return (
@@ -186,7 +217,7 @@ function PhotoTimeline({ sessions }) {
 // ═══════════════════════════════════════════════════════════════
 // TAB 0: OVERZICHT
 // ═══════════════════════════════════════════════════════════════
-function TabOverzicht({ logs, streak, sessions }) {
+function TabOverzicht({ logs, streak, sessions, goToTab }) {
   const tod = todayStr();
   const latestWeight = (() => {
     const sorted = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
@@ -268,8 +299,18 @@ function TabOverzicht({ logs, streak, sessions }) {
       )}
 
       <div className="os-section-label">Foto-tijdlijn</div>
-      <div className="os-card">
-        <PhotoTimeline sessions={sessions} />
+      <div className="os-card" style={{ cursor: 'pointer' }} onClick={() => goToTab(5)}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Progressiefoto's</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
+              {sessions.length > 0
+                ? `${sessions.length} sessie${sessions.length !== 1 ? 's' : ''} opgeslagen`
+                : "Nog geen foto's — bekijk tijdlijn"}
+            </div>
+          </div>
+          <span style={{ fontSize: 18, color: 'var(--muted)' }}>→</span>
+        </div>
       </div>
     </div>
   );
@@ -295,10 +336,15 @@ function TabLichaam({ logs }) {
     ? Math.min(100, Math.max(0, ((USER.startWeight - latestWeight) / (USER.startWeight - USER.goalWeight)) * 100))
     : 0;
 
-  // Buffer from Leven→Geld
-  const geldData = (() => {
-    try { return JSON.parse(localStorage.getItem('gc_geld') || 'null'); } catch { return null; }
-  })();
+  // Buffer — gc_geld may store a plain number or an object with .buffer
+  const geldRaw = (() => { try { return localStorage.getItem('gc_geld'); } catch { return null; } })();
+  const hasGeld = geldRaw !== null && geldRaw !== '';
+  const geldAmount = hasGeld ? (() => {
+    try {
+      const parsed = JSON.parse(geldRaw);
+      return typeof parsed === 'number' ? parsed : (parsed?.buffer ?? parseFloat(geldRaw) ?? 0);
+    } catch { return parseFloat(geldRaw) || 0; }
+  })() : 0;
 
   return (
     <div>
@@ -375,18 +421,18 @@ function TabLichaam({ logs }) {
       )}
 
       {/* Geld buffer */}
-      {geldData && geldData.buffer > 0 && (
+      {hasGeld && geldAmount > 0 && (
         <>
           <div className="os-section-label">Buffer</div>
           <div className="os-card">
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
               <div style={{ fontSize: 26, fontWeight: 900, fontFamily: 'var(--font-serif)',
-                color: geldData.buffer >= 15000 ? 'var(--green)' : 'var(--sage)' }}>
-                €{geldData.buffer.toLocaleString('nl-NL')}
+                color: geldAmount >= 15000 ? 'var(--green)' : 'var(--sage)' }}>
+                €{geldAmount.toLocaleString('nl-NL')}
               </div>
               <div style={{ fontSize: 13, color: 'var(--sub)' }}>van €15.000</div>
             </div>
-            <ProgressBar pct={Math.min(100, (geldData.buffer / 15000) * 100)} color="var(--green)" />
+            <ProgressBar pct={Math.min(100, (geldAmount / 15000) * 100)} color="var(--green)" />
           </div>
         </>
       )}
@@ -407,15 +453,18 @@ function TabHardlopen({ logs }) {
   const recentRuns = Object.values(logs)
     .filter(l => l.run_done && l.run_session)
     .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 10);
+    .slice(0, 8);
 
-  const totalKm = recentRuns.reduce((sum, l) => {
-    const run = RUNS.find(r => r.nr === l.run_session);
-    if (!run) return sum;
-    const km = run.km_estimate ? parseFloat(run.km_estimate) : 0;
-    return sum + (isNaN(km) ? 0 : km);
-  }, 0);
+  const totalKm = Object.values(logs)
+    .filter(l => l.run_done && l.run_session)
+    .reduce((sum, l) => {
+      const run = RUNS.find(r => r.nr === l.run_session);
+      if (!run) return sum;
+      const km = run.km_estimate ? parseFloat(run.km_estimate) : 0;
+      return sum + (isNaN(km) ? 0 : km);
+    }, 0);
 
+  const runWeekStreak = getRunWeekStreak(logs);
   const trailDays = daysBetween(tod, TRAIL_DATE);
   const trailPct = (() => {
     const totalDays = daysBetween(USER.startDate, TRAIL_DATE);
@@ -442,6 +491,11 @@ function TabHardlopen({ logs }) {
           <span>{TOTAL_RUNS - completedRuns} sessies te gaan</span>
           {totalKm > 0 && <span>~{totalKm.toFixed(1)} km gelopen</span>}
         </div>
+        {runWeekStreak > 0 && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--sage)', fontWeight: 600 }}>
+            {runWeekStreak} week{runWeekStreak !== 1 ? 'en' : ''} op rij getraind
+          </div>
+        )}
       </div>
 
       {/* Kracht */}
@@ -466,9 +520,11 @@ function TabHardlopen({ logs }) {
               textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
               T{nextRunNr}/{TOTAL_RUNS}
             </div>
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, fontFamily: 'var(--font-serif)' }}>
-              {nextRun.title || `Training ${nextRunNr}`}
-            </div>
+            {nextRun.goal && (
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, fontFamily: 'var(--font-serif)' }}>
+                {nextRun.goal}
+              </div>
+            )}
             <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.4, marginBottom: 4 }}>
               {nextRun.description}
             </div>
@@ -748,7 +804,7 @@ export default function ProgressieScreen({ logs, streak }) {
   return (
     <div className="os-content">
       <SubTabs tabs={SUBTABS} active={activeTab} onChange={setActiveTab} />
-      {activeTab === 0 && <TabOverzicht logs={logs} streak={streak} sessions={sessions} />}
+      {activeTab === 0 && <TabOverzicht logs={logs} streak={streak} sessions={sessions} goToTab={setActiveTab} />}
       {activeTab === 1 && <TabLichaam logs={logs} />}
       {activeTab === 2 && <TabHardlopen logs={logs} />}
       {activeTab === 3 && <TabEnergie logs={logs} />}
