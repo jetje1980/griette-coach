@@ -1,200 +1,266 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { USER } from '../config';
+import { RUNS } from '../data/runningSchema';
 
-function ago(n) {
-  const d = new Date();
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function prevDate(dateStr, n = 1) {
+  const d = new Date(dateStr);
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 }
 
 function avg(arr) {
-  const v = arr.filter(x => x != null && x !== undefined);
-  if (!v.length) return null;
-  return v.reduce((a, b) => a + b, 0) / v.length;
+  const v = arr.filter(x => x != null);
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
 }
 
-// Core decision engine — deterministic, evidence-based
-function analyzeStatus(log, logs) {
-  const yesterday = logs[ago(1)];
-  const dayBefore  = logs[ago(2)];
-  const threeDaysAgo = logs[ago(3)];
-
-  const signals = [];
-  let riskLevel = 0; // 0=green, 1=yellow, 2=red
-
-  // === PEM SIGNALS (Long COVID — highest priority) ===
-  const pemToday     = log?.training_recovery === 'pem-achtig';
-  const pemYesterday = yesterday?.training_recovery === 'pem-achtig';
-  const pemTwoDays   = dayBefore?.training_recovery === 'pem-achtig';
-
-  if (pemToday) {
-    riskLevel = 2;
-    signals.push({ type: 'critical', text: 'Jij hebt vandaag PEM-achtig herstel gerapporteerd. Dit is het vroege signaal van post-exertionele malaise bij long covid.' });
-  } else if (pemYesterday) {
-    riskLevel = Math.max(riskLevel, 2);
-    signals.push({ type: 'critical', text: 'Gisteren PEM-achtig herstel. Het zenuwstelsel heeft minimaal 48u nodig om te herstellen — geen training vandaag.' });
-  } else if (pemTwoDays) {
-    riskLevel = Math.max(riskLevel, 1);
-    signals.push({ type: 'warning', text: 'Twee dagen geleden PEM-signalen. Vandaag mag je wandelen — geen hardlopen of circuit.' });
+// Find next undone run nr (1-based)
+function getNextRunNr(logs) {
+  const doneNrs = new Set(
+    Object.values(logs || {})
+      .filter(l => l.run_done && l.run_session)
+      .map(l => l.run_session)
+  );
+  for (let nr = 1; nr <= RUNS.length; nr++) {
+    if (!doneNrs.has(nr)) return nr;
   }
+  return RUNS.length;
+}
 
-  // === SLAAP ===
-  const sleepValues = [log, yesterday, dayBefore].map(l => l?.sleep_hours).filter(Boolean);
-  const avgSleep = avg(sleepValues);
-  const sleepTonight = log?.sleep_hours;
+// ─── HEAD COACH decision engine ─────────────────────────────────────────────
+// Returns { decision, color, bg, borderColor, trainingDesc, why[], sessionLabel }
+// decision: 'GREEN' | 'AMBER' | 'BLUE' | 'RED'
 
-  if (sleepTonight != null && sleepTonight < 5.5) {
-    riskLevel = Math.max(riskLevel, 2);
-    signals.push({ type: 'critical', text: `Slaap ${sleepTonight}u — te weinig. Cortisol is nu 30–40% hoger dan normaal. Een workout bovenop cortisolstress vertraagt vetverbranding en verhoogt PEM-risico.` });
-  } else if (avgSleep != null && avgSleep < 6.5 && sleepValues.length >= 2) {
-    riskLevel = Math.max(riskLevel, 1);
-    signals.push({ type: 'warning', text: `Gemiddeld ${avgSleep.toFixed(1)}u slaap afgelopen nachten. Slaaptekort verhoogt hongerhormoon ghreline met 20%. Prioriteit: vanavond vóór 22:30 in bed.` });
-  } else if (sleepTonight != null && sleepTonight >= 7.5) {
-    signals.push({ type: 'positive', text: `Goed geslapen (${sleepTonight}u). Groeihormoon heeft 's nachts zijn werk gedaan — spieropbouw en vetverbranding zijn nu optimaal.` });
-  }
+export function computeHeadCoach(log, logs, currentDate) {
+  const yest  = logs?.[prevDate(currentDate, 1)] ?? {};
+  const d2    = logs?.[prevDate(currentDate, 2)] ?? {};
+  const d3    = logs?.[prevDate(currentDate, 3)] ?? {};
 
-  // === TRAINING LOAD (afgelopen 3 dagen) ===
-  const trainDays = [log, yesterday, dayBefore, threeDaysAgo]
-    .filter(l => l?.run_done || l?.core_done || (l?.training_zone && l?.training_zone !== 'rust'))
-    .length;
+  // ── raw signals ──────────────────────────────────────────────────────────
 
-  if (trainDays >= 3 && riskLevel < 2) {
-    riskLevel = Math.max(riskLevel, 1);
-    signals.push({ type: 'warning', text: `${trainDays} trainingsdagen in de afgelopen 4 dagen. Voor long covid is dit aan de bovenkant. Vandaag: rust of wandelen — niet meer.` });
-  }
+  // Sleep: quality 0-3 (0=bad, 3=great), hours float
+  const sleepQ   = log?.sleep_quality;      // 0-3
+  const sleepH   = log?.sleep_hours;
+  const avgSleepH = avg([sleepH, yest.sleep_hours, d2.sleep_hours].filter(Boolean));
 
-  // === ZONE C OVERTRAINING ===
-  const zoneC_yesterday = yesterday?.training_zone === 'C';
-  const zoneC_dayBefore = dayBefore?.training_zone === 'C';
-  if (zoneC_yesterday && riskLevel < 2) {
-    riskLevel = Math.max(riskLevel, 1);
-    signals.push({ type: 'warning', text: 'Gisteren zone C — boven jouw aerobe drempel. Long covid zenuwstelsel heeft 36–48u herstel nodig na zone C. Vandaag: zone B max of rust.' });
-  }
-  if (zoneC_dayBefore && zoneC_yesterday) {
-    riskLevel = Math.max(riskLevel, 2);
-    signals.push({ type: 'critical', text: 'Twee dagen op rij zone C. Dit is het patroon dat PEM triggert bij long covid. Vandaag verplichte rust — geen uitzonderingen.' });
-  }
+  // Energy: 0-3
+  const energy   = log?.energy;
 
-  // === HORMONALE SIGNALEN (perimenopauze + cortisol) ===
-  const hormonalToday = (log?.body_hotflash || log?.body_nightsweat) && log?.body_bloat > 1;
-  if (hormonalToday && riskLevel < 2) {
-    riskLevel = Math.max(riskLevel, 1);
-    signals.push({ type: 'warning', text: 'Opvliegers + opgeblazen gevoel = verhoogde cortisolactiviteit. Hoge cortisol + intensieve training = buikvetretentie. Vandaag: alleen wandelen of lichte kracht.' });
-  }
+  // Recovery feeling: 0=goed, 1=matig, 2=PEM-achtig  ← BUG FIX (was string)
+  const recovToday = log?.training_recovery;
+  const recovYest  = yest?.training_recovery;
+  const recovD2    = d2?.training_recovery;
 
-  // === ENERGIE / BATTERIJ ===
-  const battery = log?.battery;
-  if (battery === 1 && riskLevel < 2) {
-    riskLevel = Math.max(riskLevel, 1);
-    signals.push({ type: 'warning', text: 'Batterij op rood. Je ADHD-brein wil misschien toch trainen om dopamine te halen, maar dat is een val. Vandaag: rust is de prestatie.' });
-  } else if (battery >= 3 && riskLevel === 0) {
-    signals.push({ type: 'positive', text: 'Goede energiestand. Dit is het moment om de training te pakken — het lichaam staat klaar.' });
-  }
+  const pemToday = recovToday === 2 || log?.symptom_pem;
+  const pemYest  = recovYest  === 2 || yest?.symptom_pem;
+  const pemD2    = recovD2    === 2 || d2?.symptom_pem;
 
-  // === GREEN LIGHT CONFIRMATION ===
-  if (riskLevel === 0 && signals.filter(s => s.type === 'positive').length === 0) {
-    signals.push({ type: 'positive', text: 'Geen rode vlaggen. Jouw lichaam is klaar voor de geplande sessie. Warm goed op, hou zone B vast.' });
-  }
+  // Symptoms (boolean fields)
+  const symptomCount = [
+    log?.symptom_pem, log?.symptom_exhaustion, log?.symptom_breathless,
+    log?.symptom_brainfog, log?.symptom_pain,
+  ].filter(Boolean).length;
 
-  // === DECIDE WHAT TO DO TODAY ===
-  let advice, title, color, bg;
+  // Battery: battery_start (0-100)  ← BUG FIX (was log?.battery)
+  const battStart = log?.battery_start;
+  const battLow   = battStart != null && battStart <= 30;
 
-  if (riskLevel === 2) {
-    title = 'Verplichte rust vandaag';
-    advice = riskLevel === 2 && pemToday
-      ? 'Stop alle training. Horizontaal rust als je kan. Hydrateer goed. PEM vraagt 48–72u volledig herstel — elke dag dat je dit negeert, verlengt de herstelperiode met dagen.'
-      : riskLevel === 2 && sleepTonight < 5.5
-      ? 'Geen training. Vanavond vroeg in bed, telefoon buiten de kamer. Morgen evalueren. Een overgeslagen sessie is beter dan een week uitgevallen.'
-      : 'Geen training — wandelen max 20 min. Eten: eiwit prioriteit, geen suiker. Lichaam neemt de tijd die het nodig heeft.';
-    color = '#C4622D';
-    bg = '#FBE9E0';
-  } else if (riskLevel === 1) {
-    title = 'Rustig aan vandaag';
-    advice = 'Geen hardlopen boven zone B, geen circuit tot uitputting. Optie: 20 min wandelen + 10 min foam roll. Of kies voor de lichtste training van deze week.';
-    color = '#B5831A';
-    bg = '#FBF0DC';
+  // Stress: low_stress is a habit boolean (1=stress laag, falsy=stress hoog)
+  const stressHigh = log?.low_stress === 0 || log?.low_stress === false;
+  const overwhelmed = log?.adhd_overwhelmed;
+
+  // Delayed response: today's symptoms after yesterday's training
+  const yestTrained = yest?.run_done || yest?.core_done || (yest?.training_zone && yest?.training_zone !== 'rust');
+  const delayedBad  = yestTrained && (
+    log?.delayed_fatigue || log?.delayed_brainfog || log?.delayed_breathless ||
+    symptomCount >= 2
+  );
+
+  // Training load last 4 days
+  const recentTrainDays = [log, yest, d2, d3].filter(l =>
+    l?.run_done || l?.core_done || (l?.training_zone && l?.training_zone !== 'rust')
+  ).length;
+
+  // Zone C overtraining
+  const zoneC2 = yest?.training_zone === 'C' && d2?.training_zone === 'C';
+
+  // ── scoring (0-10 scale) ──────────────────────────────────────────────────
+  // Start at 5, adjust based on signals
+  let score = 5;
+
+  if (sleepQ != null)  score += (sleepQ - 1.5) * 1.0;   // 0→-1.5, 3→+1.5
+  if (energy  != null) score += (energy  - 1.5) * 1.0;
+
+  if (recovToday === 2) score -= 4;
+  else if (recovToday === 1) score -= 1.5;
+
+  score -= symptomCount * 1.2;
+  if (battLow) score -= 1;
+  if (stressHigh) score -= 0.5;
+  if (delayedBad) score -= 2.5;
+  if (recentTrainDays >= 3) score -= 1;
+  if (zoneC2) score -= 2;
+
+  // ── safety layer (RED) ────────────────────────────────────────────────────
+  const hardRed = pemToday || pemYest || symptomCount >= 3 || zoneC2 ||
+    (sleepH != null && sleepH < 4.5);
+
+  // ── decision ─────────────────────────────────────────────────────────────
+  let decision;
+  if (hardRed)       decision = 'RED';
+  else if (score <= 1.5) decision = 'BLUE';
+  else if (score <= 3.5) decision = 'AMBER';
+  else                   decision = 'GREEN';
+
+  // ── training recommendation ───────────────────────────────────────────────
+  const nextNr  = getNextRunNr(logs);
+  const nextRun = RUNS.find(r => r.nr === nextNr) || RUNS[RUNS.length - 1];
+
+  let trainingDesc, sessionLabel;
+
+  if (decision === 'GREEN') {
+    sessionLabel = `Training T${nextNr}/35`;
+    trainingDesc = nextRun
+      ? `${nextRun.description} — ${nextRun.duration} min | ${nextRun.hrZone}`
+      : 'Geplande loopsessie — Zone B strikt';
+  } else if (decision === 'AMBER') {
+    sessionLabel = 'Aangepaste sessie';
+    trainingDesc = nextRun
+      ? `Korter: ${Math.round((nextRun.runMin || 1) * 0.7)} min lopen / ${nextRun.walkMin || 2} min wandelen × ${Math.max(3, Math.round((nextRun.reps || 5) * 0.7))} — ${nextRun.hrZone}`
+      : 'Lichte wandeling 20-30 min — geen hardlopen';
+  } else if (decision === 'BLUE') {
+    sessionLabel = 'Hersteldag';
+    trainingDesc = 'Wandelen 15–30 min rustig tempo + 5 min foam roll/stretching. Geen cardio of kracht.';
   } else {
-    title = 'Groene dag — pak het';
-    advice = 'Doe de geplande sessie volledig. Zone B strikt. Na de training: eiwit binnen 45 min. Dit is de training die 4 weken later resulteert in een lagere hartslag bij hetzelfde tempo.';
-    color = '#2A7A4F';
-    bg = '#E0F0E8';
+    sessionLabel = 'Stop & Review';
+    trainingDesc = 'Vandaag geen training. Rust, hydrateer goed, observeer symptomen. Neem contact op met arts bij verslechtering.';
   }
 
-  return { riskLevel, title, advice, color, bg, signals };
+  // ── why bullets (2-4 signals) ─────────────────────────────────────────────
+  const why = [];
+
+  if (pemToday)   why.push('PEM-achtig herstel vandaag gerapporteerd — hoogste prioriteit voor rust');
+  if (pemYest)    why.push('Gisteren PEM-signalen — zenuwstelsel heeft 48u herstel nodig');
+  if (pemD2 && !pemYest) why.push('PEM-signalen twee dagen geleden — vandaag voorzichtig opbouwen');
+  if (delayedBad) why.push('Vertraagde klachten na gisteren training — tolerantie onvoldoende voor progressie');
+  if (symptomCount >= 2) why.push(`${symptomCount} actieve symptomen — herstel vóór training`);
+  if (zoneC2)     why.push('Twee opeenvolgende zone-C sessies — PEM-risico is hoog');
+  if (sleepH != null && sleepH < 5.5) why.push(`Slaap ${sleepH}u — te weinig voor goede adaptatie`);
+  if (avgSleepH != null && avgSleepH < 6.5 && sleepH >= 5.5) why.push(`Gemiddeld slaaptekort (${avgSleepH.toFixed(1)}u) — draagt bij aan verlaagde belastbaarheid`);
+  if (energy === 0) why.push('Energie op 0 — vandaag is herstel de prestatie');
+  if (energy === 1 && decision !== 'RED') why.push('Lage energie — lichtere sessie is verstandiger');
+  if (energy >= 3 && decision === 'GREEN') why.push('Energie goed — goed moment om de geplande sessie te pakken');
+  if (recentTrainDays >= 3) why.push(`${recentTrainDays} trainingsdagen in 4 dagen — even rustiger voor long-covid herstel`);
+  if (battLow) why.push(`Batterijstand laag (${battStart}%) — signaal dat het systeem op is`);
+  if (recovToday === 0 && decision === 'GREEN') why.push('Herstelgevoel goed — lichaam is klaar voor de geplande prikkel');
+  if (recovToday === 1) why.push('Matig herstelgevoel — voorzichtig met intensiteit');
+
+  // Guarantee 1-4 bullets
+  if (why.length === 0) {
+    if (decision === 'GREEN') why.push('Geen rode vlaggen — alle signalen wijzen richting trainen');
+    else if (decision === 'AMBER') why.push('Gemengde signalen — lichtere variant is de veiligste keuze');
+    else why.push('Herstel heeft vandaag prioriteit boven training');
+  }
+  const whyFinal = why.slice(0, 4);
+
+  // ── colors ────────────────────────────────────────────────────────────────
+  const COLORS = {
+    GREEN: { color: '#2A7A4F', bg: '#E0F0E8', border: '#2A7A4F', emoji: '🟢', label: 'GROEN — TRAIN' },
+    AMBER: { color: '#B5831A', bg: '#FBF0DC', border: '#B5831A', emoji: '🟡', label: 'AMBER — AANPASSEN' },
+    BLUE:  { color: '#2563AB', bg: '#E0EEFF', border: '#2563AB', emoji: '🔵', label: 'BLAUW — HERSTEL' },
+    RED:   { color: '#C4622D', bg: '#FBE9E0', border: '#C4622D', emoji: '🔴', label: 'ROOD — STOP & REVIEW' },
+  };
+  const c = COLORS[decision];
+
+  return { decision, trainingDesc, sessionLabel, why: whyFinal, ...c, score: Math.round(score * 10) / 10 };
 }
 
-export default function CoachAdvice({ log, logs }) {
-  // Only show when there's some data logged
-  const hasData = log?.sleep_hours != null || log?.battery != null || log?.training_recovery != null || log?.body_bloat != null;
-  const hasAnyRecentData = hasData ||
-    logs[ago(1)]?.training_recovery != null ||
-    logs[ago(1)]?.sleep_hours != null ||
-    logs[ago(1)]?.run_done ||
-    logs[ago(2)]?.training_recovery != null;
+// ─── Component ───────────────────────────────────────────────────────────────
 
-  if (!hasAnyRecentData) {
+export default function CoachAdvice({ log, logs, currentDate }) {
+  const [showDetails, setShowDetails] = useState(false);
+
+  const date = currentDate || new Date().toISOString().slice(0, 10);
+
+  // Only show after minimal data is entered
+  const hasData = log?.sleep_quality != null || log?.energy != null ||
+    log?.training_recovery != null || log?.battery_start != null ||
+    Object.values(logs || {}).some(l => l.run_done || l.core_done);
+
+  if (!hasData) {
     return (
       <div style={{
-        margin: '0 0 10px',
-        padding: '12px 14px',
-        borderLeft: '4px solid #2A7A4F',
-        background: '#E0F0E820',
-        borderRadius: 4,
-        fontSize: 12, color: 'var(--muted)', lineHeight: 1.5,
+        margin: '0 0 10px', padding: '12px 14px',
+        borderLeft: '4px solid #2A7A4F', background: '#E0F0E820',
+        borderRadius: 4, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5,
       }}>
-        <strong style={{ color: '#2A7A4F', display: 'block', marginBottom: 4 }}>Coach advies</strong>
-        Vul dagelijks slaap, energie en training in — dan geef ik je concrete rustadvies op basis van jouw data.
+        <strong style={{ color: '#2A7A4F', display: 'block', marginBottom: 4 }}>Head Coach</strong>
+        Vul slaap en energie in — dan geef ik je een concreet coachbesluit voor vandaag.
       </div>
     );
   }
 
-  const { riskLevel, title, advice, color, bg, signals } = analyzeStatus(log, logs);
-
-  const trafficIcon = riskLevel === 2 ? '🔴' : riskLevel === 1 ? '🟡' : '🟢';
+  const result = computeHeadCoach(log, logs, date);
+  const { decision, trainingDesc, sessionLabel, why, color, bg, border, emoji, label } = result;
 
   return (
     <div style={{
-      marginBottom: 10,
-      borderLeft: `4px solid ${color}`,
-      background: bg + '44',
-      borderRadius: 4,
-      overflow: 'hidden',
+      marginBottom: 12, borderRadius: 10, overflow: 'hidden',
+      border: `2px solid ${border}`,
+      background: bg + 'cc',
     }}>
-      {/* Header */}
+      {/* Decision header */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '10px 14px 8px',
-        background: color + '18',
-        borderBottom: `1px solid ${color}33`,
+        padding: '11px 14px 10px',
+        background: color + '22',
+        borderBottom: `1px solid ${border}33`,
+        display: 'flex', alignItems: 'center', gap: 10,
       }}>
-        <span style={{ fontSize: 18 }}>{trafficIcon}</span>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 13, color }}>Coach: {title}</div>
-          <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 500, letterSpacing: 0.3 }}>
-            Op basis van jouw data van vandaag en gisteren
-          </div>
+        <span style={{ fontSize: 22 }}>{emoji}</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 900, fontSize: 14, color, letterSpacing: 0.3 }}>{label}</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{sessionLabel}</div>
         </div>
       </div>
 
-      {/* Advice */}
-      <div style={{ padding: '8px 14px', fontSize: 12.5, color: 'var(--text)', lineHeight: 1.55, fontWeight: 500 }}>
-        {advice}
+      {/* Training prescription */}
+      <div style={{ padding: '10px 14px 6px' }}>
+        <div style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.55, fontWeight: 500 }}>
+          {trainingDesc}
+        </div>
       </div>
 
-      {/* Signals */}
-      {signals.length > 0 && (
-        <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {signals.map((s, i) => (
-            <div key={i} style={{
-              fontSize: 11.5, lineHeight: 1.4,
-              color: s.type === 'critical' ? '#C4622D' : s.type === 'warning' ? '#B5831A' : '#2A7A4F',
-              display: 'flex', gap: 6, alignItems: 'flex-start',
-            }}>
-              <span style={{ flexShrink: 0, marginTop: 1 }}>
-                {s.type === 'critical' ? '⚠️' : s.type === 'warning' ? '◆' : '✓'}
-              </span>
-              <span>{s.text}</span>
-            </div>
-          ))}
+      {/* Why bullets */}
+      <div style={{ padding: '4px 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 2 }}>Waarom</div>
+        {why.map((w, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 11.5, color: 'var(--text)', lineHeight: 1.4 }}>
+            <span style={{ color, flexShrink: 0, marginTop: 1 }}>·</span>
+            <span>{w}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Toggle extra context */}
+      <div
+        onClick={() => setShowDetails(v => !v)}
+        style={{ padding: '6px 14px', fontSize: 10, color: 'var(--muted)', cursor: 'pointer', borderTop: `1px solid ${border}22`, display: 'flex', justifyContent: 'space-between' }}
+      >
+        <span>Op basis van: slaap, energie, herstel, symptomen, recente belasting</span>
+        <span>{showDetails ? '▲' : '▼'}</span>
+      </div>
+
+      {showDetails && (
+        <div style={{ padding: '8px 14px 10px', fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.6, borderTop: `1px solid ${border}22` }}>
+          <div>Slaap: {log?.sleep_quality != null ? ['Slecht','Matig','Goed','Top'][log.sleep_quality] : '–'}{log?.sleep_hours ? ` (${log.sleep_hours}u)` : ''}</div>
+          <div>Energie: {log?.energy != null ? ['Leeg','Laag','Goed','Hoog'][log.energy] : '–'}</div>
+          <div>Herstelgevoel: {log?.training_recovery != null ? ['Goed','Matig','PEM-achtig'][log.training_recovery] : '–'}</div>
+          <div>Actieve symptomen: {[log?.symptom_pem,log?.symptom_exhaustion,log?.symptom_breathless,log?.symptom_brainfog,log?.symptom_pain].filter(Boolean).length}</div>
+          <div>Batterijstart: {log?.battery_start != null ? `${log.battery_start}%` : '–'}</div>
+          {log?.delayed_fatigue || log?.delayed_brainfog || log?.delayed_breathless
+            ? <div style={{ color: '#C4622D', fontWeight: 700 }}>⚠ Vertraagde klachten na gisteren gemeld</div>
+            : null}
         </div>
       )}
     </div>

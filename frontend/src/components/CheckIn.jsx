@@ -331,7 +331,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
   const daysToVacation = Math.max(0, Math.floor((new Date(VACATION_DATE) - new Date(todayStr)) / 86400000));
   const weeksToVacation = (daysToVacation / 7).toFixed(1);
 
-  const START_DATE  = '2026-05-27';
+  const START_DATE  = USER.startDate;
   const MIN_WEIGHT  = 45;
 
   const weightEntries = Object.values(logs || {})
@@ -600,7 +600,48 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
       {!isFuture && <DagFocus log={log} logs={logs} currentDate={currentDate} />}
 
       {/* Expert coaching advice — dagelijkse status */}
-      {!isFuture && <CoachAdvice log={log} logs={logs} />}
+      {!isFuture && <CoachAdvice log={log} logs={logs} currentDate={currentDate} />}
+
+      {/* Delayed response check — alleen tonen als er gisteren getraind is */}
+      {!isFuture && (() => {
+        const yestDate = (() => { const d = new Date(currentDate); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
+        const yestLog = logs?.[yestDate];
+        const yestTrained = yestLog?.run_done || yestLog?.core_done || (yestLog?.training_zone && yestLog?.training_zone !== 'rust');
+        if (!yestTrained) return null;
+        const toggleDelayed = (field) => saveField(field, log?.[field] ? 0 : 1);
+        const anyDelayed = log?.delayed_fatigue || log?.delayed_brainfog || log?.delayed_breathless;
+        return (
+          <div className="card" style={{ borderLeft: anyDelayed ? '3px solid #C4622D' : '3px solid #2A7A4F' }}>
+            <div className="card-header">
+              <div className="card-accent" style={{ background: anyDelayed ? '#C4622D' : '#2A7A4F' }} />
+              <div className="card-title">⏱ Reactie na gisteren training</div>
+              {anyDelayed && <span style={{ fontSize: 10, color: '#C4622D', fontWeight: 700 }}>Klachten gemeld</span>}
+            </div>
+            <div className="card-body" style={{ paddingBottom: 8 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+                Hoe reageerde je lichaam 6-24u na de training?
+              </div>
+              {[
+                { field: 'delayed_fatigue',    label: 'Meer vermoeidheid dan verwacht' },
+                { field: 'delayed_brainfog',   label: 'Brain fog / concentratieproblemen' },
+                { field: 'delayed_breathless', label: 'Meer kortademigheid' },
+              ].map(({ field, label }) => (
+                <div key={field} className={`med-item ${log?.[field] ? 'checked' : ''}`}
+                  onClick={() => toggleDelayed(field)}
+                  style={{ background: log?.[field] ? '#FBE9E0' : undefined, borderColor: log?.[field] ? '#C4622D44' : undefined }}>
+                  <div className="checkbox" style={{ borderColor: log?.[field] ? '#C4622D' : undefined, background: log?.[field] ? '#C4622D' : undefined }}>{log?.[field] ? '✓' : ''}</div>
+                  <div style={{ flex: 1, fontSize: 12 }}>{label}</div>
+                </div>
+              ))}
+              {anyDelayed && (
+                <div style={{ marginTop: 8, padding: '6px 10px', background: '#FBE9E020', borderRadius: 6, fontSize: 11, color: '#C4622D', lineHeight: 1.4 }}>
+                  ⚠ Coach houdt dit mee in het besluit van vandaag. Geen progressie bij vertraagde klachten.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Medicatie — dagelijks, prioriteit */}
       <div className="card">
