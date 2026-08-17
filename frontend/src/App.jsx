@@ -9,23 +9,16 @@ import { TIPS } from './data/tips';
 import Header from './components/Header';
 import TabBar from './components/TabBar';
 import CheckIn from './components/CheckIn';
-import Calendar from './components/Calendar';
 import Training from './components/Training';
-import Eten from './components/Eten';
-import Lichaam from './components/Lichaam';
-import Patronen from './components/Patronen';
-import Badges from './components/Badges';
+import PlanningHub from './components/PlanningHub';
+import VoortgangHub from './components/VoortgangHub';
+import MeerTab from './components/MeerTab';
 import Coach from './components/Coach';
-import Progressie from './components/Progressie';
-import Glow from './components/Glow';
 import Settings from './components/Settings';
 import Onboarding from './components/Onboarding';
 import StravaCallback from './components/StravaCallback';
-import Trainingsplan from './components/Trainingsplan';
-import Ritme from './components/Ritme';
-import WeekFocus from './components/WeekFocus';
 
-const TABS = ['Vandaag', 'Kalender', 'Training', 'Plan', 'Ritme', 'Week', 'Eten', 'Lichaam', 'Trends', 'Coach', 'Progressie', '✨ Glow', '🏅'];
+const TABS = ['Vandaag', 'Training', 'Planning', 'Voortgang', 'Coach', 'Meer'];
 const MAX_FUTURE_DAYS = 90;
 
 function today() {
@@ -194,18 +187,18 @@ export default function App() {
 
       <div>
         {tab === 0 && <CheckIn {...sharedProps} tip={tip} />}
-        {tab === 1 && <Calendar currentDate={currentDate} logs={logs} onSelectDate={(d) => { setCurrentDate(d); setTab(0); }} maxDate={maxFutureDate} />}
-        {tab === 2 && <Training {...sharedProps} />}
-        {tab === 3 && <Trainingsplan />}
-        {tab === 4 && <Ritme />}
-        {tab === 5 && <WeekFocus />}
-        {tab === 6 && <Eten tip={tip} dayNum={dayNum} log={log} />}
-        {tab === 7 && <Lichaam {...sharedProps} logs={logs} />}
-        {tab === 8 && <Patronen logs={logs} />}
-        {tab === 9 && <Coach logs={logs} />}
-        {tab === 10 && <Progressie logs={logs} />}
-        {tab === 11 && <Glow log={log} saveField={saveField} currentDate={currentDate} logs={logs} />}
-        {tab === 12 && <Badges logs={logs} streak={streak} />}
+        {tab === 1 && <Training {...sharedProps} />}
+        {tab === 2 && (
+          <PlanningHub
+            currentDate={currentDate}
+            logs={logs}
+            onSelectDate={(d) => { setCurrentDate(d); setTab(0); }}
+            maxDate={maxFutureDate}
+          />
+        )}
+        {tab === 3 && <VoortgangHub logs={logs} streak={streak} />}
+        {tab === 4 && <Coach logs={logs} />}
+        {tab === 5 && <MeerTab {...sharedProps} tip={tip} />}
       </div>
     </>
   );
