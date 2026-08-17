@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { photoStore } from '../photoStore';
+import React, { useState, useEffect, useCallback } from 'react';
+import { photoStore, checkPhotoCloud } from '../photoStore';
 import { store } from '../store';
 import { USER } from '../config';
 
@@ -834,10 +834,27 @@ export default function Progressie({ logs }) {
   const [sessions, setSessions] = useState([]);
   const [measurements, setMeasurements] = useState([]);
   const [expanded, setExpanded] = useState({});
+  const [restoreState, setRestoreState] = useState(null); // null | 'checking' | 'loading' | { ok, count, reason }
 
   useEffect(() => {
     photoStore.getAll().then(setSessions).catch(() => {});
     store.getMeasurements().then(setMeasurements).catch(() => {});
+  }, []);
+
+  const handleRestore = useCallback(async () => {
+    setRestoreState('checking');
+    const cloud = await checkPhotoCloud();
+    if (!cloud.ok) {
+      setRestoreState({ ok: false, reason: cloud.reason });
+      return;
+    }
+    setRestoreState('loading');
+    const count = await photoStore.restoreFromCloud();
+    if (count > 0) {
+      const updated = await photoStore.getAll();
+      setSessions(updated);
+    }
+    setRestoreState({ ok: true, count });
   }, []);
 
   function closestMeasurement(date) {
@@ -866,11 +883,46 @@ export default function Progressie({ logs }) {
       <GedragGevolg logs={logs} />
       <MigraineOverview logs={logs} />
 
+      {/* Cloud foto-herstel */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={handleRestore}
+            disabled={restoreState === 'checking' || restoreState === 'loading'}
+            style={{
+              fontSize: 11, padding: '6px 12px', borderRadius: 99,
+              background: 'var(--sage)', color: '#fff', border: 'none',
+              cursor: restoreState === 'checking' || restoreState === 'loading' ? 'wait' : 'pointer',
+              fontWeight: 700, opacity: restoreState === 'checking' || restoreState === 'loading' ? 0.6 : 1,
+            }}
+          >
+            {restoreState === 'checking' ? '🔍 Controleren...' :
+             restoreState === 'loading'  ? '⬇️ Herstellen...' :
+             '☁️ Foto\'s zoeken in cloud'}
+          </button>
+          {restoreState && restoreState !== 'checking' && restoreState !== 'loading' && (
+            <span style={{ fontSize: 11, color: restoreState.ok ? 'var(--sage)' : 'var(--alert)' }}>
+              {restoreState.ok
+                ? restoreState.count > 0
+                  ? `✓ ${restoreState.count} foto${restoreState.count !== 1 ? "'s" : ''} hersteld`
+                  : '✓ Cloud bereikbaar — geen nieuwe foto\'s gevonden'
+                : `✗ Cloud niet bereikbaar: ${restoreState.reason}`}
+            </span>
+          )}
+        </div>
+        {restoreState?.ok === false && (
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, lineHeight: 1.5 }}>
+            Foto's worden lokaal op dit apparaat bewaard. Als je een ander apparaat of een nieuwe browser gebruikt, zijn ze mogelijk niet overgezet.
+          </div>
+        )}
+      </div>
+
       {/* Foto-tijdlijn */}
       {photoSessions.length === 0 ? (
         <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: 12, lineHeight: 1.7, background: 'var(--card)', borderRadius: 12 }}>
           📸 Nog geen progressiefoto's.<br />
-          Ga naar <strong>Coach → Progressiefoto's</strong> om je eerste foto te maken.
+          Ga naar <strong>Coach → Progressiefoto's</strong> om je eerste foto te maken.<br />
+          <span style={{ fontSize: 10 }}>Elke 2 weken een foto bijhouden geeft je de beste datagedreven inzichten.</span>
         </div>
       ) : (
         <>

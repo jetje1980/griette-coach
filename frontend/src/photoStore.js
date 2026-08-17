@@ -58,6 +58,16 @@ async function deleteFromCloud(date, type) {
   }
 }
 
+export async function checkPhotoCloud() {
+  try {
+    const { data, error } = await supabase.storage.from(BUCKET).list('', { limit: 1 });
+    if (error) return { ok: false, reason: error.message };
+    return { ok: true, folders: data?.length ?? 0 };
+  } catch (e) {
+    return { ok: false, reason: e.message };
+  }
+}
+
 export const photoStore = {
   async save(date, type, base64, mimeType) {
     const db = await openDB();

@@ -4,6 +4,9 @@ const FALLBACK = {
   updated: '2026-08-17',
   source: 'Trello + Google Agenda',
   soon: [
+    { date: '2026-08-21', text: 'Mounjaro herstart (2,5 mg)', type: 'goal' },
+    { date: '2026-08-21', text: 'Ameland gezinsvakantie (t/m 28 aug)', type: 'race' },
+    { date: '2026-09-02', text: '22 jaar getrouwd 💍', type: 'goal' },
     { date: '2026-09-19', text: 'Spathoek betaling deadline', type: 'deadline' },
     { text: 'Tikkie vragen voor Terschelling', type: 'todo' },
     { text: '400 euro opname Peaks regelen', type: 'todo' },
@@ -11,19 +14,24 @@ const FALLBACK = {
     { text: 'Kelder/schuur/kasten opruimen — vaste plekken', type: 'todo' },
   ],
   october: [
-    { text: 'Bereloop 10 km (~1 nov)', type: 'race' },
+    { date: '2026-10-03', text: 'Trail 10 km 🏔️ — zone B vasthouden', type: 'race' },
+    { date: '2026-10-30', text: 'Bereloop Terschelling 10 km 🏃', type: 'race' },
     { text: '55 kg wegen — tussencheck', type: 'goal' },
     { text: 'Reformer pilates starten', type: 'goal' },
     { text: 'Opleiding afzeggen (actie)', type: 'todo' },
   ],
+  events_2027: [
+    { date: '2026-12-13', text: 'Ameland run 5 km 🏝️', type: 'race' },
+    { date: '2027-06-11', text: 'Oerol festival Terschelling 🎭 (t/m 14 jun)', type: 'goal' },
+  ],
   goals_2026: [
-    '55 kilo en sportief levensritme',
+    '57 kilo en sportief levensritme',
     'Financieel buffer 3 maanden',
     'Eigen plek en meer alleentijd',
     'Leven vanuit rust en autonomie',
     'Georganiseerd — alles vaste plekken',
   ],
-  coach_note: 'Financieel: Spathoek vóór 19 sept betalen. Bereloop staat in oktoberlijst — loopschema is hierop afgestemd. Werk-situatie verdient aandacht: VSO en arbeidsrecht zijn open acties.',
+  coach_note: 'Mounjaro herstart 21 aug — maag rustig opbouwen. Ameland: bewegen zonder prestatiedruk. Trail 10km op 3 okt is eerste echte race. Financieel: Spathoek vóór 19 sept betalen. Werk-situatie verdient aandacht: VSO en arbeidsrecht open.',
 };
 
 const TYPE_COLOR = {
@@ -136,19 +144,54 @@ export default function PlanningContext() {
           {ctx.october?.length > 0 && (
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>
-                Oktober
+                Okt / Nov
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {ctx.october.map((item, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12 }}>
-                    <span style={{ fontSize: 13, color: TYPE_COLOR[item.type] || 'var(--muted)', flexShrink: 0 }}>
-                      {TYPE_ICON[item.type]}
-                    </span>
-                    <span style={{ flex: 1, color: 'var(--text)', lineHeight: 1.4 }}>{item.text}</span>
-                  </div>
-                ))}
+                {ctx.october.map((item, i) => {
+                  const days = daysUntil(item.date);
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12 }}>
+                      <span style={{ fontSize: 13, color: TYPE_COLOR[item.type] || 'var(--muted)', flexShrink: 0 }}>
+                        {TYPE_ICON[item.type]}
+                      </span>
+                      <span style={{ flex: 1, color: 'var(--text)', lineHeight: 1.4 }}>{item.text}</span>
+                      {days !== null && days >= 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, flexShrink: 0, color: days < 14 ? '#C4622D' : 'var(--muted)', background: 'var(--bg)', padding: '1px 6px', borderRadius: 10 }}>
+                          {days}d
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
+          )}
+
+          {/* Events 2027 */}
+          {ctx.events_2027?.length > 0 && (
+            <details style={{ fontSize: 11.5 }}>
+              <summary style={{ fontWeight: 700, color: 'var(--muted)', cursor: 'pointer', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                Dec 2026 / 2027
+              </summary>
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {ctx.events_2027.map((item, i) => {
+                  const days = daysUntil(item.date);
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12 }}>
+                      <span style={{ fontSize: 13, color: TYPE_COLOR[item.type] || 'var(--muted)', flexShrink: 0 }}>
+                        {TYPE_ICON[item.type]}
+                      </span>
+                      <span style={{ flex: 1, color: 'var(--text)', lineHeight: 1.4 }}>{item.text}</span>
+                      {days !== null && days >= 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, flexShrink: 0, color: 'var(--muted)', background: 'var(--bg)', padding: '1px 6px', borderRadius: 10 }}>
+                          {days}d
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
           )}
 
           {/* Goals 2026 collapsed */}

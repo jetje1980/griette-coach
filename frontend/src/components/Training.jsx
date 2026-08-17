@@ -276,6 +276,23 @@ export default function Training({ log, saveField, saveFields, currentDate, show
     showFlash('😌', 'Dagsluiting gedaan! Goed bezig.');
   };
 
+  const overrideKey = `gc_plan_override_${currentDate}`;
+  const [planOverride, setPlanOverride] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(overrideKey)) || null; } catch { return null; }
+  });
+
+  function setOverride(reason, adjustment) {
+    const val = { reason, adjustment, set_at: new Date().toISOString() };
+    localStorage.setItem(overrideKey, JSON.stringify(val));
+    setPlanOverride(val);
+    showFlash('✅', `Schema aangepast: ${adjustment}`);
+  }
+
+  function clearOverride() {
+    localStorage.removeItem(overrideKey);
+    setPlanOverride(null);
+  }
+
   return (
     <div className="pane">
 
@@ -291,6 +308,63 @@ export default function Training({ log, saveField, saveFields, currentDate, show
             <div style={{ fontSize: 12, lineHeight: 1.9, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{aiPlan}</div>
             <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)', lineHeight: 1.5 }}>
               Bijgewerkt na elke coach-check en foto-analyse. Hardloopschema hieronder.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dagelijkse plan-aanpassing */}
+      {planOverride ? (
+        <div className="card" style={{ borderLeft: '3px solid var(--gold)' }}>
+          <div className="card-header">
+            <div className="card-accent" style={{ background: 'var(--gold)' }} />
+            <div className="card-title">📋 Plan aangepast vandaag</div>
+            <button onClick={clearOverride} style={{ fontSize: 10, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Herstellen</button>
+          </div>
+          <div className="card-body">
+            <div style={{ fontSize: 12, lineHeight: 1.7 }}>
+              <span style={{ color: 'var(--gold)', fontWeight: 700 }}>Reden:</span> {planOverride.reason}<br />
+              <span style={{ color: 'var(--sage)', fontWeight: 700 }}>Alternatief:</span> {planOverride.adjustment}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
+              Goed dat je dit luistert — herstel gaat voor presteren.
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-accent" style={{ background: 'var(--muted)' }} />
+            <div className="card-title">📋 Schema aanpassen vandaag?</div>
+          </div>
+          <div className="card-body">
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>Iets in de weg? Kies reden + alternatief:</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {[
+                { r: 'Hoofdpijn/migraine',  a: 'Rustdag — stretchen max 10 min' },
+                { r: 'Moeheid/laag energie', a: 'Wandeling 20–30 min, zone A' },
+                { r: 'PEM-risico',           a: 'Complete rustdag — geen training' },
+                { r: 'Drukke dag/logistiek', a: 'Training morgen inhalen' },
+              ].map(({ r, a }) => (
+                <button
+                  key={r}
+                  onClick={() => setOverride(r, a)}
+                  style={{
+                    fontSize: 11, padding: '6px 10px', borderRadius: 99,
+                    background: 'var(--bg)', border: '1px solid var(--border)',
+                    cursor: 'pointer', color: 'var(--text)', textAlign: 'left',
+                  }}
+                >
+                  {r === 'Hoofdpijn/migraine' && '🧠 '}
+                  {r === 'Moeheid/laag energie' && '🪫 '}
+                  {r === 'PEM-risico' && '⚡ '}
+                  {r === 'Drukke dag/logistiek' && '📅 '}
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Het schema past zich aan voor vandaag — morgen gaan we gewoon verder.
             </div>
           </div>
         </div>

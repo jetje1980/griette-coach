@@ -148,4 +148,14 @@ export const PERSONAL_EVENTS = [
     goal: 'Stralend het nieuwe jaar ingaan — minimaal gewicht: 45 kg',
     color: '#CA8A04',
   },
+  {
+    id: 'oerol_2027',
+    emoji: '🎭',
+    title: 'Oerol festival Terschelling',
+    startDate: '2027-06-11',
+    endDate: '2027-06-14',
+    description: 'Oerol festival — Terschelling (uit Google Agenda)',
+    goal: 'Fit, licht en energiek op het festival',
+    color: '#0891B2',
+  },
 ];
