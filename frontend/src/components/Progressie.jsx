@@ -837,21 +837,14 @@ export default function Progressie({ logs }) {
   const [restoreState, setRestoreState] = useState(null); // null | 'checking' | 'loading' | { ok, count, reason }
 
   useEffect(() => {
-    photoStore.getAll().then(s => {
-      setSessions(s);
-      if (s.length === 0) {
-        setRestoreState('checking');
-        checkPhotoCloud().then(cloud => {
-          if (!cloud.ok) { setRestoreState({ ok: false, reason: cloud.reason }); return; }
-          setRestoreState('loading');
-          photoStore.restoreFromCloud().then(count => {
-            if (count > 0) photoStore.getAll().then(setSessions).catch(() => {});
-            setRestoreState({ ok: true, count });
-          });
-        });
-      }
-    }).catch(() => {});
+    photoStore.getAll().then(setSessions).catch(() => {});
     store.getMeasurements().then(setMeasurements).catch(() => {});
+    // Always check cloud for missing photos on mount
+    setRestoreState('loading');
+    photoStore.restoreFromCloud().then(count => {
+      if (count > 0) photoStore.getAll().then(setSessions).catch(() => {});
+      setRestoreState({ ok: true, count });
+    }).catch(() => setRestoreState(null));
   }, []);
 
   const handleRestore = useCallback(async () => {
