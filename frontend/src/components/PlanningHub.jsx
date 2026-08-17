@@ -17,7 +17,7 @@ export default function PlanningHub({ currentDate, logs, onSelectDate, maxDate }
         <PlanningContext />
       </div>
       <SubTabs tabs={TABS} active={sub} onChange={setSub} />
-      {sub === 0 && <Trainingsplan />}
+      {sub === 0 && <Trainingsplan logs={logs} />}
       {sub === 1 && <Ritme />}
       {sub === 2 && <WeekFocus />}
       {sub === 3 && (

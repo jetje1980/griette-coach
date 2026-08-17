@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RUNS } from '../data/runningSchema';
+import { RUNS, getRunDate, getRunStatus } from '../data/runningSchema';
 import { getCoreForWeek, coreWeekFromDate } from '../data/coreProgram';
 import { USER } from '../config';
 import { api } from '../api';
@@ -370,39 +370,192 @@ export default function Training({ log, saveField, saveFields, currentDate, show
         </div>
       )}
 
-      {/* Hardloopschema */}
-      <div className="card">
-        <div className="card-header">
-          <div className="card-accent" style={{ background: 'var(--rust)' }} />
-          <div className="card-title">🏃‍♀️ Hardloopschema — training {USER.currentRun}/35</div>
-        </div>
-        <div className="card-body" style={{ padding: '10px 8px' }}>
-          {RUNS.map(run => {
-            const isCurrent = run.nr === USER.currentRun;
-            const isDone = run.nr < USER.currentRun;
-            const isOpen = openRun === run.nr;
-            return (
-              <div key={run.nr} className={`run-item ${isCurrent ? 'current' : ''} ${isDone ? 'done' : ''}`}>
-                <div className="run-top" onClick={() => setOpenRun(isOpen ? null : run.nr)}>
-                  <span className="run-nr">{run.nr}</span>
-                  <span className="run-name">
-                    {isDone && '✓ '}{isCurrent && '▶ '}{run.description}{run.milestone && ' 🏁'}
-                    {isCurrent && <span style={{ marginLeft: 6, fontSize: 9, background: 'var(--rust)', color: 'white', padding: '1px 5px', borderRadius: 99 }}>VOLGENDE</span>}
-                  </span>
-                  <span className="run-dur">{run.duration}min</span>
+      {/* Hardloopschema — intelligent overzicht */}
+      {(() => {
+        const today = currentDate;
+        // Vind de volgende ongeplande training
+        const nextRun = RUNS.find(r => {
+          const status = getRunStatus(r.nr, USER.startDate, logs);
+          return !status.done && !status.skipped;
+        });
+        const todayRun = RUNS.find(r => getRunDate(r.nr, USER.startDate) === today);
+        const activeRun = todayRun || nextRun;
+        const weekRuns = activeRun ? RUNS.filter(r => r.week === activeRun.week) : [];
+        const pastRuns = RUNS.filter(r => r.nr < (activeRun?.nr || 1)).slice(-3).reverse();
+
+        if (!activeRun) return (
+          <div className="card">
+            <div className="card-header">
+              <div className="card-accent" style={{ background: 'var(--sage)' }} />
+              <div className="card-title">🏁 Schema voltooid!</div>
+            </div>
+            <div className="card-body" style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Je hebt alle 35 trainingen voltooid. Ameland 5km (13 dec) staat te wachten!
+            </div>
+          </div>
+        );
+
+        const runBg = activeRun.race ? 'linear-gradient(135deg, #EA580C22, #E07A3B11)' :
+                      activeRun.restDay ? 'var(--sage-l)' : 'var(--card)';
+        const runBorder = activeRun.race ? '2px solid var(--rust)' : '1px solid var(--border)';
+
+        return (
+          <>
+            {/* Huidige/volgende training — volledige detail */}
+            <div className="card" style={{ background: runBg, border: runBorder }}>
+              <div className="card-header">
+                <div className="card-accent" style={{ background: activeRun.race ? 'var(--rust)' : 'var(--rust)' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--text)' }}>
+                    {todayRun ? '▶ Training vandaag' : '▶ Volgende training'}
+                    {activeRun.race && <span style={{ marginLeft: 6, fontSize: 10, background: 'var(--rust)', color: 'white', padding: '1px 6px', borderRadius: 99 }}>RACE</span>}
+                    {activeRun.milestone && !activeRun.race && <span style={{ marginLeft: 6, fontSize: 10, background: 'var(--gold)', color: 'white', padding: '1px 6px', borderRadius: 99 }}>MIJLPAAL</span>}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
+                    Training {activeRun.nr}/35 · Week {activeRun.week} · {getRunDate(activeRun.nr, USER.startDate)}
+                    {activeRun.vacation && <span style={{ marginLeft: 4, color: 'var(--gold)' }}>{activeRun.vacationNote}</span>}
+                  </div>
                 </div>
-                {isOpen && (
-                  <div className="run-detail open">
-                    <strong>Week {run.week}</strong><br />{run.description}
-                    {run.intervals && <><br /><em style={{ color: 'var(--rust)' }}>⚡ {run.intervals} (iets boven zone B mag)</em></>}
-                    <br /><span style={{ fontSize: 10, color: 'var(--rust)' }}>Zone B: 106–132 bpm · hartslag leidend</span>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--rust)' }}>{activeRun.duration} min</div>
+              </div>
+              <div className="card-body">
+                {/* Interval-visualisatie */}
+                {activeRun.runMin > 0 && activeRun.walkMin > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
+                    {Array.from({ length: Math.min(activeRun.reps || 4, 6) }).map((_, i) => (
+                      <React.Fragment key={i}>
+                        <div style={{
+                          background: 'var(--rust)', color: 'white', borderRadius: 6,
+                          padding: '4px 8px', fontSize: 11, fontWeight: 700,
+                          minWidth: `${activeRun.runMin * 14}px`, textAlign: 'center',
+                        }}>
+                          {activeRun.runMin % 1 === 0 ? activeRun.runMin : activeRun.runMin.toFixed(1)}'
+                        </div>
+                        <div style={{
+                          background: 'var(--sage-l)', color: 'var(--sage)', borderRadius: 6,
+                          padding: '4px 8px', fontSize: 11, fontWeight: 600,
+                          minWidth: `${activeRun.walkMin * 14}px`, textAlign: 'center',
+                        }}>
+                          {activeRun.walkMin % 1 === 0 ? activeRun.walkMin : activeRun.walkMin.toFixed(1)}'🚶
+                        </div>
+                      </React.Fragment>
+                    ))}
+                    {(activeRun.reps || 0) > 6 && (
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>+{(activeRun.reps || 0) - 6} meer</span>
+                    )}
+                    {activeRun.reps && (
+                      <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 4 }}>× {activeRun.reps} = {activeRun.duration} min</span>
+                    )}
                   </div>
                 )}
+
+                {/* Zone & tempo */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <span style={{ fontSize: 11, background: '#EFF6FF', color: '#1D4ED8', padding: '3px 10px', borderRadius: 99, fontWeight: 700 }}>
+                    ♥ {activeRun.hrZone}
+                  </span>
+                  <span style={{ fontSize: 11, background: 'var(--bg)', color: 'var(--muted)', padding: '3px 10px', borderRadius: 99 }}>
+                    🏃 {activeRun.tempo}
+                  </span>
+                  {activeRun.km_estimate && (
+                    <span style={{ fontSize: 11, background: 'var(--bg)', color: 'var(--muted)', padding: '3px 10px', borderRadius: 99 }}>
+                      📍 ~{activeRun.km_estimate}
+                    </span>
+                  )}
+                </div>
+
+                {/* HR tip */}
+                <div style={{
+                  fontSize: 11.5, lineHeight: 1.6, color: 'var(--text)',
+                  background: '#FFF7ED', borderRadius: 8, padding: '8px 10px',
+                  borderLeft: '3px solid var(--rust)', marginBottom: 10,
+                }}>
+                  💡 {activeRun.hrTip}
+                </div>
+
+                {/* Doel */}
+                <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
+                  🎯 {activeRun.goal}
+                </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
+            </div>
+
+            {/* Week-overzicht — compact */}
+            {weekRuns.length > 1 && (
+              <div className="card">
+                <div className="card-header">
+                  <div className="card-accent" style={{ background: 'var(--rust)' }} />
+                  <div className="card-title">📅 Week {activeRun.week} overzicht</div>
+                </div>
+                <div className="card-body" style={{ padding: '8px 12px' }}>
+                  {weekRuns.map(r => {
+                    const status = getRunStatus(r.nr, USER.startDate, logs);
+                    const isActive = r.nr === activeRun.nr;
+                    return (
+                      <div key={r.nr} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '6px 0', borderBottom: '1px solid var(--border)',
+                        opacity: isActive ? 1 : 0.7,
+                      }}>
+                        <span style={{
+                          fontSize: 14, minWidth: 22,
+                          color: status.done ? 'var(--sage)' : status.skipped ? 'var(--muted)' : isActive ? 'var(--rust)' : 'var(--border)',
+                        }}>
+                          {status.done ? '✓' : status.skipped ? '—' : isActive ? '▶' : '○'}
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: isActive ? 700 : 400, color: 'var(--text)' }}>
+                            Training {r.nr}
+                            {r.race && ' 🏁'}{r.milestone && !r.race && ' ⭐'}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                            {getRunDate(r.nr, USER.startDate)} · {r.runMin > 0 ? `${r.runMin % 1 === 0 ? r.runMin : r.runMin.toFixed(1)}' / ${r.walkMin % 1 === 0 ? r.walkMin : r.walkMin.toFixed(1)}'🚶` : 'wandelen'} · {r.duration} min
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>{r.km_estimate}</div>
+                        {isActive && (
+                          <button
+                            onClick={() => setOverride('Verplaatst', 'Morgen inhalen')}
+                            style={{ fontSize: 9, padding: '2px 7px', borderRadius: 99, background: 'var(--bg)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--muted)' }}
+                          >
+                            Verplaats
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Recente trainingen */}
+            {pastRuns.length > 0 && (
+              <details>
+                <summary style={{ fontSize: 11, color: 'var(--muted)', padding: '8px 0', cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>▸</span> Laatste {pastRuns.length} trainingen
+                </summary>
+                <div className="card" style={{ marginTop: 4 }}>
+                  <div className="card-body" style={{ padding: '8px 12px' }}>
+                    {pastRuns.map(r => {
+                      const status = getRunStatus(r.nr, USER.startDate, logs);
+                      return (
+                        <div key={r.nr} style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 11 }}>
+                          <span style={{ color: status.done ? 'var(--sage)' : 'var(--muted)', minWidth: 14 }}>
+                            {status.done ? '✓' : '—'}
+                          </span>
+                          <span style={{ color: 'var(--muted)', minWidth: 80 }}>{getRunDate(r.nr, USER.startDate)}</span>
+                          <span style={{ flex: 1, color: 'var(--text)' }}>Training {r.nr} · {r.description}</span>
+                          <span style={{ color: 'var(--muted)', flexShrink: 0 }}>{r.duration} min</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </details>
+            )}
+          </>
+        );
+      })()}
 
       {/* Strava */}
       <div className="card">

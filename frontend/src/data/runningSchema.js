@@ -1,51 +1,419 @@
-// Persoonlijk Hardloopschema – 35 trainingen (opbouw naar 5 km)
-// Uitgangspunt: hartslagzone 106–132 bpm · 3 trainingen per week · hartslag leidend
+// Run-walk-run schema voor long COVID · Zone B: 106–132 bpm · 3×/week
+// Tempo hardlopen: ~10:00-11:00 min/km · Tempo wandelen: 6:30-7:00 min/km
+// Grensregel: boven 130 bpm → direct wandelen tot < 105 bpm, dan hervat
+
+// Bereken geplande datum: startdatum + week- en dagoffset (ma/wo/vr)
+// Runs met fixedDate hebben een vaste datum (races)
+export function getRunDate(runNr, startDate) {
+  const run = RUNS.find(r => r.nr === runNr);
+  if (run?.fixedDate) return run.fixedDate;
+  const start = new Date(startDate);
+  const week = Math.ceil(runNr / 3);
+  const posInWeek = (runNr - 1) % 3; // 0=ma, 1=wo, 2=vr
+  const daysOffset = 1 + (week - 1) * 7 + [0, 2, 4][posInWeek];
+  const d = new Date(start);
+  d.setDate(d.getDate() + daysOffset);
+  return d.toISOString().slice(0, 10);
+}
+
+// Loopstatus voor een training: gedaan / verplaatst / toekomst
+export function getRunStatus(runNr, startDate, logs) {
+  const date = getRunDate(runNr, startDate);
+  const log = logs?.[date] || Object.values(logs || {}).find(l => l.run_session === runNr);
+  if (log?.run_done) return { done: true, date, log };
+  if (log?.run_skipped) return { skipped: true, date, log };
+  const override = (() => { try { return JSON.parse(localStorage.getItem(`gc_plan_override_${date}`)); } catch { return null; } })();
+  if (override) return { overridden: true, date, override };
+  return { done: false, date };
+}
+
 export const RUNS = [
-  // ── Week 1 ────────────────────────────────────────────────────────────────
-  { nr:  1, week:  1, description: '3 min jog – 2 min wandel ×6',          duration: 30, jogMin: 18, walkMin: 12 },
-  { nr:  2, week:  1, description: '3 min jog – 2 min wandel ×6',          duration: 30, jogMin: 18, walkMin: 12 },
-  { nr:  3, week:  1, description: '3 min jog – 2 min wandel ×7',          duration: 35, jogMin: 21, walkMin: 14 },
-  // ── Week 2 ────────────────────────────────────────────────────────────────
-  { nr:  4, week:  2, description: '4 min jog – 2 min wandel ×5',          duration: 30, jogMin: 20, walkMin: 10 },
-  { nr:  5, week:  2, description: '4 min jog – 2 min wandel ×5',          duration: 30, jogMin: 20, walkMin: 10 },
-  { nr:  6, week:  2, description: '5 min jog – 2 min wandel ×4',          duration: 28, jogMin: 20, walkMin:  8 },
-  // ── Week 3 ────────────────────────────────────────────────────────────────
-  { nr:  7, week:  3, description: '5 min jog – 2 min wandel ×4',          duration: 28, jogMin: 20, walkMin:  8 },
-  { nr:  8, week:  3, description: '4 min jog – 1 min wandel ×6',          duration: 30, jogMin: 24, walkMin:  6 },
-  { nr:  9, week:  3, description: '6 min jog – 2 min wandel ×4',          duration: 32, jogMin: 24, walkMin:  8 },
-  // ── Week 4 ────────────────────────────────────────────────────────────────
-  { nr: 10, week:  4, description: '6 min jog – 2 min wandel ×4',          duration: 32, jogMin: 24, walkMin:  8 },
-  { nr: 11, week:  4, description: '5 min jog – 1 min wandel ×6',          duration: 36, jogMin: 30, walkMin:  6 },
-  { nr: 12, week:  4, description: '8 min jog – 2 min wandel ×3',          duration: 30, jogMin: 24, walkMin:  6 },
-  // ── Week 5 ────────────────────────────────────────────────────────────────
-  { nr: 13, week:  5, description: '8 min jog – 2 min wandel ×3',          duration: 30, jogMin: 24, walkMin:  6 },
-  { nr: 14, week:  5, description: '6 min jog – 1 min wandel ×5',          duration: 35, jogMin: 30, walkMin:  5 },
-  { nr: 15, week:  5, description: '10 min jog – 2 min wandel ×3',         duration: 36, jogMin: 30, walkMin:  6 },
-  // ── Week 6 ────────────────────────────────────────────────────────────────
-  { nr: 16, week:  6, description: '10 min jog – 2 min wandel ×3',         duration: 36, jogMin: 30, walkMin:  6 },
-  { nr: 17, week:  6, description: '8 min jog – 1 min wandel ×4',          duration: 36, jogMin: 32, walkMin:  4 },
-  { nr: 18, week:  6, description: '12 min jog – 2 min wandel ×2',         duration: 28, jogMin: 24, walkMin:  4 },
-  // ── Week 7 ────────────────────────────────────────────────────────────────
-  { nr: 19, week:  7, description: '12 min jog – 2 min wandel ×2',         duration: 28, jogMin: 24, walkMin:  4 },
-  { nr: 20, week:  7, description: '10 min jog – 1 min wandel ×3',         duration: 33, jogMin: 30, walkMin:  3 },
-  { nr: 21, week:  7, description: '15 min jog – 2 min wandel ×2',         duration: 34, jogMin: 30, walkMin:  4 },
-  // ── Week 8 ────────────────────────────────────────────────────────────────
-  { nr: 22, week:  8, description: '15 min jog – 2 min wandel ×2',         duration: 34, jogMin: 30, walkMin:  4 },
-  { nr: 23, week:  8, description: '12 min jog – 1 min wandel ×2',         duration: 26, jogMin: 24, walkMin:  2 },
-  { nr: 24, week:  8, description: '20 min aaneengesloten lopen',           duration: 20, jogMin: 20, walkMin:  0 },
-  // ── Week 9 ────────────────────────────────────────────────────────────────
-  { nr: 25, week:  9, description: '20 min lopen',                          duration: 20, jogMin: 20, walkMin:  0 },
-  { nr: 26, week:  9, description: '15 min lopen + 3×1 min sneller',        duration: 20, jogMin: 18, walkMin:  0, intervals: '3×1 min sneller' },
-  { nr: 27, week:  9, description: '25 min lopen',                          duration: 25, jogMin: 25, walkMin:  0 },
-  // ── Week 10 ───────────────────────────────────────────────────────────────
-  { nr: 28, week: 10, description: '25 min lopen',                          duration: 25, jogMin: 25, walkMin:  0 },
-  { nr: 29, week: 10, description: '20 min lopen + 4×1 min sneller',        duration: 25, jogMin: 24, walkMin:  0, intervals: '4×1 min sneller' },
-  { nr: 30, week: 10, description: '30 min lopen',                          duration: 30, jogMin: 30, walkMin:  0 },
-  // ── Week 11 ───────────────────────────────────────────────────────────────
-  { nr: 31, week: 11, description: '30 min rustig',                         duration: 30, jogMin: 30, walkMin:  0 },
-  { nr: 32, week: 11, description: '25 min + 5×1 min sneller',              duration: 30, jogMin: 30, walkMin:  0, intervals: '5×1 min sneller' },
-  { nr: 33, week: 11, description: '35 min rustig',                         duration: 35, jogMin: 35, walkMin:  0 },
-  // ── Week 12 ───────────────────────────────────────────────────────────────
-  { nr: 34, week: 12, description: '30 min rustig',                         duration: 30, jogMin: 30, walkMin:  0 },
-  { nr: 35, week: 12, description: '🏁 5 km rustig lopen',                  duration: 35, jogMin: 35, walkMin:  0, milestone: true },
+  // ── Week 1 · Aug 18-22 · Eerste stappen — hartslag is de baas ─────────────
+  {
+    nr: 1, week: 1,
+    runMin: 1, walkMin: 2, reps: 5, duration: 15,
+    description: '1 min lopen / 2 min wandelen × 5',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Boven 130 bpm → direct wandelen. Praatregel: je moet hele zinnen kunnen zeggen.',
+    tempo: 'Looptempo: ~10:30 min/km · Wandeltempo: ~6:45 min/km',
+    goal: 'Wennen aan de intervalvorm — niet op gevoel, maar op hartslag lopen',
+    km_estimate: '1.5 km',
+  },
+  {
+    nr: 2, week: 1,
+    runMin: 1, walkMin: 2, reps: 6, duration: 18,
+    description: '1 min lopen / 2 min wandelen × 6',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Als HR na wandelminuut nog boven 110 is: verleng de wandelpauze tot < 105.',
+    tempo: 'Looptempo: ~10:30 min/km · Wandeltempo: ~6:45 min/km',
+    goal: 'Hartslag leren lezen — noteer je max HR per interval',
+    km_estimate: '2.0 km',
+  },
+  {
+    nr: 3, week: 1,
+    runMin: 1.5, walkMin: 2, reps: 6, duration: 21,
+    description: '1,5 min lopen / 2 min wandelen × 6',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Eerste kleine opbouw. Als HR boven 128 bleef tijdens loopblok: terug naar 1 min.',
+    tempo: 'Looptempo: ~10:00-10:30 min/km · Wandeltempo: ~6:45 min/km',
+    goal: 'Probeer de hartslag tijdens lopen onder 128 te houden',
+    km_estimate: '2.5 km',
+  },
+
+  // ── Week 2 · Aug 25-29 · AMELAND! Strandlopen als bonus ──────────────────
+  {
+    nr: 4, week: 2,
+    runMin: 1.5, walkMin: 2, reps: 5, duration: 17,
+    description: '1,5 min lopen / 2 min wandelen × 5',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Strand is zwaarder (zand slokt energie) → tempo iets lager dan thuis. Zet HR als enige maatstaf.',
+    tempo: 'Looptempo: ~11:00 min/km op strand · Wandeltempo: ~7:00 min/km',
+    goal: 'Ameland bonus: buitenlucht, zonlicht, zand — genieten én bewegen',
+    vacation: true,
+    vacationNote: '🏝️ Ameland — strandjog is prima vervanging, duinen optioneel',
+    km_estimate: '1.8 km',
+  },
+  {
+    nr: 5, week: 2,
+    runMin: 2, walkMin: 2, reps: 5, duration: 20,
+    description: '2 min lopen / 2 min wandelen × 5',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Eerste keer 2 minuten aan een stuk. Succes = hartslag onder 132 blijft.',
+    tempo: 'Looptempo: ~10:00-11:00 min/km · Wandeltempo: ~6:45 min/km',
+    goal: '2 min aan een stuk in zone B — dit is de eerste echte mijlpaal',
+    vacation: true,
+    vacationNote: '🏝️ Ameland',
+    km_estimate: '2.3 km',
+  },
+  {
+    nr: 6, week: 2,
+    runMin: 2, walkMin: 2, reps: 6, duration: 24,
+    description: '2 min lopen / 2 min wandelen × 6',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Totale looptijd: 12 min. Hartslag gemiddeld tijdens loopblokken? Noteer dit.',
+    tempo: 'Looptempo: ~10:00 min/km · Wandeltempo: ~6:45 min/km',
+    goal: 'Volume opbouwen terwijl hartslag laag blijft',
+    km_estimate: '2.8 km',
+  },
+
+  // ── Week 3 · Sep 1-5 · Na vakantie — opnieuw opbouwen ────────────────────
+  {
+    nr: 7, week: 3,
+    runMin: 2, walkMin: 1.5, reps: 6, duration: 21,
+    description: '2 min lopen / 1,5 min wandelen × 6',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Kortere wandelpauze = meer uitdaging voor hartslag. Bij twijfel: wandelpauze verlengen.',
+    tempo: 'Looptempo: ~10:00 min/km · Wandeltempo: ~6:30-7:00 min/km',
+    goal: 'Herstelefficiëntie testen — daalt je HR snel genoeg in 1,5 min wandelen?',
+    km_estimate: '2.7 km',
+  },
+  {
+    nr: 8, week: 3,
+    runMin: 3, walkMin: 2, reps: 5, duration: 25,
+    description: '3 min lopen / 2 min wandelen × 5',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Eerste keer 3 min lopen. Pas als 2 min echt makkelijk voelt — anders terugstap naar run 7.',
+    tempo: 'Looptempo: ~10:00 min/km · Wandeltempo: ~6:45 min/km',
+    goal: '3 min zone B — mijlpaal. Na de training: hoe voel je je 2 uur later?',
+    km_estimate: '3.2 km',
+  },
+  {
+    nr: 9, week: 3,
+    runMin: 3, walkMin: 2, reps: 5, duration: 25,
+    description: '3 min lopen / 2 min wandelen × 5',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Herhaal zelfde sessie. Let op: zit je nu al eerder in zone B? Dat is conditiewinst.',
+    tempo: 'Looptempo: ~9:45-10:30 min/km · Wandeltempo: ~6:45 min/km',
+    goal: 'Consistentie — dezelfde sessie voelt makkelijker dan vorige keer',
+    km_estimate: '3.2 km',
+  },
+
+  // ── Week 4 · Sep 8-12 · Langere loopblokken ──────────────────────────────
+  {
+    nr: 10, week: 4,
+    runMin: 4, walkMin: 2, reps: 4, duration: 24,
+    description: '4 min lopen / 2 min wandelen × 4',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: '4 min vraagt om geduld met tempo. Begin de loopblokken rustig, niet sprint in!',
+    tempo: 'Looptempo: ~9:30-10:30 min/km · Wandeltempo: ~6:30-6:45 min/km',
+    goal: 'Totaal 16 min lopen (verdeeld) — meer dan week 1 helemaal',
+    km_estimate: '3.5 km',
+  },
+  {
+    nr: 11, week: 4,
+    runMin: 4, walkMin: 1.5, reps: 5, duration: 27,
+    description: '4 min lopen / 1,5 min wandelen × 5',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Kortere herstelperiode. Als HR niet daalt onder 108 in wandelpauze: verleng naar 2 min.',
+    tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Hogere loopefficiëntie — meer lopen, minder wandelen',
+    km_estimate: '4.0 km',
+  },
+  {
+    nr: 12, week: 4,
+    runMin: 5, walkMin: 2, reps: 4, duration: 28,
+    description: '5 min lopen / 2 min wandelen × 4',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Eerste keer 5 min! Neem de eerste minuut extra rustig — de 5e minuut wordt anders te zwaar.',
+    tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~6:30 min/km',
+    goal: '5 min zone B = conditie begint mee te komen. Merk je verschil met week 1?',
+    km_estimate: '4.5 km',
+    milestone: true,
+  },
+
+  // ── Week 5 · Sep 15-19 · Opbouw richting Trail ───────────────────────────
+  {
+    nr: 13, week: 5,
+    runMin: 5, walkMin: 2, reps: 5, duration: 35,
+    description: '5 min lopen / 2 min wandelen × 5',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Meer volume — totaal 25 min lopen. Hartslag leidend, tempo bijkomstig.',
+    tempo: 'Looptempo: ~9:15-10:00 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Langste training tot nu toe. Na afloop: energie check — niet moe maar voldaan',
+    km_estimate: '5.5 km',
+  },
+  {
+    nr: 14, week: 5,
+    runMin: 4, walkMin: 1, reps: 6, duration: 30,
+    description: '4 min lopen / 1 min wandelen × 6',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Korte wandelbreak van 1 min — werkt alleen als je HR snel herstelt. Test dit!',
+    tempo: 'Looptempo: ~9:15-9:45 min/km · Wandeltempo: ~6:00-6:30 min/km',
+    goal: 'Efficiëntie: meer lopen met kortere pauzes, hartslag stabiel',
+    km_estimate: '5.0 km',
+  },
+  {
+    nr: 15, week: 5,
+    runMin: 6, walkMin: 2, reps: 4, duration: 32,
+    description: '6 min lopen / 2 min wandelen × 4',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: '6 min — echt conditiegebied. Eerste 2 min op 11:00 min/km, daarna naar comfortabel.',
+    tempo: 'Looptempo: ~9:15-10:00 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Langste loopblokken tot nu — voorbereiding voor Trail op 3 oktober',
+    km_estimate: '6.0 km',
+  },
+
+  // ── Week 6 · Sep 22-26 · Tapering Trail 10km (3 okt) ────────────────────
+  {
+    nr: 16, week: 6,
+    runMin: 5, walkMin: 2, reps: 4, duration: 28,
+    description: '5 min lopen / 2 min wandelen × 4 (iets minder dan vorige week)',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Tapering: minder volume, zelfde tempo. Benen vers houden voor de race.',
+    tempo: 'Looptempo: ~9:15-9:45 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Frisse benen sparen — prestatie wordt in herstel gebouwd',
+    km_estimate: '5.0 km',
+  },
+  {
+    nr: 17, week: 6,
+    runMin: 4, walkMin: 2, reps: 3, duration: 18,
+    description: '4 min lopen / 2 min wandelen × 3 — korte activering',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Licht en fris blijven. Geen heroïsche sessie nu — sparen voor de race.',
+    tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Activering — benen voelen, niet belasten',
+    km_estimate: '2.5 km',
+  },
+  {
+    nr: 18, week: 6,
+    runMin: 3, walkMin: 2, reps: 3, duration: 15,
+    description: '3 min lopen / 2 min wandelen × 3 — rustig uitlopen',
+    hrZone: 'Zone B: 106–120 bpm (extra laag)',
+    hrTip: 'Race is over 5 dagen! Vandaag alleen losse benen. Stoppen bij 120 bpm.',
+    tempo: 'Looptempo: ~10:30-11:30 min/km · Wandeltempo: ~6:45 min/km',
+    goal: 'Mentale voorbereiding: ritme voelen, benen vrij houden',
+    km_estimate: '1.8 km',
+  },
+
+  // ── Week 7 · Sep 29 – Okt 3 · 🏁 TRAIL 10 KM ───────────────────────────
+  {
+    nr: 19, week: 7,
+    runMin: 3, walkMin: 3, reps: 3, duration: 18,
+    description: '3 min lopen / 3 min wandelen × 3 — losse benen',
+    hrZone: 'Zone A/B: 95–120 bpm',
+    hrTip: 'Race is bijna! Niet boven 120. Dit is alleen even bewegen.',
+    tempo: 'Heel rustig — wandeltempo met een lichte trot',
+    goal: 'Activering, niet training. Zo fris mogelijk naar de start.',
+    km_estimate: '1.5 km',
+  },
+  {
+    nr: 20, week: 7,
+    runMin: 0, walkMin: 20, reps: 1, duration: 20,
+    description: '20 min rustige wandeling — geen lopen',
+    hrZone: 'Zone A: < 106 bpm',
+    hrTip: 'Dag voor de race: wandelen, stretchen, goed slapen. Geen extra belasting.',
+    tempo: 'Wandeltempo: ~6:30 min/km',
+    goal: 'Actief rusten — bloed laten circuleren, niet belasten',
+    km_estimate: '2.5 km',
+    restDay: true,
+  },
+  {
+    nr: 21, week: 7,
+    runMin: 5, walkMin: 3, reps: null, duration: 75,
+    fixedDate: '2026-10-03',
+    description: '🏁 TRAIL 10 KM · Run-walk strategie: 5 min lopen / 3 min wandelen',
+    hrZone: 'Zone B HARD LIMIT: nooit boven 132 bpm',
+    hrTip: 'Race-strategie: bij 130+ DIRECT wandelen. Liever 10 min langzamer dan PEM riskeren. Wandelen op heuvels/klimmen altijd.',
+    tempo: 'Looptempo: ~10:00-11:00 min/km · Wandeltempo: ~7:00 min/km · Doeltijd: ~75-85 min',
+    goal: 'UITLOPEN, niet sprinten. Finishen in zone B = succes. Eerste race = ervaring opdoen.',
+    km_estimate: '10 km',
+    milestone: true,
+    race: true,
+  },
+
+  // ── Week 8 · Okt 6-10 · Post-race herstel + opbouw Bereloop ─────────────
+  {
+    nr: 22, week: 8,
+    runMin: 3, walkMin: 2, reps: 4, duration: 20,
+    description: '3 min lopen / 2 min wandelen × 4 — zachte comeback',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Na race: benen zijn moe. Bij spierpijn of moeheid → rustdag. Geen schuldgevoel.',
+    tempo: 'Looptempo: ~10:30 min/km · Wandeltempo: ~6:45 min/km',
+    goal: 'Herstel activeren — bloed laten stromen, niet presteren',
+    km_estimate: '2.5 km',
+  },
+  {
+    nr: 23, week: 8,
+    runMin: 5, walkMin: 2, reps: 4, duration: 28,
+    description: '5 min lopen / 2 min wandelen × 4',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Als race-herstel compleet voelt: normaal tempo. Twijfel? Één level terug.',
+    tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Terug op schema — Bereloop is over 3 weken',
+    km_estimate: '4.5 km',
+  },
+  {
+    nr: 24, week: 8,
+    runMin: 6, walkMin: 2, reps: 4, duration: 32,
+    description: '6 min lopen / 2 min wandelen × 4',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Langste training na de race. Voel je de conditiewinst van de race?',
+    tempo: 'Looptempo: ~9:15-9:45 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Bereloop voorbereiding — 10 km opnieuw aanlopen',
+    km_estimate: '6.0 km',
+  },
+
+  // ── Week 9 · Okt 13-17 · Piek voor Bereloop ─────────────────────────────
+  {
+    nr: 25, week: 9,
+    runMin: 7, walkMin: 2, reps: 4, duration: 36,
+    description: '7 min lopen / 2 min wandelen × 4',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: '7 min is echt conditiegebied. Eerste minuut heel rustig — je hebt 7 nodig.',
+    tempo: 'Looptempo: ~9:00-9:30 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Langste loopblokken tot nu toe — voorbereiding Bereloop',
+    km_estimate: '7.0 km',
+  },
+  {
+    nr: 26, week: 9,
+    runMin: 5, walkMin: 1, reps: 6, duration: 36,
+    description: '5 min lopen / 1 min wandelen × 6 — hogere intensiteit',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Korte wandelpauze = testen of hartslag snel herstelt. Goed teken van conditie.',
+    tempo: 'Looptempo: ~9:00-9:30 min/km · Wandeltempo: ~6:00-6:30 min/km',
+    goal: 'Efficiëntie — veel lopen, weinig wandelen, HR stabiel',
+    km_estimate: '6.5 km',
+  },
+  {
+    nr: 27, week: 9,
+    runMin: 8, walkMin: 2, reps: 4, duration: 40,
+    description: '8 min lopen / 2 min wandelen × 4',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: '8 min — dit is je langste loopblok ooit. Tempo is bijzaak, hartslag is alles.',
+    tempo: 'Looptempo: ~9:00-10:00 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Peak training — 32 min totaal lopen. Bereloop is volgende week!',
+    km_estimate: '8.0 km',
+    milestone: true,
+  },
+
+  // ── Week 10 · Okt 20-24 · Tapering Bereloop (30 okt) ────────────────────
+  {
+    nr: 28, week: 10,
+    runMin: 6, walkMin: 2, reps: 4, duration: 32,
+    description: '6 min lopen / 2 min wandelen × 4 — tapering',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Minder volume dan vorige week — benen vers houden. Kwaliteit boven kwantiteit.',
+    tempo: 'Looptempo: ~9:15-9:45 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Fris blijven — Bereloop is over 10 dagen',
+    km_estimate: '5.5 km',
+  },
+  {
+    nr: 29, week: 10,
+    runMin: 4, walkMin: 2, reps: 4, duration: 24,
+    description: '4 min lopen / 2 min wandelen × 4 — rustige activering',
+    hrZone: 'Zone B: 106–125 bpm (iets lager)',
+    hrTip: 'Tapering: bewust HR lager houden. Sparen voor race.',
+    tempo: 'Looptempo: ~9:45-10:30 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Activering, niet training — benen voelen, bewust ontspannen',
+    km_estimate: '3.5 km',
+  },
+  {
+    nr: 30, week: 10,
+    runMin: 3, walkMin: 2, reps: 3, duration: 15,
+    description: '3 min lopen / 2 min wandelen × 3 — laatste activering',
+    hrZone: 'Zone B: 106–120 bpm',
+    hrTip: 'Dag voor de race bijna: heel licht bewegen. Stoppen bij 120 bpm.',
+    tempo: 'Looptempo: ~10:30 min/km · Wandeltempo: ~6:45 min/km',
+    goal: 'Mentaal klaar voor Bereloop — alles is klaar, nu alleen vertrouwen',
+    km_estimate: '1.8 km',
+  },
+
+  // ── Week 11 · Okt 27-31 · 🏁 BERELOOP TERSCHELLING ──────────────────────
+  {
+    nr: 31, week: 11,
+    runMin: 3, walkMin: 3, reps: 3, duration: 18,
+    description: '3 min lopen / 3 min wandelen × 3 — losse benen',
+    hrZone: 'Zone A/B: 95–120 bpm',
+    hrTip: 'Race is over 3 dagen. Heel licht — geen km\'s meer opbouwen nu.',
+    tempo: 'Zeer rustig — bewegend mediteren',
+    goal: 'Lichaam activeren zonder te belasten',
+    km_estimate: '1.5 km',
+  },
+  {
+    nr: 32, week: 11,
+    runMin: 0, walkMin: 20, reps: 1, duration: 20,
+    description: '20 min wandelen — dag voor de race',
+    hrZone: 'Zone A: < 106 bpm',
+    hrTip: 'Dag voor Bereloop: wandelen + stretchen + goed eten + vroeg slapen.',
+    tempo: 'Wandeltempo: ~6:30-7:00 min/km',
+    goal: 'Uitgerust en zeker aan de start verschijnen',
+    km_estimate: '2.5 km',
+    restDay: true,
+  },
+  {
+    nr: 33, week: 11,
+    runMin: 7, walkMin: 3, reps: null, duration: 80,
+    fixedDate: '2026-10-30',
+    description: '🏁 BERELOOP 10 KM TERSCHELLING · Run-walk: 7 min lopen / 3 min wandelen',
+    hrZone: 'Zone B HARD LIMIT: nooit boven 132 bpm',
+    hrTip: 'Race-strategie: zand en duin = meer weerstand. Bij 130+ DIRECT wandelen. Terschelling is pittiger dan weg — verwacht 5-10% lagere snelheid. Liever slenteren dan PEM.',
+    tempo: 'Looptempo: ~10:00-11:30 min/km op strand · Wandeltempo: ~7:00-7:30 min/km · Doeltijd: ~75-90 min',
+    goal: 'TERSCHELLING BERELOOP — finishen is winnen. Zone B door de hele race. Genieten van het eiland.',
+    km_estimate: '10 km',
+    milestone: true,
+    race: true,
+  },
+
+  // ── Week 12 · Nov 3-7 · Post-races + Ameland Dec voorbereiding ──────────
+  {
+    nr: 34, week: 12,
+    runMin: 5, walkMin: 2, reps: 4, duration: 28,
+    description: '5 min lopen / 2 min wandelen × 4 — herstel Bereloop',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Na twee races in 4 weken: luister naar je lichaam. Moe = rustdag. Kracht = doorlopen.',
+    tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~6:30 min/km',
+    goal: 'Herstellen én conditie vasthouden voor Ameland 5 km (13 dec)',
+    km_estimate: '4.5 km',
+  },
+  {
+    nr: 35, week: 12,
+    runMin: 8, walkMin: 2, reps: 3, duration: 30,
+    description: '🎯 5 km rustig lopen met run-walk · 8 min / 2 min × 3',
+    hrZone: 'Zone B: 106–132 bpm',
+    hrTip: 'Je bent in 12 weken van "1 min lopen" naar hier. Dit is échte progressie.',
+    tempo: 'Looptempo: ~9:00-9:30 min/km · Wandeltempo: ~6:30 min/km · Doeltijd 5 km: ~50-55 min',
+    goal: 'Ameland 5 km (13 dec) droge test — voorbereiding voor het echte werk',
+    km_estimate: '5 km',
+    milestone: true,
+  },
 ];
