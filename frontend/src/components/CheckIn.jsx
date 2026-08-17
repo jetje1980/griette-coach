@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HABITS, MEDS, BP, PERSONAL_EVENTS, PRN_MEDS, SUPPLEMENTS, USER } from '../config';
+import CoachAdvice from './CoachAdvice';
 
 const AJOVI_KEY    = 'gc_ajovi_next';
 const AJOVI_HIST   = 'gc_ajovi_history';
@@ -489,6 +490,9 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
           </span>
         )}
       </div>
+
+      {/* Expert coaching advice — dagelijkse status */}
+      {!isFuture && <CoachAdvice log={log} logs={logs} />}
 
       {/* Sprint-widget */}
       {daysToVacation > 0 && (
