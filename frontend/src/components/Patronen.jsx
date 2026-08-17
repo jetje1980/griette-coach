@@ -111,6 +111,15 @@ function HabitBars({ logs }) {
   );
 }
 
+const MOUNJARO_START = '2026-08-21';
+const PRE_MOUNJARO = [
+  { date: '2026-08-17', day: 'Zo', actions: ['💪 Krachtcircuit A (15 min)', '🥗 3× 40g eiwit, stop eten 19:00', '💧 2,5L water, geen suiker', '😴 Weeg je morgenochtend nuchter'] },
+  { date: '2026-08-18', day: 'Ma', actions: ['💪 Circuit B + 🏃 20 min zone B', '🥚 Eiwit binnen 45 min na training', '🧂 Nul zout — vocht laten zakken', '😴 Voor 22:30 in bed'] },
+  { date: '2026-08-19', day: 'Di', actions: ['🚶 20 min wandelen + foam roll', '🥩 Rustdag: extra eiwit + groenten', '🍽️ Eetvenster 09:00–17:00 proberen', '💧 3L water'] },
+  { date: '2026-08-20', day: 'Wo', actions: ['🏃 20–25 min zone B + Circuit C core', '🥗 Geen koolhydraten na 16:00', '😴 8 uur slaap: dit is de nacht vóór Mounjaro'] },
+  { date: '2026-08-21', day: 'Do', actions: ['💉 Mounjaro prik 1 — Fase 2 begint!', '🚶 Alleen wandelen vandaag', '⚠️ Blijf eten: min 100g eiwit ook zonder honger', "🎯 Weeg je 's ochtends vóór de prik"] },
+];
+
 export default function Patronen({ logs }) {
   const last7 = useMemo(() => Array.from({ length: 7 }, (_, i) => logs[ago(6 - i)]).filter(Boolean), [logs]);
 
@@ -123,8 +132,53 @@ export default function Patronen({ logs }) {
   const latest = weights[0]?.weight;
   const toGoal = latest ? (latest - USER.goalWeight).toFixed(1) : null;
 
+  const todayStr = ago(0);
+  const showPreMounjaro = todayStr < MOUNJARO_START;
+
   return (
     <div className="pane">
+      {/* Pre-Mounjaro protocol (zichtbaar tot 21 aug) */}
+      {showPreMounjaro && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-accent" style={{ background: '#0EA5E9' }} />
+            <div className="card-title">💉 Protocol tot Mounjaro (21 aug)</div>
+          </div>
+          <div className="card-body" style={{ padding: 0 }}>
+            <div style={{ padding: '8px 14px 6px', fontSize: 12, color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
+              Elke dag dit doen = −0,5 tot −1 kg vóór de eerste prik
+            </div>
+            {PRE_MOUNJARO.filter(d => d.date >= todayStr).map(({ date, day, actions }) => {
+              const isToday_ = date === todayStr;
+              const daysDiff = Math.round((new Date(date) - new Date(todayStr)) / 86400000);
+              return (
+                <div key={date} style={{
+                  borderBottom: '1px solid var(--border)',
+                  background: isToday_ ? '#CFFAFE22' : 'transparent',
+                  borderLeft: isToday_ ? '3px solid #0EA5E9' : '3px solid transparent',
+                }}>
+                  <div style={{ padding: '7px 14px 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: 12, color: isToday_ ? '#0EA5E9' : 'var(--muted)', minWidth: 20 }}>{day}</span>
+                    <span style={{ fontSize: 10, color: 'var(--muted)' }}>{date.slice(5).replace('-', ' ')}</span>
+                    {isToday_ && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10, background: '#0EA5E9', color: '#fff' }}>vandaag</span>}
+                    {daysDiff === 1 && <span style={{ fontSize: 10, color: 'var(--muted)' }}>morgen</span>}
+                    {date === MOUNJARO_START && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10, background: '#0EA5E9', color: '#fff' }}>💉 prikdag!</span>}
+                  </div>
+                  <div style={{ padding: '0 14px 8px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {actions.map((a, i) => (
+                      <div key={i} style={{ fontSize: 12, color: isToday_ ? 'var(--text)' : 'var(--muted)', fontWeight: isToday_ ? 500 : 400 }}>{a}</div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>
+              Hefbomen: geen zout + weinig koolhydraten = −0,5–1 kg vocht. Eiwit hoog houden = geen spierafbraak.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Samenvatting */}
       <div className="card">
         <div className="card-header">
@@ -204,9 +258,10 @@ export default function Patronen({ logs }) {
           {(() => {
             const cards = [];
 
-            // Gewichtstrend
+            // Gewichtstrend — laatste 30 dagen
+            const thirtyDaysAgo = ago(30);
             const recentWeights = Object.values(logs)
-              .filter(l => l.weight && l.date)
+              .filter(l => l.weight && l.date && l.date >= thirtyDaysAgo)
               .sort((a, b) => a.date.localeCompare(b.date));
             if (recentWeights.length >= 2) {
               const first = recentWeights[0], last = recentWeights[recentWeights.length - 1];
@@ -216,10 +271,11 @@ export default function Patronen({ logs }) {
               const going = diff < 0;
               cards.push(
                 <div key="weight" style={{ padding: '10px 12px', background: going ? 'var(--sage-l)' : 'var(--rust-l)', borderRadius: 9, marginBottom: 8, borderLeft: `3px solid ${going ? 'var(--sage)' : 'var(--rust)'}` }}>
-                  <strong style={{ fontSize: 12 }}>{going ? '📉 Gewicht daalt' : '📈 Gewicht gestegen'}</strong>
+                  <strong style={{ fontSize: 12 }}>{going ? '📉 Gewicht daalt' : '📈 Gewicht gestegen (vakantie-effect)'}</strong>
                   <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                    {first.weight} → {last.weight} kg ({diff > 0 ? '+' : ''}{diff} kg in {days} dagen · {perWeek > 0 ? '+' : ''}{perWeek} kg/week)
+                    {first.weight} → {last.weight} kg ({diff > 0 ? '+' : ''}{diff} kg in {days} dagen · {perWeek > 0 ? '+' : ''}{perWeek} kg/week) · trend obv laatste 30d
                   </div>
+                  {!going ? <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Vandaag is dag 1. Mounjaro + zone B + 120g eiwit keert dit snel om.</div> : null}
                 </div>
               );
             }
