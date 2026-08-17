@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { computeHeadCoach } from './CoachAdvice';
 import { USER, PERSONAL_EVENTS } from '../config';
 import { RUNS } from '../data/runningSchema';
@@ -13,6 +13,7 @@ function formatNL(dateStr) {
 }
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
+function getHour()  { return new Date().getHours(); }
 
 // ── localStorage helpers ────────────────────────────────────────
 const SEASON_KEY  = 'gc_focus_season';
@@ -24,6 +25,108 @@ function getShutdownState(date) {
 }
 function saveShutdownState(date, s) {
   localStorage.setItem(`gc_shutdown_${date}`, JSON.stringify(s));
+}
+function getTop3(date) {
+  try { return JSON.parse(localStorage.getItem(`gc_top3_${date}`) || '[]'); } catch { return []; }
+}
+function saveTop3(date, items) {
+  localStorage.setItem(`gc_top3_${date}`, JSON.stringify(items));
+}
+function getTransitions(date) {
+  try { return JSON.parse(localStorage.getItem(`gc_transitions_${date}`) || '[]'); } catch { return []; }
+}
+function saveTransitions(date, items) {
+  localStorage.setItem(`gc_transitions_${date}`, JSON.stringify(items));
+}
+
+// ── Wat Nu? logic ───────────────────────────────────────────────
+function computeWatNu(log, logs, coach, nextRun, nextRunNr) {
+  const hour = getHour();
+  const decision = coach?.decision || 'AMBER';
+  const runDone = log?.run_done;
+  const coreDone = log?.core_done;
+  const hasData = log && Object.keys(log).filter(k => k !== 'date').length > 1;
+
+  if (!hasData) {
+    return {
+      emoji: '📊',
+      action: 'Vul je ochtendcheck in',
+      context: 'Lichaam → Vandaag — energie, slaap, herstelgevoel. Duurt 1 minuut.',
+      color: 'var(--gold)',
+    };
+  }
+
+  if (!runDone && !coreDone && decision === 'GREEN') {
+    if (hour < 11) {
+      return {
+        emoji: '🏃',
+        action: `Training ${nextRunNr ? `T${nextRunNr}` : ''} starten`,
+        context: nextRun ? (nextRun.title || nextRun.description || `Zone B · ${USER.hrZone.low}–${USER.hrZone.high} bpm`) : 'Je bent fit genoeg.',
+        color: 'var(--sage)',
+      };
+    }
+    if (hour < 17) {
+      return {
+        emoji: '🏃',
+        action: `Training vandaag — nu of niet`,
+        context: `T${nextRunNr || '?'} staat open. Doe het vóór de avond.`,
+        color: 'var(--sage)',
+      };
+    }
+  }
+
+  if (!runDone && !coreDone && decision === 'AMBER') {
+    return {
+      emoji: '🚶',
+      action: 'Korte wandeling of core (15 min)',
+      context: 'Vandaag geen intensieve training — maar lichte beweging helpt herstel.',
+      color: 'var(--gold)',
+    };
+  }
+
+  if (decision === 'BLUE' || decision === 'RED') {
+    return {
+      emoji: '🛌',
+      action: 'Rust is vandaag de training',
+      context: 'Je lichaam geeft een hersteldag aan. Geen druk op prestaties.',
+      color: 'var(--blue)',
+    };
+  }
+
+  if (runDone || coreDone) {
+    if (hour < 14) {
+      return {
+        emoji: '💧',
+        action: 'Herstel: water + eiwitten',
+        context: 'Training gedaan — zorg voor herstel in de komende 2 uur.',
+        color: 'var(--sage)',
+      };
+    }
+    if (hour < 18) {
+      return {
+        emoji: '🎯',
+        action: 'Werk aan je prioriteit #1',
+        context: 'Training zit erop. Dit is je productieve blok.',
+        color: 'var(--text)',
+      };
+    }
+  }
+
+  if (hour >= 20) {
+    return {
+      emoji: '🌙',
+      action: 'Shutdown starten',
+      context: 'Sluit het werkblok af — morgen is ook een dag.',
+      color: 'var(--blue)',
+    };
+  }
+
+  return {
+    emoji: '☕',
+    action: 'Volgende prioriteit oppakken',
+    context: 'Kijk naar je Top 3 van vandaag.',
+    color: 'var(--text)',
+  };
 }
 
 // ── Sub-components ──────────────────────────────────────────────
@@ -41,23 +144,169 @@ function ExpandSection({ label, children, initialOpen = false }) {
   );
 }
 
-const DAY_CAP = [
-  { id: 'minimum', label: 'Minimum', emoji: '🪫' },
-  { id: 'normaal',  label: 'Normaal',  emoji: '⚡' },
-  { id: 'hoog',     label: 'Hoog',     emoji: '🚀' },
-  { id: 'herstel',  label: 'Herstel',  emoji: '🛌' },
-];
-const ENERGIE_OPTS = ['Zwaar','Middel','Licht','Fysiek','Vrij'];
-const ENERGIE_KEYS = ['energy_morning', 'energy_middag', 'energy_avond'];
-const ENERGIE_SLOT_LABELS = ['Ochtend', 'Middag', 'Avond'];
+function Top3({ currentDate }) {
+  const [items, setItems] = useState(() => getTop3(currentDate));
+  const [text, setText] = useState('');
+  const inputRef = useRef(null);
 
-const SHUTDOWN_STEPS = [
-  'Alle openstaande zaken vastgelegd in de inbox',
-  'Topprioriteit voor morgen gekozen',
-  'Agenda gecheckt voor morgen',
-  'Ideeën geparkeerd',
-  'Werkapps gesloten en notificaties uit',
+  useEffect(() => {
+    setItems(getTop3(currentDate));
+  }, [currentDate]);
+
+  function persist(updated) {
+    saveTop3(currentDate, updated);
+    setItems(updated);
+  }
+
+  function add() {
+    const t = text.trim();
+    if (!t || items.length >= 3) return;
+    persist([...items, { id: Date.now().toString(), text: t, done: false }]);
+    setText('');
+    inputRef.current?.focus();
+  }
+
+  function toggle(id) {
+    persist(items.map(i => i.id === id ? { ...i, done: !i.done } : i));
+  }
+
+  function remove(id) {
+    persist(items.filter(i => i.id !== id));
+  }
+
+  const allDone = items.length > 0 && items.every(i => i.done);
+
+  return (
+    <div>
+      {allDone && (
+        <div style={{ background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green)',
+          borderRadius: 10, padding: '10px 14px', fontWeight: 600, fontSize: 13, marginBottom: 12 }}>
+          Top 3 afgerond. Sterk.
+        </div>
+      )}
+      {items.map((item, idx) => (
+        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10,
+          paddingBottom: 10, marginBottom: 10,
+          borderBottom: idx < items.length - 1 ? '1px solid var(--divide)' : 'none' }}>
+          <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, minWidth: 14,
+            textAlign: 'center' }}>{idx + 1}</div>
+          <div className={`os-check-box ${item.done ? 'checked' : ''}`}
+            style={{ flexShrink: 0 }}
+            onClick={() => toggle(item.id)}>
+            {item.done ? '✓' : ''}
+          </div>
+          <span style={{ flex: 1, fontSize: 14, color: item.done ? 'var(--sub)' : 'var(--text)',
+            textDecoration: item.done ? 'line-through' : 'none' }}>
+            {item.text}
+          </span>
+          <button onClick={() => remove(item.id)}
+            style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer',
+              fontSize: 16, padding: '0 2px', lineHeight: 1 }}>
+            ×
+          </button>
+        </div>
+      ))}
+      {items.length < 3 && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            ref={inputRef}
+            className="os-input"
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && add()}
+            placeholder={`Prioriteit ${items.length + 1} van 3…`}
+          />
+          <button className="os-btn-save" onClick={add} style={{ flexShrink: 0 }}>+</button>
+        </div>
+      )}
+      {items.length === 0 && (
+        <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 6 }}>
+          Max 3 prioriteiten — kies wat écht telt vandaag.
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TRANSITION_TEMPLATES = [
+  { emoji: '🏃', label: 'Voor training (5 min)' },
+  { emoji: '🧘', label: 'Na training — cooling down (10 min)' },
+  { emoji: '☕', label: 'Ochtendstart (10 min)' },
+  { emoji: '🌙', label: 'Avondovergang (15 min)' },
+  { emoji: '📞', label: 'Voor gesprek — focus (5 min)' },
+  { emoji: '💤', label: 'Naar slaap (20 min schermen uit)' },
 ];
+
+function Transitions({ currentDate }) {
+  const [items, setItems] = useState(() => getTransitions(currentDate));
+
+  useEffect(() => {
+    setItems(getTransitions(currentDate));
+  }, [currentDate]);
+
+  function persist(updated) {
+    saveTransitions(currentDate, updated);
+    setItems(updated);
+  }
+
+  function toggle(id) {
+    persist(items.map(i => i.id === id ? { ...i, done: !i.done } : i));
+  }
+
+  function addTemplate(tpl) {
+    if (items.some(i => i.label === tpl.label)) return;
+    persist([...items, { id: Date.now().toString(), ...tpl, done: false }]);
+  }
+
+  function remove(id) {
+    persist(items.filter(i => i.id !== id));
+  }
+
+  const activeItems = items.filter(i => !i.done);
+  const doneItems   = items.filter(i => i.done);
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 10, lineHeight: 1.5 }}>
+        Buffer-momenten rondom activiteiten. Voorkomt overgang-stress.
+      </div>
+
+      {items.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          {activeItems.map(item => (
+            <div key={item.id} className="os-check-item" onClick={() => toggle(item.id)}>
+              <div className="os-check-box">{''}</div>
+              <span style={{ fontSize: 13 }}>{item.emoji} {item.label}</span>
+              <button onClick={e => { e.stopPropagation(); remove(item.id); }}
+                style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer',
+                  marginLeft: 'auto', fontSize: 15, padding: '0 4px' }}>×</button>
+            </div>
+          ))}
+          {doneItems.length > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 6 }}>
+              {doneItems.length} transition{doneItems.length > 1 ? 's' : ''} gedaan
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.5px',
+        textTransform: 'uppercase', marginBottom: 6 }}>Toevoegen</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+        {TRANSITION_TEMPLATES
+          .filter(t => !items.some(i => i.label === t.label))
+          .map(tpl => (
+            <button key={tpl.label}
+              className="os-toggle-chip"
+              onClick={() => addTemplate(tpl)}
+              style={{ fontSize: 12 }}>
+              {tpl.emoji} {tpl.label}
+            </button>
+          ))}
+      </div>
+    </div>
+  );
+}
 
 function CaptureInbox() {
   const [items, setItems] = useState(() => {
@@ -88,7 +337,7 @@ function CaptureInbox() {
           ref={inputRef} className="os-input" value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && add()}
-          placeholder="Iets wat in je hoofd zit..."
+          placeholder="Iets wat in je hoofd zit…"
         />
         <button className="os-btn-save" onClick={add} style={{ flexShrink: 0 }}>+ Zet</button>
       </div>
@@ -118,11 +367,23 @@ function CaptureInbox() {
 
 function ShutdownProtocol({ currentDate }) {
   const [state, setState] = useState(() => getShutdownState(currentDate));
+
+  useEffect(() => {
+    setState(getShutdownState(currentDate));
+  }, [currentDate]);
+
   function toggle(i) {
     const upd = { ...state, [i]: !state[i] };
     saveShutdownState(currentDate, upd); setState(upd);
   }
-  const allDone = SHUTDOWN_STEPS.every((_, i) => state[i]);
+  const STEPS = [
+    'Alle openstaande zaken vastgelegd in de inbox',
+    'Topprioriteit voor morgen gekozen',
+    'Agenda gecheckt voor morgen',
+    'Ideeën geparkeerd',
+    'Werkapps gesloten en notificaties uit',
+  ];
+  const allDone = STEPS.every((_, i) => state[i]);
   return (
     <div>
       {allDone && (
@@ -131,7 +392,7 @@ function ShutdownProtocol({ currentDate }) {
           Werk is klaar. Goed gedaan.
         </div>
       )}
-      {SHUTDOWN_STEPS.map((step, i) => (
+      {STEPS.map((step, i) => (
         <div key={i} className="os-check-item" onClick={() => toggle(i)}>
           <div className={`os-check-box ${state[i] ? 'checked' : ''}`}>{state[i] ? '✓' : ''}</div>
           <span style={{ fontSize: 14, color: state[i] ? 'var(--sub)' : 'var(--text)',
@@ -164,6 +425,16 @@ const VERDICT_MAP = {
   },
 };
 
+const DAY_CAP = [
+  { id: 'minimum', label: 'Minimum', emoji: '🪫' },
+  { id: 'normaal',  label: 'Normaal',  emoji: '⚡' },
+  { id: 'hoog',     label: 'Hoog',     emoji: '🚀' },
+  { id: 'herstel',  label: 'Herstel',  emoji: '🛌' },
+];
+const ENERGIE_OPTS = ['Zwaar','Middel','Licht','Fysiek','Vrij'];
+const ENERGIE_KEYS = ['energy_morning', 'energy_middag', 'energy_avond'];
+const ENERGIE_SLOT_LABELS = ['Ochtend', 'Middag', 'Avond'];
+
 function getNextRun(logs) {
   const done = new Set(Object.values(logs || {}).filter(l => l.run_done && l.run_session).map(l => l.run_session));
   for (let n = 1; n <= RUNS.length; n++) if (!done.has(n)) return { nr: n, run: RUNS[n - 1] };
@@ -185,6 +456,8 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
   const verdict = VERDICT_MAP[coach.decision] || VERDICT_MAP.AMBER;
   const { nr: nextRunNr, run: nextRun } = getNextRun(logs);
   const hasData = log && Object.keys(log).filter(k => k !== 'date').length > 1;
+
+  const watNu = !isFuture ? computeWatNu(log, logs, coach, nextRun, nextRunNr) : null;
 
   return (
     <div className="os-content">
@@ -237,19 +510,20 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
         </div>
       )}
 
-      {/* Wat doe je vandaag */}
-      {!isFuture && nextRun && (
+      {/* Wat Nu? — one prominent action */}
+      {watNu && (
         <>
-          <div className="os-section-label">Wat doe je vandaag</div>
-          <div className="os-card">
-            <div className="os-action">
-              <div className="os-action-icon">🏃</div>
+          <div className="os-section-label">Wat nu?</div>
+          <div className="os-card" style={{ borderLeft: `4px solid ${watNu.color}`, paddingLeft: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ fontSize: 28, lineHeight: 1, marginTop: 2 }}>{watNu.emoji}</div>
               <div>
-                <div className="os-action-title">
-                  {nextRun.title || `Training T${nextRunNr}/35`}
+                <div style={{ fontSize: 17, fontWeight: 800, fontFamily: 'var(--font-serif)',
+                  color: 'var(--text)', marginBottom: 4, lineHeight: 1.2 }}>
+                  {watNu.action}
                 </div>
-                <div className="os-action-desc">
-                  {nextRun.desc || nextRun.description || `Zone B · ${USER.hrZone.low}–${USER.hrZone.high} bpm`}
+                <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.5 }}>
+                  {watNu.context}
                 </div>
               </div>
             </div>
@@ -257,13 +531,23 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
         </>
       )}
 
+      {/* Top 3 */}
+      {!isFuture && (
+        <>
+          <div className="os-section-label">Top 3 van vandaag</div>
+          <div className="os-card">
+            <Top3 currentDate={currentDate} />
+          </div>
+        </>
+      )}
+
       {/* Wat doe je NIET */}
       {!isFuture && verdict.notToday && (
         <>
-          <div className="os-section-label">Wat doe je niet vandaag</div>
+          <div className="os-section-label">Niet vandaag</div>
           <div className="os-card">
             <div className="os-action">
-              <div className="os-action-icon red" style={{ fontSize: 18 }}>✕</div>
+              <div className="os-action-icon" style={{ fontSize: 18, color: 'var(--rust)' }}>✕</div>
               <div>
                 <div className="os-action-title">{verdict.notToday.title}</div>
                 <div className="os-action-desc">{verdict.notToday.desc}</div>
@@ -271,6 +555,13 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
             </div>
           </div>
         </>
+      )}
+
+      {/* Transitions */}
+      {!isFuture && (
+        <ExpandSection label="Overgangsmomenten">
+          <Transitions currentDate={currentDate} />
+        </ExpandSection>
       )}
 
       {/* Dag type + energie planning */}

@@ -7,13 +7,14 @@ import { photoStore } from './photoStore';
 import VandaagScreen   from './components/VandaagScreen';
 import WeekScreen      from './components/WeekScreen';
 import LichaamScreen   from './components/LichaamScreen';
+import LevenScreen     from './components/LevenScreen';
 import ProgressieScreen from './components/ProgressieScreen';
-import MeerTab         from './components/MeerTab';
+import CoachScreen     from './components/CoachScreen';
 import Settings        from './components/Settings';
 import Onboarding      from './components/Onboarding';
 import StravaCallback  from './components/StravaCallback';
 
-const TABS = ['Vandaag', 'Week', 'Lichaam', 'Progressie', 'Meer'];
+const TABS = ['Vandaag', 'Week', 'Lichaam', 'Leven', 'Progressie', 'Coach'];
 const MAX_FUTURE_DAYS = 90;
 
 function today() {
@@ -122,16 +123,6 @@ export default function App() {
 
   const isFuture = currentDate > today();
 
-  const latestWeight = (() => {
-    const sorted = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
-    return sorted[0]?.weight || null;
-  })();
-
-  const progressPct = (() => {
-    if (!latestWeight) return 0;
-    return Math.min(100, Math.max(0, ((USER.startWeight - latestWeight) / (USER.startWeight - USER.goalWeight)) * 100));
-  })();
-
   if (window.location.pathname.endsWith('/strava/callback')) {
     return (
       <StravaCallback onDone={(ok, msg) => {
@@ -144,8 +135,6 @@ export default function App() {
   if (!onboardingDone) {
     return <Onboarding onDone={() => { setOnboardingDone(true); loadLogs(); }} />;
   }
-
-  const sharedProps = { log, saveField, saveFields, currentDate, logs, dayNum, showFlash, isFuture, deleteLog, syncStatus };
 
   return (
     <>
@@ -192,8 +181,9 @@ export default function App() {
           isFuture={isFuture}
         />
       )}
-      {tab === 3 && <ProgressieScreen logs={logs} streak={streak} />}
-      {tab === 4 && <MeerTab {...sharedProps} />}
+      {tab === 3 && <LevenScreen />}
+      {tab === 4 && <ProgressieScreen logs={logs} streak={streak} />}
+      {tab === 5 && <CoachScreen logs={logs} />}
     </>
   );
 }
