@@ -21,8 +21,11 @@ import Glow from './components/Glow';
 import Settings from './components/Settings';
 import Onboarding from './components/Onboarding';
 import StravaCallback from './components/StravaCallback';
+import Trainingsplan from './components/Trainingsplan';
+import Ritme from './components/Ritme';
+import WeekFocus from './components/WeekFocus';
 
-const TABS = ['Vandaag', 'Kalender', 'Training', 'Eten', 'Lichaam', 'Trends', 'Coach', 'Progressie', '✨ Glow', '🏅'];
+const TABS = ['Vandaag', 'Kalender', 'Training', 'Plan', 'Ritme', 'Week', 'Eten', 'Lichaam', 'Trends', 'Coach', 'Progressie', '✨ Glow', '🏅'];
 const MAX_FUTURE_DAYS = 90;
 
 function today() {
@@ -193,13 +196,16 @@ export default function App() {
         {tab === 0 && <CheckIn {...sharedProps} tip={tip} />}
         {tab === 1 && <Calendar currentDate={currentDate} logs={logs} onSelectDate={(d) => { setCurrentDate(d); setTab(0); }} maxDate={maxFutureDate} />}
         {tab === 2 && <Training {...sharedProps} />}
-        {tab === 3 && <Eten tip={tip} dayNum={dayNum} log={log} />}
-        {tab === 4 && <Lichaam {...sharedProps} logs={logs} />}
-        {tab === 5 && <Patronen logs={logs} />}
-        {tab === 6 && <Coach logs={logs} />}
-        {tab === 7 && <Progressie logs={logs} />}
-        {tab === 8 && <Glow log={log} saveField={saveField} currentDate={currentDate} logs={logs} />}
-        {tab === 9 && <Badges logs={logs} streak={streak} />}
+        {tab === 3 && <Trainingsplan />}
+        {tab === 4 && <Ritme />}
+        {tab === 5 && <WeekFocus />}
+        {tab === 6 && <Eten tip={tip} dayNum={dayNum} log={log} />}
+        {tab === 7 && <Lichaam {...sharedProps} logs={logs} />}
+        {tab === 8 && <Patronen logs={logs} />}
+        {tab === 9 && <Coach logs={logs} />}
+        {tab === 10 && <Progressie logs={logs} />}
+        {tab === 11 && <Glow log={log} saveField={saveField} currentDate={currentDate} logs={logs} />}
+        {tab === 12 && <Badges logs={logs} streak={streak} />}
       </div>
     </>
   );
