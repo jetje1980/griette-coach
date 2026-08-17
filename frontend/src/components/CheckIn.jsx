@@ -186,6 +186,111 @@ function GlassTracker({ glasses, onChange }) {
   );
 }
 
+function DagFocus({ log, logs, currentDate }) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isToday = currentDate === todayStr;
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Goedemorgen' : hour < 17 ? 'Goedemiddag' : 'Goedenavond';
+
+  const streakCount = (() => {
+    let s = 0;
+    for (let i = 0; i < 90; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const dk = d.toISOString().slice(0, 10);
+      const l = logs[dk];
+      if (l && (l.run_done || l.core_done || l.mounjaro || l.candesartan || l.adhd_meds)) s++;
+      else if (i > 0) break;
+    }
+    return s;
+  })();
+
+  const medsOk = MEDS.filter(m => !m.weekly).every(m => !!log?.[m.id]);
+  const moodOk = log?.energy != null && log?.mood != null;
+  const sleepOk = log?.sleep_hours != null;
+  const score = [medsOk, moodOk, sleepOk].filter(Boolean).length;
+
+  const weightEntries = Object.values(logs || {}).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
+  const currentW = weightEntries[0]?.weight;
+  const lost = currentW ? +(USER.startWeight - currentW).toFixed(1) : 0;
+  const toGo = currentW ? +(currentW - USER.goalWeight).toFixed(1) : +(USER.startWeight - USER.goalWeight).toFixed(1);
+  const pct = currentW ? Math.min(100, Math.max(0, ((USER.startWeight - currentW) / (USER.startWeight - USER.goalWeight)) * 100)) : 0;
+
+  const nextRace = [
+    { date: '2026-10-03', label: 'Trail 10km', emoji: '🏔️' },
+    { date: '2026-10-30', label: 'Bereloop', emoji: '🏃' },
+    { date: '2026-12-13', label: 'Ameland 5km', emoji: '🏝️' },
+  ].filter(r => r.date > todayStr)[0];
+  const daysToRace = nextRace ? Math.floor((new Date(nextRace.date) - new Date(todayStr)) / 86400000) : null;
+
+  return (
+    <div style={{
+      background: score === 3 ? 'var(--sage-l)' : score >= 1 ? 'var(--gold-l)' : 'var(--card)',
+      border: `1.5px solid ${score === 3 ? 'var(--sage)' : score >= 1 ? 'var(--gold)' : 'var(--border)'}`,
+      borderRadius: 14, padding: '14px 16px', marginBottom: 10,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          {isToday && <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>{greeting}</div>}
+          <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.3, marginBottom: 8 }}>
+            {score === 3 ? 'Dagcheck compleet ⚡' : score >= 1 ? 'Je bent bezig...' : 'Begin je dagcheck'}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[{ ok: medsOk, label: 'Meds' }, { ok: moodOk, label: 'Stemming' }, { ok: sleepOk, label: 'Slaap' }].map(({ ok, label }) => (
+              <span key={label} style={{
+                fontSize: 11, padding: '3px 10px', borderRadius: 99, fontWeight: 600,
+                background: ok ? 'var(--sage)' : 'var(--border)', color: ok ? 'white' : 'var(--muted)',
+              }}>{ok ? '✓' : '○'} {label}</span>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+          {streakCount > 0 && (
+            <div style={{ textAlign: 'center', background: 'var(--rust-l)', border: '1.5px solid var(--rust)', borderRadius: 10, padding: '6px 10px', minWidth: 50 }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--rust)', lineHeight: 1 }}>{streakCount}</div>
+              <div style={{ fontSize: 8, color: 'var(--rust)', letterSpacing: 0.5, fontWeight: 700 }}>STREAK</div>
+            </div>
+          )}
+          {nextRace && daysToRace != null && (
+            <div style={{ textAlign: 'center', background: '#FFF3E0', border: '1px solid #FDBA74', borderRadius: 10, padding: '4px 8px', minWidth: 50 }}>
+              <div style={{ fontSize: 13 }}>{nextRace.emoji}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#C2410C', lineHeight: 1 }}>{daysToRace}</div>
+              <div style={{ fontSize: 7, color: '#C2410C', letterSpacing: 0.3, fontWeight: 700 }}>DAGEN</div>
+            </div>
+          )}
+        </div>
+      </div>
+      {currentW && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>
+            <span style={{ fontWeight: 700, color: lost > 0 ? 'var(--sage)' : 'var(--text)' }}>
+              {lost > 0 ? `−${lost} kg afgevallen` : `Start: ${USER.startWeight} kg`}
+            </span>
+            <span>{currentW} kg · {toGo > 0 ? `${toGo} kg naar doel` : 'doel bereikt!'}</span>
+          </div>
+          <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${Math.max(2, pct)}%`, background: pct >= 60 ? 'var(--sage)' : pct >= 20 ? 'var(--gold)' : 'var(--rust)', borderRadius: 99, transition: 'width 0.5s' }} />
+          </div>
+          <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>{Math.round(pct)}% richting 57 kg</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardGroup({ title, emoji, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <div onClick={() => setOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 2px 4px', cursor: 'pointer', userSelect: 'none' }}>
+        <span style={{ fontSize: 14 }}>{emoji}</span>
+        <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: 0.6, textTransform: 'uppercase' }}>{title}</span>
+        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && <div>{children}</div>}
+    </div>
+  );
+}
+
 export default function CheckIn({ log, saveField, saveFields, currentDate, logs, tip, isFuture, deleteLog, syncStatus }) {
   const [weight, setWeight] = useState('');
   const [bpSys, setBpSys] = useState('');
@@ -491,8 +596,89 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         )}
       </div>
 
+      {/* Dag Focus — progressie gevoel */}
+      {!isFuture && <DagFocus log={log} logs={logs} currentDate={currentDate} />}
+
       {/* Expert coaching advice — dagelijkse status */}
       {!isFuture && <CoachAdvice log={log} logs={logs} />}
+
+      {/* Medicatie — dagelijks, prioriteit */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: 'var(--gold)' }} />
+          <div className="card-title">💊 Medicatie</div>
+          {checkedMeds > 0 && (
+            <span style={{ fontSize: 10, background: 'var(--sage-l)', color: 'var(--sage)', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>
+              {checkedMeds}/{MEDS.filter(m => !m.weekly).length} ✓
+            </span>
+          )}
+        </div>
+        <div className="card-body">
+          {MEDS.map(med => {
+            const isPlanned = isFuture && med.id === 'mounjaro' && log?.[med.id];
+            return (
+              <div key={med.id} className={`med-item ${log?.[med.id] ? 'checked' : ''}`} onClick={() => toggleMed(med.id)}
+                style={isPlanned ? { background: '#FEF3C7', borderColor: '#F59E0B' } : {}}>
+                <div className={`checkbox`}>{log?.[med.id] ? '✓' : ''}</div>
+                <div style={{ flex: 1 }}>
+                  <div className="med-label">{med.label}</div>
+                  <div className="med-detail">{med.detail}</div>
+                </div>
+                {isPlanned
+                  ? <span style={{ fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FDE68A', padding: '2px 8px', borderRadius: 99 }}>📅 gepland</span>
+                  : med.weekly && <span style={{ fontSize: 10, color: 'var(--muted)', background: 'var(--border)', padding: '2px 6px', borderRadius: 99 }}>wekelijks</span>
+                }
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Hoe voel je je — dagelijkse check */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-accent" style={{ background: 'var(--gold)' }} />
+          <div className="card-title">⚡ Hoe voel je je?</div>
+        </div>
+        <div className="card-body">
+          <div className="scale-label">ENERGIE</div>
+          <div className="scale-row">
+            {['🪫','😐','⚡','🚀'].map((e, i) => (
+              <button key={i} className={`scale-btn ${log?.energy === i ? 'selected-e' : ''}`} onClick={() => saveField('energy', i)}>{e}</button>
+            ))}
+          </div>
+          <div className="scale-label">MOTIVATIE</div>
+          <div className="scale-row">
+            {['😩','😑','🙂','🔥'].map((e, i) => (
+              <button key={i} className={`scale-btn ${log?.mood === i ? 'selected-m' : ''}`} onClick={() => saveField('mood', i)}>{e}</button>
+            ))}
+          </div>
+          <div className="scale-label">SLAAP KWALITEIT</div>
+          <div className="scale-row">
+            {['😫','😕','🙂','😴'].map((e, i) => (
+              <button key={i} className={`scale-btn ${log?.sleep_quality === i ? 'selected-s' : ''}`} onClick={() => saveField('sleep_quality', i)}>{e}</button>
+            ))}
+          </div>
+          <div className="scale-label" style={{ marginTop: 10 }}>SLAAPUREN</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            {[4, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9].map(h => (
+              <button key={h} className="btn" style={{
+                padding: '5px 10px', fontSize: 12, minWidth: 44,
+                background: log?.sleep_hours === h ? 'var(--gold)' : 'var(--bg)',
+                color: log?.sleep_hours === h ? 'white' : 'var(--text)',
+                border: `1.5px solid ${log?.sleep_hours === h ? 'var(--gold)' : 'var(--border)'}`,
+              }} onClick={() => saveSleepHours(h)}>{h}u</button>
+            ))}
+          </div>
+          {log?.sleep_hours && (
+            <div className="saved-note">
+              ✓ {log.sleep_hours} uur
+              {log.sleep_hours < 6 && <span style={{ color: 'var(--alert)', marginLeft: 6 }}>⚠️ te weinig voor herstel</span>}
+              {log.sleep_hours >= 7 && <span style={{ color: 'var(--sage)', marginLeft: 6 }}>✓ goed!</span>}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Sprint-widget */}
       {daysToVacation > 0 && (
@@ -695,6 +881,8 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
       <AjoviTracker />
 
       <BpAlert sys={log?.bp_sys} dia={log?.bp_dia} />
+
+      <CardGroup title="Metingen" emoji="📊" defaultOpen={!!(log?.weight || log?.bp_sys)}>
 
       {/* Gewicht */}
       <div className="card">
@@ -1093,60 +1281,10 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         </div>
       </div>
 
-      {/* Hoe voel je je */}
-      <div className="card">
-        <div className="card-header">
-          <div className="card-accent" style={{ background: 'var(--gold)' }} />
-          <div className="card-title">⚡ Hoe voel je je?</div>
-        </div>
-        <div className="card-body">
-          <div className="scale-label">ENERGIE</div>
-          <div className="scale-row">
-            {['🪫','😐','⚡','🚀'].map((e, i) => (
-              <button key={i} className={`scale-btn ${log?.energy === i ? 'selected-e' : ''}`} onClick={() => saveField('energy', i)}>{e}</button>
-            ))}
-          </div>
-          <div className="scale-label">MOTIVATIE</div>
-          <div className="scale-row">
-            {['😩','😑','🙂','🔥'].map((e, i) => (
-              <button key={i} className={`scale-btn ${log?.mood === i ? 'selected-m' : ''}`} onClick={() => saveField('mood', i)}>{e}</button>
-            ))}
-          </div>
-          <div className="scale-label">SLAAP KWALITEIT</div>
-          <div className="scale-row">
-            {['😫','😕','🙂','😴'].map((e, i) => (
-              <button key={i} className={`scale-btn ${log?.sleep_quality === i ? 'selected-s' : ''}`} onClick={() => saveField('sleep_quality', i)}>{e}</button>
-            ))}
-          </div>
-          <div className="scale-label" style={{ marginTop: 10 }}>SLAAPUREN</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-            {[4, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9].map(h => (
-              <button
-                key={h}
-                className="btn"
-                style={{
-                  padding: '5px 10px', fontSize: 12, minWidth: 44,
-                  background: log?.sleep_hours === h ? 'var(--gold)' : 'var(--bg)',
-                  color: log?.sleep_hours === h ? 'white' : 'var(--text)',
-                  border: `1.5px solid ${log?.sleep_hours === h ? 'var(--gold)' : 'var(--border)'}`,
-                }}
-                onClick={() => saveSleepHours(h)}
-              >
-                {h}u
-              </button>
-            ))}
-          </div>
-          {log?.sleep_hours && (
-            <div className="saved-note">
-              ✓ {log.sleep_hours} uur
-              {log.sleep_hours < 6 && <span style={{ color: 'var(--alert)', marginLeft: 6 }}>⚠️ te weinig voor herstel</span>}
-              {log.sleep_hours >= 7 && <span style={{ color: 'var(--sage)', marginLeft: 6 }}>✓ goed!</span>}
-            </div>
-          )}
-        </div>
-      </div>
+      </CardGroup>
 
-      {/* Klachten vandaag */}
+      <CardGroup title="Klachten" emoji="🩺" defaultOpen={activeSymptoms > 0 || !!log?.migraine}>
+
       <div className="card">
         <div className="card-header">
           <div className="card-accent" style={{ background: activeSymptoms > 0 ? 'var(--alert)' : 'var(--muted)' }} />
@@ -1326,34 +1464,10 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         </div>
       </div>
 
-      {/* Medicatie */}
-      <div className="card">
-        <div className="card-header">
-          <div className="card-accent" style={{ background: 'var(--gold)' }} />
-          <div className="card-title">💊 Medicatie</div>
-        </div>
-        <div className="card-body">
-          {MEDS.map(med => {
-            const isPlanned = isFuture && med.id === 'mounjaro' && log?.[med.id];
-            return (
-              <div key={med.id} className={`med-item ${log?.[med.id] ? 'checked' : ''}`} onClick={() => toggleMed(med.id)}
-                style={isPlanned ? { background: '#FEF3C7', borderColor: '#F59E0B' } : {}}>
-                <div className={`checkbox`}>{log?.[med.id] ? '✓' : ''}</div>
-                <div style={{ flex: 1 }}>
-                  <div className="med-label">{med.label}</div>
-                  <div className="med-detail">{med.detail}</div>
-                </div>
-                {isPlanned
-                  ? <span style={{ fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FDE68A', padding: '2px 8px', borderRadius: 99 }}>📅 gepland</span>
-                  : med.weekly && <span style={{ fontSize: 10, color: 'var(--muted)', background: 'var(--border)', padding: '2px 6px', borderRadius: 99 }}>wekelijks</span>
-                }
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      </CardGroup>
 
-      {/* Mounjaro details */}
+      <CardGroup title="Medicatie details" emoji="💉" defaultOpen={false}>
+
       <div className="card">
         <div className="card-header">
           <div className="card-accent" style={{ background: '#06B6D4' }} />
@@ -1500,6 +1614,10 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
           ))}
         </div>
       </div>
+
+      </CardGroup>
+
+      <CardGroup title="Voeding & gewoontes" emoji="🍽️" defaultOpen={false}>
 
       {/* Water */}
       <div className="card">
@@ -1654,6 +1772,8 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
           )}
         </div>
       </div>
+
+      </CardGroup>
 
       {/* Notitie */}
       <div className="card">

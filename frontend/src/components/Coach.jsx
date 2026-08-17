@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ai } from '../ai';
 import { photoStore } from '../photoStore';
-import { USER } from '../config';
+import { USER, HABITS } from '../config';
 
 const REPORT_KEY = 'gc_coach_report';
 const REPORT_DATE_KEY = 'gc_coach_report_date';
@@ -498,6 +498,108 @@ function ReportHistory() {
   );
 }
 
+function CoachDashboard({ logs }) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Weight
+  const wEntries = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
+  const latestW = wEntries[0]?.weight;
+  const prevW = wEntries.find(l => l.date < wEntries[0]?.date)?.weight;
+  const wTrend = latestW && prevW ? +(latestW - prevW).toFixed(1) : null;
+  const wPct = latestW ? Math.min(100, Math.max(0, ((USER.startWeight - latestW) / (USER.startWeight - USER.goalWeight)) * 100)) : 0;
+
+  // Training this week (Mon–Sun)
+  const dayOfWeek = new Date().getDay() || 7;
+  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - dayOfWeek + 1);
+  const weekKeys = Array.from({ length: dayOfWeek }, (_, i) => {
+    const d = new Date(weekStart); d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+  const weekTrainDone = weekKeys.filter(dk => {
+    const l = logs[dk];
+    return l && (l.run_done || (l.training_zone && l.training_zone !== 'rust'));
+  }).length;
+
+  // Streak
+  const streak = (() => {
+    let s = 0;
+    for (let i = 0; i < 90; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const l = logs[d.toISOString().slice(0, 10)];
+      if (l && (l.run_done || l.core_done || l.mounjaro || l.candesartan || l.adhd_meds)) s++;
+      else if (i > 0) break;
+    }
+    return s;
+  })();
+
+  // Days to next race
+  const races = [
+    { date: '2026-10-03', label: 'Trail 10km', emoji: '🏔️' },
+    { date: '2026-10-30', label: 'Bereloop', emoji: '🏃' },
+    { date: '2026-12-13', label: 'Ameland 5km', emoji: '🏝️' },
+  ];
+  const nextRace = races.filter(r => r.date > todayStr)[0];
+  const daysToRace = nextRace ? Math.floor((new Date(nextRace.date) - new Date(todayStr)) / 86400000) : null;
+
+  // Mounjaro prognosis: 0.4 kg/week loss rate target
+  const weeksSinceStart = Math.max(0, Math.floor((new Date(todayStr) - new Date(USER.startDate)) / 604800000));
+  const prognoseW = latestW ? Math.max(USER.goalWeight, latestW - 0.4).toFixed(1) : null;
+
+  const tiles = [
+    {
+      label: 'Gewicht', value: latestW ? `${latestW} kg` : '—',
+      sub: wTrend != null ? `${wTrend > 0 ? '+' : ''}${wTrend} kg` : `doel: ${USER.goalWeight} kg`,
+      color: wTrend != null && wTrend < 0 ? 'var(--sage)' : 'var(--rust)',
+      bar: wPct, barColor: wPct >= 50 ? 'var(--sage)' : 'var(--gold)',
+    },
+    {
+      label: 'Training', value: `${weekTrainDone}/3`, sub: 'trainingen deze week',
+      color: weekTrainDone >= 2 ? 'var(--sage)' : weekTrainDone >= 1 ? 'var(--gold)' : 'var(--muted)',
+      bar: Math.round((weekTrainDone / 3) * 100), barColor: weekTrainDone >= 2 ? 'var(--sage)' : 'var(--gold)',
+    },
+    {
+      label: 'Streak', value: streak > 0 ? `${streak}d` : '—', sub: 'dagen actief',
+      color: streak >= 7 ? 'var(--sage)' : streak >= 3 ? 'var(--gold)' : 'var(--rust)',
+    },
+    {
+      label: nextRace?.emoji || '🏁', value: daysToRace != null ? `${daysToRace}d` : '—',
+      sub: nextRace?.label || 'geen race',
+      color: daysToRace != null && daysToRace <= 30 ? 'var(--rust)' : 'var(--gold)',
+    },
+  ];
+
+  return (
+    <div className="card" style={{ marginBottom: 0 }}>
+      <div className="card-body" style={{ paddingBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10 }}>
+          Jou in cijfers
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          {tiles.map(t => (
+            <div key={t.label} style={{ background: 'var(--bg)', borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>{t.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.color, lineHeight: 1, marginBottom: 2 }}>{t.value}</div>
+              <div style={{ fontSize: 10, color: 'var(--muted)' }}>{t.sub}</div>
+              {t.bar != null && (
+                <div style={{ height: 4, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginTop: 6 }}>
+                  <div style={{ height: '100%', width: `${Math.max(2, t.bar)}%`, background: t.barColor, borderRadius: 99 }} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {latestW && (
+          <div style={{ fontSize: 11, color: 'var(--muted)', background: 'var(--bg)', borderRadius: 8, padding: '8px 10px', lineHeight: 1.6 }}>
+            {prognoseW && <span>📊 Prognose volgende week: <strong style={{ color: 'var(--sage)' }}>{prognoseW} kg</strong> · </span>}
+            Week {weeksSinceStart + 1} van programma ·{' '}
+            {+(latestW - USER.goalWeight).toFixed(1)} kg naar doel van {USER.goalWeight} kg
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Coach({ logs }) {
   const [report, setReport] = useState(() => localStorage.getItem(REPORT_KEY) || null);
   const [reportDate, setReportDate] = useState(() => localStorage.getItem(REPORT_DATE_KEY) || null);
@@ -565,6 +667,9 @@ export default function Coach({ logs }) {
 
   return (
     <div className="pane">
+      {/* Data dashboard — geen AI nodig */}
+      <CoachDashboard logs={logs} />
+
       {/* Status banner */}
       <div className="card">
         <div className="card-body" style={{ textAlign: 'center', padding: '16px 14px' }}>
