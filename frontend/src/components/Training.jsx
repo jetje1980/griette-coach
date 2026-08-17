@@ -189,6 +189,194 @@ function SportScreenshot({ type, label, recentSessions, logs }) {
   );
 }
 
+// ─── Kracht Module ────────────────────────────────────────────────────────────
+
+const KRACHT_CATS = [
+  { id: 'squat',  label: 'Squat / Lunge',     emoji: '🦵', exercises: ['Goblet Squat','Bulgarian Split Squat','Lunge','Leg Press'], reps: 10 },
+  { id: 'hinge',  label: 'Hip Hinge',           emoji: '🏋️', exercises: ['Romanian Deadlift','Sumo Deadlift','Kettlebell Swing','Good Morning'], reps: 8  },
+  { id: 'thrust', label: 'Hip Thrust / Glute', emoji: '🍑', exercises: ['Hip Thrust','Glute Bridge','Single-leg Hip Thrust'], reps: 12 },
+  { id: 'push',   label: 'Push',               emoji: '💪', exercises: ['Dumbbell Press','Push-up','Shoulder Press','Incline Press'], reps: 10 },
+  { id: 'pull',   label: 'Pull',               emoji: '🤸', exercises: ['Dumbbell Row','Lat Pulldown','Cable Row','Face Pull'], reps: 10 },
+  { id: 'core',   label: 'Core / Carry',       emoji: '🧘', exercises: ['Plank','Dead Bug','Farmers Carry','Side Plank','Pallof Press'], reps: null },
+  { id: 'kuit',   label: 'Kuiten',             emoji: '🦶', exercises: ['Staand kuit raise','Zittend kuit raise','Enkel-been raise'], reps: 15 },
+];
+
+function loadKracht(date) {
+  try { return JSON.parse(localStorage.getItem(`gc_kracht_${date}`) || '{}'); } catch { return {}; }
+}
+
+function saveKrachtStore(date, data) {
+  localStorage.setItem(`gc_kracht_${date}`, JSON.stringify(data));
+}
+
+function findLastKrachtSession(currentDate) {
+  for (let i = 1; i <= 60; i++) {
+    const d = new Date(currentDate);
+    d.setDate(d.getDate() - i);
+    const dk = d.toISOString().slice(0, 10);
+    const raw = localStorage.getItem(`gc_kracht_${dk}`);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Object.keys(parsed).length > 0) return { date: dk, data: parsed };
+      } catch {}
+    }
+  }
+  return null;
+}
+
+function getProgression(prev) {
+  if (!prev || prev.rir == null) return null;
+  const { sets, reps, weight, rir } = prev;
+  if (rir >= 3) {
+    if (weight > 0) return { sets, reps, weight: +(weight + 2.5).toFixed(1), note: `+2.5kg (RIR ${rir} → gemakkelijk)` };
+    if (reps)      return { sets, reps: reps + 2, weight, note: `+2 herh. (RIR ${rir} → gemakkelijk)` };
+  }
+  if (rir <= 1)    return { sets, reps, weight, note: `Zelfde gewicht (RIR ${rir} → goed uitgedaagd)` };
+  if (reps && reps < 15) return { sets, reps: reps + 1, weight, note: `+1 herhaling (RIR ${rir})` };
+  if (weight > 0)  return { sets, reps, weight: +(weight + 2.5).toFixed(1), note: `+2.5kg (rep-plafond bereikt)` };
+  return null;
+}
+
+function KrachtModuleCard({ currentDate }) {
+  const [kracht, setKracht] = useState(() => loadKracht(currentDate));
+  const [lastSession] = useState(() => findLastKrachtSession(currentDate));
+  const [openCat, setOpenCat] = useState(null);
+
+  useEffect(() => {
+    setKracht(loadKracht(currentDate));
+  }, [currentDate]);
+
+  function update(catId, field, val) {
+    const next = { ...kracht, [catId]: { ...kracht[catId], [field]: val } };
+    setKracht(next);
+    saveKrachtStore(currentDate, next);
+  }
+
+  function applyProgression(catId, sug) {
+    const { note: _n, ...fields } = sug;
+    const next = { ...kracht, [catId]: { ...kracht[catId], ...fields } };
+    setKracht(next);
+    saveKrachtStore(currentDate, next);
+  }
+
+  const doneCats = KRACHT_CATS.filter(c => kracht[c.id]?.sets > 0).length;
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-accent" style={{ background: '#7C3AED' }} />
+        <div className="card-title">💪 Kracht</div>
+        {doneCats > 0 && (
+          <span style={{ fontSize: 10, background: '#F3E8FF', color: '#7C3AED', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>
+            {doneCats}/{KRACHT_CATS.length} ✓
+          </span>
+        )}
+      </div>
+      <div className="card-body" style={{ padding: 0 }}>
+        {lastSession && (
+          <div style={{ padding: '6px 14px 4px', fontSize: 10, color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
+            Vorige sessie: <strong>{lastSession.date}</strong> · Progressive overload ↓
+          </div>
+        )}
+        {KRACHT_CATS.map(cat => {
+          const catData = kracht[cat.id] || {};
+          const prevData = lastSession?.data?.[cat.id];
+          const suggestion = prevData ? getProgression(prevData) : null;
+          const isOpen = openCat === cat.id;
+          const isDone = (catData.sets ?? 0) > 0;
+
+          return (
+            <div key={cat.id} style={{ borderBottom: '1px solid var(--border)' }}>
+              <div
+                onClick={() => setOpenCat(isOpen ? null : cat.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 14px', cursor: 'pointer',
+                  background: isDone ? '#F3E8FF20' : undefined,
+                }}
+              >
+                <span style={{ fontSize: 18 }}>{cat.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: isDone ? '#7C3AED' : 'var(--text)' }}>{cat.label}</div>
+                  {isDone ? (
+                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                      {catData.exercise && `${catData.exercise} · `}{catData.sets}×{catData.reps ?? '—'}{catData.weight > 0 ? ` · ${catData.weight}kg` : ''}{catData.rir != null ? ` · RIR ${catData.rir}` : ''}
+                    </div>
+                  ) : suggestion ? (
+                    <div style={{ fontSize: 10, color: '#7C3AED' }}>↑ {suggestion.note}</div>
+                  ) : prevData ? (
+                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>Vorige: {prevData.sets}×{prevData.reps ?? '—'}{prevData.weight > 0 ? ` · ${prevData.weight}kg` : ''}</div>
+                  ) : null}
+                </div>
+                <span style={{ fontSize: 11, color: isDone ? '#7C3AED' : 'var(--muted)' }}>
+                  {isDone ? '✓' : isOpen ? '▲' : '▼'}
+                </span>
+              </div>
+
+              {isOpen && (
+                <div style={{ padding: '6px 14px 14px', background: 'var(--bg)' }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4, fontWeight: 700, letterSpacing: 0.5 }}>OEFENING</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {cat.exercises.map(ex => (
+                        <button key={ex} onClick={() => update(cat.id, 'exercise', catData.exercise === ex ? null : ex)} style={{
+                          fontSize: 11, padding: '4px 10px', borderRadius: 99, border: '1.5px solid', cursor: 'pointer',
+                          background: catData.exercise === ex ? '#7C3AED' : 'var(--bg)',
+                          color: catData.exercise === ex ? 'white' : 'var(--text)',
+                          borderColor: catData.exercise === ex ? '#7C3AED' : 'var(--border)',
+                        }}>{ex}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {suggestion && (
+                    <div style={{ marginBottom: 10, padding: '6px 10px', background: '#F3E8FF', borderRadius: 8, fontSize: 11, color: '#6D28D9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                      <span style={{ flex: 1 }}>↑ {suggestion.note}</span>
+                      <button onClick={() => applyProgression(cat.id, suggestion)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: '#7C3AED', color: 'white', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+                        Overnemen
+                      </button>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                    {[
+                      { field: 'sets',   label: 'Sets', ph: '3' },
+                      { field: 'reps',   label: 'Reps', ph: cat.reps ? String(cat.reps) : '10' },
+                      { field: 'weight', label: 'Kg',   ph: '0' },
+                      { field: 'rir',    label: 'RIR',  ph: '2' },
+                    ].map(({ field, label, ph }) => (
+                      <div key={field}>
+                        <div style={{ fontSize: 9, color: 'var(--muted)', marginBottom: 3, textAlign: 'center', fontWeight: 700, letterSpacing: 0.5 }}>{label}</div>
+                        <input
+                          type="number"
+                          placeholder={ph}
+                          value={catData[field] ?? ''}
+                          min={0}
+                          onChange={e => update(cat.id, field, e.target.value === '' ? null : +e.target.value)}
+                          style={{ textAlign: 'center', padding: '6px 2px', fontSize: 15, fontWeight: 700 }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 5 }}>
+                    RIR = Reps in Reserve (0 = tot falen · 3 = 3 reps over)
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {!lastSession && doneCats === 0 && (
+          <div style={{ padding: '10px 14px', fontSize: 11, color: 'var(--muted)' }}>
+            Tik een categorie om te beginnen. Na de eerste sessie verschijnen progressive overload suggesties.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Training({ log, saveField, saveFields, currentDate, showFlash, logs }) {
   const [openRun, setOpenRun] = useState(null);
   const [openEx, setOpenEx] = useState({});
@@ -556,6 +744,9 @@ export default function Training({ log, saveField, saveFields, currentDate, show
           </>
         );
       })()}
+
+      {/* Kracht Module */}
+      <KrachtModuleCard currentDate={currentDate} />
 
       {/* Strava */}
       <div className="card">

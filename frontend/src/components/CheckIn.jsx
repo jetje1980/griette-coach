@@ -643,6 +643,89 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         );
       })()}
 
+      {/* Post-training RPE — alleen tonen als er vandaag getraind is */}
+      {!isFuture && (() => {
+        const trainedToday = log?.run_done || log?.core_done || (log?.training_zone && log?.training_zone !== 'rust');
+        if (!trainedToday) return null;
+        return (
+          <div className="card" style={{ borderLeft: '3px solid var(--sage)' }}>
+            <div className="card-header">
+              <div className="card-accent" style={{ background: 'var(--sage)' }} />
+              <div className="card-title">🏁 Hoe was de training?</div>
+              {log?.training_rpe != null && <span style={{ fontSize: 10, color: 'var(--sage)', fontWeight: 700 }}>✓ ingevuld</span>}
+            </div>
+            <div className="card-body">
+              <div className="scale-label">RPE — INSPANNINGSNIVEAU (1 = heel licht · 10 = maximaal)</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                  <button key={n} className="btn" style={{
+                    padding: '6px 8px', fontSize: 12, minWidth: 34,
+                    background: log?.training_rpe === n ? 'var(--sage)' : 'var(--bg)',
+                    color: log?.training_rpe === n ? 'white' : 'var(--text)',
+                    border: `1.5px solid ${log?.training_rpe === n ? 'var(--sage)' : 'var(--border)'}`,
+                  }} onClick={() => saveField('training_rpe', log?.training_rpe === n ? null : n)}>{n}</button>
+                ))}
+              </div>
+              {log?.training_rpe != null && (
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
+                  {log.training_rpe <= 3 ? '😊 Heel licht — had je meer kunnen doen?' :
+                   log.training_rpe <= 5 ? '😐 Gematigd — goed voor zone B' :
+                   log.training_rpe <= 7 ? '😤 Pittig — let op herstel' :
+                   '🔴 Zwaar — morgen extra rust nodig'}
+                </div>
+              )}
+              <div className="scale-label" style={{ marginTop: 12 }}>BENEN & SPIEREN</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                {[
+                  { v: 'fris',    label: 'Fris',    emoji: '✨' },
+                  { v: 'normaal', label: 'Normaal', emoji: '👍' },
+                  { v: 'zwaar',   label: 'Zwaar',   emoji: '🦵' },
+                ].map(opt => (
+                  <button key={opt.v} className="btn" style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    padding: '8px 4px', gap: 2,
+                    background: log?.training_legs === opt.v ? 'var(--sage-l)' : 'var(--bg)',
+                    borderColor: log?.training_legs === opt.v ? 'var(--sage)' : 'var(--border)',
+                    color: log?.training_legs === opt.v ? 'var(--sage)' : 'var(--text)',
+                  }} onClick={() => saveField('training_legs', log?.training_legs === opt.v ? null : opt.v)}>
+                    <span style={{ fontSize: 14 }}>{opt.emoji}</span>
+                    <span style={{ fontSize: 10 }}>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="scale-label" style={{ marginTop: 12 }}>HAD JE MEER KUNNEN DOEN?</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                {[
+                  { v: 'ja',     label: 'Ja',     emoji: '💪' },
+                  { v: 'beetje', label: 'Beetje', emoji: '😊' },
+                  { v: 'nee',    label: 'Nee',    emoji: '😤' },
+                ].map(opt => (
+                  <button key={opt.v} className="btn" style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    padding: '8px 4px', gap: 2,
+                    background: log?.training_could_more === opt.v ? '#EFF6FF' : 'var(--bg)',
+                    borderColor: log?.training_could_more === opt.v ? '#3B82F6' : 'var(--border)',
+                    color: log?.training_could_more === opt.v ? '#1D4ED8' : 'var(--text)',
+                  }} onClick={() => saveField('training_could_more', log?.training_could_more === opt.v ? null : opt.v)}>
+                    <span style={{ fontSize: 14 }}>{opt.emoji}</span>
+                    <span style={{ fontSize: 10 }}>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+              {(log?.training_rpe != null || log?.training_legs || log?.training_could_more) && (
+                <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--sage-l)', borderRadius: 8, fontSize: 11, color: 'var(--text)', lineHeight: 1.5 }}>
+                  {log?.training_could_more === 'ja' && (log?.training_rpe ?? 10) <= 5
+                    ? '💡 Goede belastbaarheid — overweeg volgende keer iets meer herhalingen of langere run-blokken'
+                    : (log?.training_rpe ?? 0) >= 8 || log?.training_legs === 'zwaar'
+                    ? '⚠️ Hoge inspanning — zorg morgen voor actief herstel of rustdag'
+                    : '✓ Training gelogd — coach neemt dit mee in het besluit van morgen'}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Medicatie — dagelijks, prioriteit */}
       <div className="card">
         <div className="card-header">

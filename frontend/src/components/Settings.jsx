@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { store } from '../store';
 
 const FOOD_PREF_KEY = 'gc_food_prefs';
@@ -38,6 +38,83 @@ function loadPrefs() {
     localStorage.setItem(FOOD_PREF_KEY, JSON.stringify(defaults));
     return defaults;
   } catch { return {}; }
+}
+
+function DataPortability() {
+  const [importStatus, setImportStatus] = useState(null);
+  const fileRef = useRef(null);
+
+  function exportData() {
+    const data = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('gc_')) {
+        try { data[key] = JSON.parse(localStorage.getItem(key)); }
+        catch { data[key] = localStorage.getItem(key); }
+      }
+    }
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `griette-coach-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        let count = 0;
+        Object.entries(data).forEach(([key, val]) => {
+          if (typeof key === 'string' && key.startsWith('gc_')) {
+            localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val));
+            count++;
+          }
+        });
+        setImportStatus({ ok: true, msg: `✓ ${count} items hersteld — herlaad de app om alles te zien` });
+      } catch {
+        setImportStatus({ ok: false, msg: 'Ongeldig bestand — selecteer een geldig backup-bestand' });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div className="card-header">
+        <div className="card-accent" style={{ background: '#0EA5E9' }} />
+        <div className="card-title">📤 Data export / import</div>
+      </div>
+      <div className="card-body">
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.6 }}>
+          Download alle daglogboek-data als JSON-bestand, of herstel vanuit een eerder backup-bestand.
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-sage" style={{ flex: 1 }} onClick={exportData}>
+            📥 Download backup
+          </button>
+          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => fileRef.current?.click()}>
+            📂 Herstel backup
+          </button>
+        </div>
+        <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+        {importStatus && (
+          <div style={{ marginTop: 8, fontSize: 11, fontWeight: 600, color: importStatus.ok ? 'var(--sage)' : 'var(--alert)' }}>
+            {importStatus.msg}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function FoodPrefs() {
@@ -255,6 +332,9 @@ export default function Settings({ onClose }) {
             {backupResult && <div className="saved-note" style={{ marginTop: 6 }}>{backupResult}</div>}
           </div>
         </div>
+
+        {/* Data export / import */}
+        <DataPortability />
 
         {/* Voedingsvoorkuren */}
         <FoodPrefs />
