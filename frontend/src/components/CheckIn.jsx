@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HABITS, MEDS, BP, PERSONAL_EVENTS, PRN_MEDS, SUPPLEMENTS, USER } from '../config';
 import CoachAdvice from './CoachAdvice';
 
@@ -287,6 +287,185 @@ function CardGroup({ title, emoji, children, defaultOpen = false }) {
         <span style={{ fontSize: 11, color: 'var(--muted)' }}>{open ? '▲' : '▼'}</span>
       </div>
       {open && <div>{children}</div>}
+    </div>
+  );
+}
+
+// ─── Capture Inbox ────────────────────────────────────────────────────────────
+
+const INBOX_KEY = 'gc_inbox';
+
+function loadInbox() {
+  try { return JSON.parse(localStorage.getItem(INBOX_KEY) || '[]'); } catch { return []; }
+}
+
+function CaptureInbox() {
+  const [items, setItems] = useState(loadInbox);
+  const [input, setInput] = useState('');
+  const [showProcessed, setShowProcessed] = useState(false);
+  const inputRef = useRef(null);
+
+  function saveInbox(updated) {
+    setItems(updated);
+    localStorage.setItem(INBOX_KEY, JSON.stringify(updated));
+  }
+
+  function add() {
+    const text = input.trim();
+    if (!text) return;
+    saveInbox([{ id: Date.now().toString(), text, date: new Date().toISOString().slice(0, 10), status: 'open' }, ...items]);
+    setInput('');
+    inputRef.current?.focus();
+  }
+
+  function setStatus(id, status) {
+    saveInbox(items.map(item => item.id === id ? { ...item, status } : item));
+  }
+
+  function removeItem(id) {
+    saveInbox(items.filter(item => item.id !== id));
+  }
+
+  const openItems      = items.filter(i => i.status === 'open');
+  const processedItems = items.filter(i => i.status !== 'open');
+
+  const ACTION_OPTS = [
+    { s: 'done',     label: '✓ Doen',      color: 'var(--sage)'  },
+    { s: 'plannen',  label: '📅 Plannen',  color: '#3B82F6'       },
+    { s: 'delegeer', label: '👋 Delegeer', color: '#F59E0B'       },
+    { s: 'park',     label: '💤 Parkeer',  color: '#94A3B8'       },
+  ];
+
+  const STATUS_EMOJI = { done: '✓', plannen: '📅', delegeer: '👋', park: '💤' };
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-accent" style={{ background: '#6366F1' }} />
+        <div className="card-title">⚡ Capture Inbox</div>
+        {openItems.length > 0 && (
+          <span style={{ fontSize: 10, background: '#EEF2FF', color: '#4338CA', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>
+            {openItems.length} open
+          </span>
+        )}
+      </div>
+      <div className="card-body">
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+          Dump alles hier — ideeën, taken, zorgen. Snel vastleggen, later beslissen.
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Typ iets wat in je hoofd zit…"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && add()}
+            style={{ flex: 1, fontSize: 13 }}
+          />
+          <button className="btn" style={{ fontWeight: 800, fontSize: 16, padding: '6px 14px', background: '#6366F1', color: 'white', border: 'none' }} onClick={add}>+</button>
+        </div>
+
+        {openItems.length === 0 && (
+          <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', padding: '4px 0 8px' }}>Inbox leeg — hoofd is vrij ✓</div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {openItems.map(item => (
+            <div key={item.id} style={{ background: 'var(--bg)', borderRadius: 8, padding: '8px 10px', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 6, lineHeight: 1.4 }}>{item.text}</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {ACTION_OPTS.map(({ s, label, color }) => (
+                  <button key={s} onClick={() => setStatus(item.id, s)} style={{
+                    fontSize: 10, padding: '3px 8px', borderRadius: 99,
+                    border: `1px solid ${color}50`, background: 'var(--bg)',
+                    color, cursor: 'pointer',
+                  }}>{label}</button>
+                ))}
+                <button onClick={() => removeItem(item.id)} style={{
+                  fontSize: 10, padding: '3px 8px', borderRadius: 99,
+                  border: '1px solid var(--border)', background: 'var(--bg)',
+                  color: 'var(--muted)', cursor: 'pointer',
+                }}>🗑️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {processedItems.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div onClick={() => setShowProcessed(v => !v)} style={{ fontSize: 10, color: 'var(--muted)', cursor: 'pointer', padding: '4px 0', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+              <span>{processedItems.length} verwerkte items</span>
+              <span>{showProcessed ? '▲' : '▼'}</span>
+            </div>
+            {showProcessed && processedItems.map(item => (
+              <div key={item.id} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '5px 0', fontSize: 11, color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 12 }}>{STATUS_EMOJI[item.status] || '?'}</span>
+                <span style={{ flex: 1, textDecoration: item.status === 'done' ? 'line-through' : 'none' }}>{item.text}</span>
+                <button onClick={() => setStatus(item.id, 'open')} style={{ fontSize: 9, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>↩</button>
+                <button onClick={() => removeItem(item.id)} style={{ fontSize: 9, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Shutdown Protocol ────────────────────────────────────────────────────────
+
+const SHUTDOWN_STEPS = [
+  { id: 'capture',  label: 'Open eindjes gecaptured in inbox' },
+  { id: 'priority', label: 'Topprioriteit voor morgen gekozen' },
+  { id: 'agenda',   label: 'Agenda morgen gecheckt' },
+  { id: 'park',     label: 'Nieuwe ideeën geparkeerd' },
+  { id: 'close',    label: 'Werkapps gesloten — status: UIT' },
+];
+
+function ShutdownProtocol({ currentDate }) {
+  const key = `gc_shutdown_${currentDate}`;
+  const [steps, setSteps] = useState(() => { try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch { return {}; } });
+
+  const doneCount  = SHUTDOWN_STEPS.filter(s => steps[s.id]).length;
+  const isComplete = doneCount === SHUTDOWN_STEPS.length;
+
+  function toggle(id) {
+    const next = { ...steps, [id]: !steps[id] };
+    setSteps(next);
+    localStorage.setItem(key, JSON.stringify(next));
+  }
+
+  return (
+    <div className="card" style={{ borderLeft: `3px solid ${isComplete ? 'var(--sage)' : '#6366F1'}` }}>
+      <div className="card-header">
+        <div className="card-accent" style={{ background: isComplete ? 'var(--sage)' : '#6366F1' }} />
+        <div className="card-title">🔒 Werkdag shutdown</div>
+        <span style={{ fontSize: 10, fontWeight: 700, background: isComplete ? 'var(--sage-l)' : '#EEF2FF', color: isComplete ? 'var(--sage)' : '#4338CA', padding: '2px 8px', borderRadius: 99 }}>
+          {doneCount}/{SHUTDOWN_STEPS.length}
+        </span>
+      </div>
+      <div className="card-body">
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+          15 minuten om goed af te ronden — zodat je hoofd ook echt kan stoppen.
+        </div>
+        {SHUTDOWN_STEPS.map(step => (
+          <div key={step.id} className={`med-item ${steps[step.id] ? 'checked' : ''}`} onClick={() => toggle(step.id)}>
+            <div className="checkbox" style={{
+              borderColor: steps[step.id] ? 'var(--sage)' : undefined,
+              background: steps[step.id] ? 'var(--sage)' : undefined,
+            }}>{steps[step.id] ? '✓' : ''}</div>
+            <div style={{ flex: 1, fontSize: 12, color: steps[step.id] ? 'var(--muted)' : 'var(--text)', textDecoration: steps[step.id] ? 'line-through' : 'none' }}>
+              {step.label}
+            </div>
+          </div>
+        ))}
+        {isComplete && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--sage-l)', borderRadius: 8, fontSize: 12, color: 'var(--sage)', fontWeight: 700, textAlign: 'center', lineHeight: 1.5 }}>
+            ✓ Werk is klaar. Geniet van je avond.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -598,6 +777,36 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
 
       {/* Dag Focus — progressie gevoel */}
       {!isFuture && <DagFocus log={log} logs={logs} currentDate={currentDate} />}
+
+      {/* Dag Capaciteit — type dag instellen voor Coach */}
+      {!isFuture && (
+        <div style={{ marginBottom: 10, borderRadius: 10, border: '1.5px solid var(--border)', background: 'var(--card)', overflow: 'hidden' }}>
+          <div style={{ padding: '7px 14px 4px', fontSize: 9, fontWeight: 700, color: 'var(--muted)', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+            Type dag
+          </div>
+          <div style={{ display: 'flex', padding: '0 10px 10px', gap: 6 }}>
+            {[
+              { v: 'minimum', label: 'Minimum', emoji: '🪫', color: '#94A3B8' },
+              { v: 'normaal',  label: 'Normaal', emoji: '⚡', color: 'var(--sage)' },
+              { v: 'hoog',    label: 'Hoog',    emoji: '🚀', color: '#F59E0B' },
+              { v: 'herstel', label: 'Herstel', emoji: '🛌', color: '#3B82F6' },
+            ].map(opt => {
+              const sel = log?.day_capacity === opt.v;
+              return (
+                <button key={opt.v} onClick={() => saveField('day_capacity', sel ? null : opt.v)} style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  padding: '7px 4px', gap: 3, borderRadius: 8,
+                  border: `1.5px solid ${sel ? opt.color : 'var(--border)'}`,
+                  background: sel ? `${opt.color}20` : 'var(--bg)', cursor: 'pointer',
+                }}>
+                  <span style={{ fontSize: 18 }}>{opt.emoji}</span>
+                  <span style={{ fontSize: 10, fontWeight: sel ? 800 : 500, color: sel ? opt.color : 'var(--muted)' }}>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Expert coaching advice — dagelijkse status */}
       {!isFuture && <CoachAdvice log={log} logs={logs} currentDate={currentDate} />}
@@ -1898,6 +2107,12 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
       </div>
 
       </CardGroup>
+
+      {/* Capture Inbox */}
+      <CaptureInbox />
+
+      {/* Shutdown Protocol */}
+      {!isFuture && <ShutdownProtocol currentDate={currentDate} />}
 
       {/* Notitie */}
       <div className="card">

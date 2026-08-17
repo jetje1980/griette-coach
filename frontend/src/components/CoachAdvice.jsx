@@ -113,6 +113,12 @@ export function computeHeadCoach(log, logs, currentDate) {
   else if (score <= 3.5) decision = 'AMBER';
   else                   decision = 'GREEN';
 
+  // Day capacity override (user explicitly set the day type)
+  const dayCapacity = log?.day_capacity;
+  if (dayCapacity === 'herstel' && decision === 'GREEN') decision = 'BLUE';
+  if (dayCapacity === 'herstel' && decision === 'AMBER') decision = 'BLUE';
+  if (dayCapacity === 'minimum' && decision === 'GREEN') decision = 'AMBER';
+
   // ── training recommendation ───────────────────────────────────────────────
   const nextNr  = getNextRunNr(logs);
   const nextRun = RUNS.find(r => r.nr === nextNr) || RUNS[RUNS.length - 1];
@@ -139,6 +145,10 @@ export function computeHeadCoach(log, logs, currentDate) {
 
   // ── why bullets (2-4 signals) ─────────────────────────────────────────────
   const why = [];
+
+  if (dayCapacity === 'herstel') why.unshift('Hersteldag ingesteld — rust heeft voorrang boven elke training');
+  if (dayCapacity === 'minimum') why.unshift('Minimum dag — basisroutine is het doel, training is secundair');
+  if (dayCapacity === 'hoog')    why.push('Hoge capaciteitsdag — goed moment voor de geplande training');
 
   if (pemToday)   why.push('PEM-achtig herstel vandaag gerapporteerd — hoogste prioriteit voor rust');
   if (pemYest)    why.push('Gisteren PEM-signalen — zenuwstelsel heeft 48u herstel nodig');
