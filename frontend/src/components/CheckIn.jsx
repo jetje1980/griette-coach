@@ -291,6 +291,82 @@ function CardGroup({ title, emoji, children, defaultOpen = false }) {
   );
 }
 
+// ─── Focus Season ────────────────────────────────────────────────────────────
+
+const DEFAULT_SEASON = {
+  name: 'Strong · Lean · Structured',
+  emoji: '💪',
+  primary: ['Lichaamscompositie', 'Loopschema (5km Ameland)', 'Dagstructuur'],
+  maintain: ['Werkprestatie'],
+  notNow: ['Grote nieuwe projecten'],
+};
+const SEASON_KEY = 'gc_focus_season';
+
+function FocusSeason() {
+  const [season, setSeason] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(SEASON_KEY)) || DEFAULT_SEASON; }
+    catch { return DEFAULT_SEASON; }
+  });
+  const [editing, setEditing] = useState(false);
+
+  function save(updated) { setSeason(updated); localStorage.setItem(SEASON_KEY, JSON.stringify(updated)); }
+
+  if (editing) return (
+    <div style={{ marginBottom: 10, borderRadius: 10, border: '1.5px solid #7C3AED30', background: 'var(--card)', padding: '10px 14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#7C3AED' }}>Focus Seizoen bewerken</div>
+        <button className="btn btn-sm" onClick={() => setEditing(false)} style={{ fontSize: 11, background: 'var(--sage)', color: 'white', border: 'none' }}>✓ Klaar</button>
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 700, marginBottom: 3 }}>SEIZOEN NAAM</div>
+        <input value={season.name} onChange={e => save({ ...season, name: e.target.value })} style={{ fontSize: 13 }} />
+      </div>
+      {[
+        { key: 'primary', label: 'PRIMAIRE FOCUS (één per regel)' },
+        { key: 'maintain', label: 'ONDERHOUDEN' },
+        { key: 'notNow', label: 'NIET NU' },
+      ].map(({ key, label }) => (
+        <div key={key} style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 700, marginBottom: 3 }}>{label}</div>
+          <textarea
+            value={(season[key] || []).join('\n')}
+            onChange={e => save({ ...season, [key]: e.target.value.split('\n').filter(l => l.trim()) })}
+            style={{ fontSize: 11, minHeight: 44, resize: 'vertical' }}
+            placeholder="Eén item per regel"
+          />
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', border: '1.5px solid #7C3AED30' }}>
+      <div style={{ padding: '7px 14px 5px', background: '#F3E8FF18', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 16 }}>{season.emoji}</span>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: '#7C3AED', letterSpacing: 0.8, textTransform: 'uppercase' }}>Focus Seizoen  </span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>{season.name}</span>
+        </div>
+        <button onClick={() => setEditing(true)} style={{ fontSize: 11, background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer' }}>✏️</button>
+      </div>
+      <div style={{ display: 'flex', borderTop: '1px solid #7C3AED12' }}>
+        {[
+          { key: 'primary', label: 'Primair', color: '#7C3AED' },
+          { key: 'maintain', label: 'Onderhoud', color: '#059669' },
+          { key: 'notNow', label: 'Niet nu', color: '#94A3B8' },
+        ].map(({ key, label, color }, idx) => (
+          <div key={key} style={{ flex: 1, padding: '5px 10px', borderRight: idx < 2 ? '1px solid #7C3AED10' : 'none' }}>
+            <div style={{ fontSize: 8, fontWeight: 700, color, letterSpacing: 0.5, marginBottom: 3, textTransform: 'uppercase' }}>{label}</div>
+            {(season[key] || []).map((item, i) => (
+              <div key={i} style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.5 }}>· {item}</div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Capture Inbox ────────────────────────────────────────────────────────────
 
 const INBOX_KEY = 'gc_inbox';
@@ -732,6 +808,18 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
 
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Re-entry detection: detect gap of 3+ days without logging
+  const reEntryGap = !isFuture && currentDate === todayStr ? (() => {
+    for (let i = 1; i <= 90; i++) {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() - i);
+      const dk = d.toISOString().slice(0, 10);
+      const l = logs?.[dk];
+      if (l && Object.keys(l).filter(k => k !== 'date').length > 2) return i;
+    }
+    return 0;
+  })() : 0;
+
   const handleDelete = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
     setConfirmDelete(false);
@@ -775,6 +863,43 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         )}
       </div>
 
+      {/* Re-entry Mode — toon na pauze van 3+ dagen */}
+      {reEntryGap >= 3 && (
+        <div className="card" style={{ borderLeft: '3px solid #3B82F6', marginBottom: 10 }}>
+          <div className="card-header">
+            <div className="card-accent" style={{ background: '#3B82F6' }} />
+            <div className="card-title">🔄 Re-entry Modus</div>
+            <span style={{ fontSize: 10, color: '#3B82F6', background: '#EFF6FF', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>
+              {reEntryGap} dagen pauze
+            </span>
+          </div>
+          <div className="card-body">
+            <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.6, marginBottom: 10 }}>
+              Welkom terug. Geen rode streaks, geen "je bent terug bij af" — gewoon opnieuw beginnen.
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6', marginBottom: 6 }}>Dag 1 re-entry plan:</div>
+            {[
+              'Agenda herstellen — kies één taak voor vandaag',
+              'Één normale maaltijd met voldoende eiwitten',
+              '20–30 min bewegen (wandelen is meer dan genoeg)',
+              'Was en sportspullen klaarleggen voor morgen',
+              'Op normale bedtijd gaan liggen',
+            ].map((step, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 11, color: 'var(--text)', padding: '3px 0', lineHeight: 1.4 }}>
+                <span style={{ color: '#3B82F6', fontWeight: 800, flexShrink: 0, minWidth: 14 }}>{i + 1}.</span>
+                <span>{step}</span>
+              </div>
+            ))}
+            <div style={{ marginTop: 10, fontSize: 10, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Daarna geleidelijk terug naar normaal. Een goede coach is niet alleen goed in progressie — maar vooral in snel terugkeren zonder overcorrectie.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Focus Seizoen — compact banner */}
+      {!isFuture && <FocusSeason />}
+
       {/* Dag Focus — progressie gevoel */}
       {!isFuture && <DagFocus log={log} logs={logs} currentDate={currentDate} />}
 
@@ -805,6 +930,57 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Energie planning — cognitieve belasting per dagdeel */}
+      {!isFuture && (
+        <div style={{ marginBottom: 10, borderRadius: 10, border: '1.5px solid var(--border)', background: 'var(--card)', overflow: 'hidden' }}>
+          <div style={{ padding: '7px 14px 4px', fontSize: 9, fontWeight: 700, color: 'var(--muted)', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+            Energie planning
+          </div>
+          <div style={{ display: 'flex', padding: '0 10px 10px', gap: 6 }}>
+            {[
+              { slot: 'energy_morning', label: 'Ochtend' },
+              { slot: 'energy_middag',  label: 'Middag'  },
+              { slot: 'energy_avond',   label: 'Avond'   },
+            ].map(({ slot, label }) => (
+              <div key={slot} style={{ flex: 1 }}>
+                <div style={{ fontSize: 9, color: 'var(--muted)', textAlign: 'center', marginBottom: 4, fontWeight: 700 }}>{label}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {[
+                    { v: 'hoog',   emoji: '🧠', label: 'Cognitief', color: '#7C3AED' },
+                    { v: 'middel', emoji: '💬', label: 'Middel',    color: '#3B82F6'  },
+                    { v: 'licht',  emoji: '📬', label: 'Licht',     color: '#059669'  },
+                    { v: 'fysiek', emoji: '🏃', label: 'Fysiek',    color: '#F59E0B'  },
+                    { v: 'vrij',   emoji: '🔓', label: 'Vrij',      color: '#94A3B8'  },
+                  ].map(opt => {
+                    const sel = log?.[slot] === opt.v;
+                    return (
+                      <button key={opt.v} onClick={() => saveField(slot, sel ? null : opt.v)} style={{
+                        display: 'flex', alignItems: 'center', gap: 4, padding: '4px 6px',
+                        borderRadius: 6, border: `1px solid ${sel ? opt.color : 'var(--border)'}`,
+                        background: sel ? `${opt.color}15` : 'var(--bg)', cursor: 'pointer',
+                        fontSize: 10, color: sel ? opt.color : 'var(--muted)', fontWeight: sel ? 700 : 400,
+                      }}>
+                        <span style={{ fontSize: 11 }}>{opt.emoji}</span>
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          {(log?.energy_morning || log?.energy_middag || log?.energy_avond) && (
+            <div style={{ padding: '0 14px 8px', fontSize: 10, color: 'var(--muted)', lineHeight: 1.5 }}>
+              {log?.energy_morning === 'hoog' && log?.energy_avond === 'hoog'
+                ? '⚠️ Zwaar werk de hele dag — vanavond geen complexe taken meer'
+                : log?.energy_avond === 'vrij' || log?.energy_avond === 'licht'
+                ? '✓ Avond bewust geblokt — goed voor herstel'
+                : null}
+            </div>
+          )}
         </div>
       )}
 
