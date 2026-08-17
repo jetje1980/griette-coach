@@ -1,16 +1,32 @@
-// Direct browser calls to Anthropic API
-// Requires anthropic-dangerous-direct-browser-access header
+// AI calls: tries server-side proxy first, falls back to direct browser access.
+// Server proxy requires ANTHROPIC_API_KEY in backend .env (preferred — keeps key off client).
+// Direct browser fallback uses gc_api_key from localStorage + dangerous-direct-browser-access header.
 
 const MODEL = 'claude-sonnet-4-6';
+const SERVER_ENDPOINT = '/api/ai/messages';
 
 function getKey() {
   return localStorage.getItem('gc_api_key') || '';
 }
 
-async function callClaude(messages, maxTokens = 1024) {
+async function callClaudeViaServer(messages, maxTokens) {
+  const r = await fetch(SERVER_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages }),
+  });
+  if (r.status === 503) return null; // server key not configured
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Server API fout ${r.status}`);
+  }
+  const data = await r.json();
+  return data.content[0].text;
+}
+
+async function callClaudeDirect(messages, maxTokens) {
   const key = getKey();
   if (!key) throw new Error('Geen API-sleutel ingesteld — ga naar Instellingen');
-
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -21,14 +37,25 @@ async function callClaude(messages, maxTokens = 1024) {
     },
     body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages }),
   });
-
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     throw new Error(err?.error?.message || `API fout ${r.status}`);
   }
-
   const data = await r.json();
   return data.content[0].text;
+}
+
+async function callClaude(messages, maxTokens = 1024) {
+  // Try server proxy first (no client-side key needed)
+  try {
+    const result = await callClaudeViaServer(messages, maxTokens);
+    if (result !== null) return result;
+  } catch (serverErr) {
+    // Server error (not 503) — rethrow only if no client key to fall back to
+    if (!getKey()) throw serverErr;
+  }
+  // Fall back to direct browser access with localStorage key
+  return callClaudeDirect(messages, maxTokens);
 }
 
 function buildContext(logs, measurements) {
@@ -573,7 +600,8 @@ ${measurementLines.length ? `MATEN VERLOOP (cm):\n${measurementLines.join('\n')}
 }
 
 export const ai = {
-  hasKey: () => !!getKey(),
+  // Returns true if client key is set OR server proxy is reachable (optimistic)
+  hasKey: () => !!getKey() || true,
 
   async coachCheck(logs, measurements) {
     const context = buildContext(logs, measurements);

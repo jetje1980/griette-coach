@@ -95,6 +95,47 @@ app.post('/api/backup', (req, res) => {
   }
 });
 
+// ── AI proxy ─────────────────────────────────────────────
+// Forwards requests to Anthropic API using server-side key.
+// Keeps the API key off the client.
+app.post('/api/ai/messages', async (req, res) => {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+  }
+
+  try {
+    const https = require('https');
+    const body = JSON.stringify(req.body);
+
+    const options = {
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+    };
+
+    const proxyReq = https.request(options, (proxyRes) => {
+      let data = '';
+      proxyRes.on('data', chunk => { data += chunk; });
+      proxyRes.on('end', () => {
+        res.status(proxyRes.statusCode).set('Content-Type', 'application/json').send(data);
+      });
+    });
+
+    proxyReq.on('error', err => res.status(502).json({ error: err.message }));
+    proxyReq.write(body);
+    proxyReq.end();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Strava ────────────────────────────────────────────────
 app.use('/api/strava', stravaRouter);
 
