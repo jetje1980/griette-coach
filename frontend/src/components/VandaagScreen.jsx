@@ -491,6 +491,14 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
           <div className={`os-card os-verdict ${verdict.cls}`}>
             <div className="os-v-status">{verdict.label} — {verdict.sub}</div>
             <div className="os-v-head">{coach.trainingDesc || 'Volg het schema van vandaag'}</div>
+            {coach.adaptive && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
+                background: 'rgba(0,0,0,0.06)', borderRadius: 8, padding: '4px 10px',
+                fontSize: 12, fontWeight: 600, marginBottom: 8, marginTop: 2 }}>
+                <span>{coach.adaptive.emoji}</span>
+                <span>{coach.adaptive.label}: {coach.adaptive.desc}</span>
+              </div>
+            )}
             <ul className="os-v-list">
               {(coach.why || []).slice(0, 3).map((w, i) => <li key={i}>{w}</li>)}
             </ul>

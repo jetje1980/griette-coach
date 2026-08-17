@@ -174,6 +174,47 @@ export function computeHeadCoach(log, logs, currentDate) {
   }
   const whyFinal = why.slice(0, 4);
 
+  // ── adaptive training state ──────────────────────────────────────────────
+  // BUILD: ready to progress · HOLD: repeat current · REPEAT: redo last
+  // DELOAD: reduce intensity · SWAP: change modality · TEST: re-entry check
+  let adaptiveState = 'BUILD';
+
+  const lastRunDone = Object.values(logs || {})
+    .filter(l => l.run_done && l.run_session)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const sessionsSinceRest = [yest, d2, d3].filter(l => l?.run_done || l?.core_done).length;
+  const recentAvgEnergy   = avg([yest?.energy, d2?.energy].filter(x => x != null));
+  const recentPem         = pemYest || (log?.symptom_pem && d2?.symptom_pem);
+  const highLoad          = recentTrainDays >= 3;
+
+  if (decision === 'RED') {
+    adaptiveState = 'DELOAD';
+  } else if (decision === 'BLUE') {
+    adaptiveState = recentPem ? 'DELOAD' : 'SWAP';
+  } else if (decision === 'AMBER') {
+    adaptiveState = (delayedBad || highLoad) ? (delayedBad ? 'REPEAT' : 'HOLD') : 'HOLD';
+  } else {
+    // GREEN
+    adaptiveState = sessionsSinceRest >= 3 ? 'DELOAD' : 'BUILD';
+  }
+
+  // TEST state: long gap + green
+  const daysSinceLastRun = lastRunDone
+    ? Math.floor((new Date(currentDate) - new Date(lastRunDone.date)) / 86400000)
+    : 999;
+  if (decision === 'GREEN' && daysSinceLastRun >= 5 && !highLoad) {
+    adaptiveState = 'TEST';
+  }
+
+  const ADAPTIVE_META = {
+    BUILD:  { emoji: '📈', label: 'Bouwen',      desc: 'Je bent klaar voor de volgende sessie in het schema.' },
+    HOLD:   { emoji: '⏸',  label: 'Houd tempo',  desc: 'Herhaal de huidige sessie — lichaam is nog niet klaar om te stappen.' },
+    REPEAT: { emoji: '🔄', label: 'Herhalen',    desc: 'Doe de vorige sessie opnieuw — de vorige keer was te zwaar.' },
+    DELOAD: { emoji: '📉', label: 'Terugschalen', desc: 'Vermoeidheid vraagt een stap terug — dit is goed herstelbeleid.' },
+    SWAP:   { emoji: '🔀', label: 'Wissel sport', desc: 'Hardlopen is nu te veel — wandel of zwem vandaag als alternatief.' },
+    TEST:   { emoji: '🧪', label: 'Test sessie',  desc: 'Je bent lang uit geweest — test belastbaarheid voorzichtig opnieuw.' },
+  };
+
   // ── colors ────────────────────────────────────────────────────────────────
   const COLORS = {
     GREEN: { color: '#2A7A4F', bg: '#E0F0E8', border: '#2A7A4F', emoji: '🟢', label: 'GROEN — TRAIN' },
@@ -183,7 +224,12 @@ export function computeHeadCoach(log, logs, currentDate) {
   };
   const c = COLORS[decision];
 
-  return { decision, trainingDesc, sessionLabel, why: whyFinal, ...c, score: Math.round(score * 10) / 10 };
+  return {
+    decision, trainingDesc, sessionLabel, why: whyFinal, ...c,
+    score: Math.round(score * 10) / 10,
+    adaptiveState,
+    adaptive: ADAPTIVE_META[adaptiveState],
+  };
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────

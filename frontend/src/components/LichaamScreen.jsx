@@ -393,6 +393,23 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     const runInfo = nextRun;
     return (
       <div>
+        {/* Adaptive training state */}
+        {coach.adaptive && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10,
+            background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10,
+            padding: '10px 14px', marginBottom: 10 }}>
+            <span style={{ fontSize: 22 }}>{coach.adaptive.emoji}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 2 }}>
+                {coach.adaptive.label}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.4 }}>
+                {coach.adaptive.desc}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Next run info */}
         <div className="os-card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
