@@ -4,6 +4,7 @@ import Trainingsplan from './Trainingsplan';
 import Ritme from './Ritme';
 import WeekFocus from './WeekFocus';
 import Calendar from './Calendar';
+import PlanningContext from './PlanningContext';
 
 const TABS = ['Schema', 'Ritme', 'Week', 'Kalender'];
 
@@ -12,6 +13,9 @@ export default function PlanningHub({ currentDate, logs, onSelectDate, maxDate }
 
   return (
     <div>
+      <div style={{ padding: '10px 14px 0' }}>
+        <PlanningContext />
+      </div>
       <SubTabs tabs={TABS} active={sub} onChange={setSub} />
       {sub === 0 && <Trainingsplan />}
       {sub === 1 && <Ritme />}
