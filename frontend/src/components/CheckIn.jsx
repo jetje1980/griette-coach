@@ -121,16 +121,25 @@ const SYMPTOMS = [
 ];
 
 const PRIK_SCHEMA = [
-  { date: '2026-06-05', nr: 5,  label: 'vr 5 jun'  },
-  { date: '2026-06-16', nr: 6,  label: 'ma 16 jun' },
-  { date: '2026-06-23', nr: 7,  label: 'ma 23 jun' },
-  { date: '2026-06-30', nr: 8,  label: 'ma 30 jun' },
-  { date: '2026-07-06', nr: 9,  label: 'ma 6 jul'  },
-  { date: '2026-07-17', nr: 10, label: 'vr 17 jul' },
-  { date: '2026-07-25', nr: 11, label: 'vr 25 jul' },
+  { date: '2026-08-21', nr: 1,  label: 'vr 21 aug' },
+  { date: '2026-08-28', nr: 2,  label: 'vr 28 aug' },
+  { date: '2026-09-04', nr: 3,  label: 'vr 4 sep'  },
+  { date: '2026-09-11', nr: 4,  label: 'vr 11 sep' },
+  { date: '2026-09-18', nr: 5,  label: 'vr 18 sep' },
+  { date: '2026-09-25', nr: 6,  label: 'vr 25 sep' },
+  { date: '2026-10-02', nr: 7,  label: 'vr 2 okt'  },
+  { date: '2026-10-09', nr: 8,  label: 'vr 9 okt'  },
+  { date: '2026-10-16', nr: 9,  label: 'vr 16 okt' },
+  { date: '2026-10-23', nr: 10, label: 'vr 23 okt' },
+  { date: '2026-10-30', nr: 11, label: 'vr 30 okt' },
+  { date: '2026-11-06', nr: 12, label: 'vr 6 nov'  },
+  { date: '2026-11-13', nr: 13, label: 'vr 13 nov' },
+  { date: '2026-11-20', nr: 14, label: 'vr 20 nov' },
+  { date: '2026-11-27', nr: 15, label: 'vr 27 nov' },
+  { date: '2026-12-04', nr: 16, label: 'vr 4 dec'  },
 ];
-const VACATION_DATE = '2026-07-25';
-const GOAL_WEIGHT   = 55;
+const VACATION_DATE = '2026-10-03';
+const GOAL_WEIGHT   = 57;
 
 function BpAlert({ sys, dia }) {
   if (!sys) return null;
@@ -486,7 +495,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
         <div className="card" style={{ background: 'linear-gradient(135deg, var(--card) 0%, var(--gold-l) 100%)' }}>
           <div className="card-header">
             <div className="card-accent" style={{ background: 'var(--gold)' }} />
-            <div className="card-title">🏖️ Sprint naar vakantie</div>
+            <div className="card-title">🏔️ Sprint naar trail 10 km</div>
             <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--gold)' }}>{daysToVacation} dagen</span>
           </div>
           <div className="card-body">
@@ -539,7 +548,7 @@ export default function CheckIn({ log, saveField, saveFields, currentDate, logs,
                 </span>
               )}
               {!volgendePrik && (
-                <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 700 }}>laatste prik voor vakantie!</span>
+                <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 700 }}>schema voltooid!</span>
               )}
             </div>
           </div>
