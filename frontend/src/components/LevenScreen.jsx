@@ -98,13 +98,24 @@ function TabGlow() {
       type: typeId, date: today, notes: '',
       subItems: [],
       intervalDays: tp?.defaultInterval || 28,
+      editingId: null,
+    });
+  }
+
+  function startEdit(ev) {
+    setAdding(ev.type);
+    setForm({
+      type: ev.type, date: ev.date, notes: ev.notes || '',
+      subItems: ev.subItems || [],
+      intervalDays: ev.intervalDays || 28,
+      editingId: ev.id,
     });
   }
 
   function saveAdd() {
     const tp = GLOW_TYPES.find(t => t.id === form.type);
-    const newEvent = {
-      id: Date.now(),
+    const event = {
+      id: form.editingId || Date.now(),
       type: form.type,
       date: form.date,
       notes: form.notes,
@@ -113,8 +124,14 @@ function TabGlow() {
       nextDate: glowAddDays(form.date, form.intervalDays || 28),
       label: tp?.label,
     };
-    persist([newEvent, ...events]);
+    const rest = events.filter(e => e.id !== event.id);
+    persist([event, ...rest].sort((a, b) => (b.date || '').localeCompare(a.date || '')));
     setAdding(null);
+  }
+
+  function removeEvent(id) {
+    if (!window.confirm('Deze behandeling verwijderen?')) return;
+    persist(events.filter(e => e.id !== id));
   }
 
   function daysUntil(dateStr) {
@@ -224,14 +241,22 @@ function TabGlow() {
       </div>
 
       {events.length > 0 && (
-        <ExpandSection label={`Geschiedenis (${events.length})`}>
+        <ExpandSection label={`Geschiedenis (${events.length}) — bewerken kan`}>
           <div>
-            {events.slice(0, 20).map(e => {
+            {events.slice(0, 30).map(e => {
               const gType = GLOW_TYPES.find(t => t.id === e.type);
               return (
                 <div key={e.id} className="os-detail-row">
-                  <span className="os-dk">{gType?.emoji} {gType?.label || e.type}</span>
-                  <span className="os-dv">{e.date}</span>
+                  <span className="os-dk">{gType?.emoji} {gType?.label || e.type}
+                    {e.notes ? <span style={{ color: 'var(--ghost)', fontSize: 11 }}> — {e.notes.slice(0, 24)}</span> : ''}
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="os-dv">{e.date}</span>
+                    <button onClick={() => startEdit(e)}
+                      style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 13 }}>✎</button>
+                    <button onClick={() => removeEvent(e.id)}
+                      style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 15 }}>×</button>
+                  </span>
                 </div>
               );
             })}
@@ -296,6 +321,15 @@ function TabProjecten() {
     persist(projects.map(p => p.id === id ? { ...p, status } : p));
   }
 
+  function updateProject(id, patch) {
+    persist(projects.map(p => p.id === id ? { ...p, ...patch } : p));
+  }
+
+  function removeProject(id) {
+    if (!window.confirm('Dit project verwijderen?')) return;
+    persist(projects.filter(p => p.id !== id));
+  }
+
   function changeWipLimit(v) {
     const n = Math.max(1, Math.min(9, parseInt(v, 10) || 3));
     localStorage.setItem(WIP_LIMIT_KEY, String(n));
@@ -306,47 +340,6 @@ function TabProjecten() {
   const waiting  = projects.filter(p => p.status === 'wacht');
   const parked   = projects.filter(p => p.status === 'park');
   const done     = projects.filter(p => p.status === 'klaar');
-
-  function ProjectCard({ project }) {
-    const [open, setOpen] = useState(false);
-    const statusInfo = PROJECT_STATUS.find(s => s.id === project.status);
-    return (
-      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-          onClick={() => setOpen(o => !o)}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 2 }}>{project.name}</div>
-            {project.nextAction && (
-              <div style={{ fontSize: 12, color: 'var(--sage)', fontWeight: 600 }}>→ {project.nextAction}</div>
-            )}
-          </div>
-          <div style={{ background: statusInfo?.color + '22', color: statusInfo?.color,
-            borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
-            {statusInfo?.label}
-          </div>
-        </div>
-        {open && (
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--divide)' }}>
-            {project.outcome && (
-              <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 10 }}>
-                <span style={{ fontWeight: 700 }}>Doel:</span> {project.outcome}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-              {PROJECT_STATUS.map(s => (
-                <button key={s.id}
-                  className={`os-toggle-chip ${project.status === s.id ? 'active green' : ''}`}
-                  onClick={() => updateStatus(project.id, s.id)}
-                  style={{ fontSize: 11 }}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -413,23 +406,23 @@ function TabProjecten() {
       {active.length > 0 && (
         <>
           <div className="os-section-label" style={{ marginTop: 0 }}>Actief ({active.length})</div>
-          {active.map(p => <ProjectCard key={p.id} project={p} />)}
+          {active.map(p => <ProjectCard key={p.id} project={p} updateStatus={updateStatus} updateProject={updateProject} removeProject={removeProject} />)}
         </>
       )}
       {waiting.length > 0 && (
         <>
           <div className="os-section-label">Wacht op…</div>
-          {waiting.map(p => <ProjectCard key={p.id} project={p} />)}
+          {waiting.map(p => <ProjectCard key={p.id} project={p} updateStatus={updateStatus} updateProject={updateProject} removeProject={removeProject} />)}
         </>
       )}
       {parked.length > 0 && (
         <ExpandSection label={`Geparkeerd (${parked.length})`}>
-          {parked.map(p => <ProjectCard key={p.id} project={p} />)}
+          {parked.map(p => <ProjectCard key={p.id} project={p} updateStatus={updateStatus} updateProject={updateProject} removeProject={removeProject} />)}
         </ExpandSection>
       )}
       {done.length > 0 && (
         <ExpandSection label={`Afgerond (${done.length})`}>
-          {done.map(p => <ProjectCard key={p.id} project={p} />)}
+          {done.map(p => <ProjectCard key={p.id} project={p} updateStatus={updateStatus} updateProject={updateProject} removeProject={removeProject} />)}
         </ExpandSection>
       )}
       {projects.length === 0 && !adding && (
@@ -443,6 +436,65 @@ function TabProjecten() {
     </div>
   );
 }
+
+// Module-level zodat de kaart niet remount (en dichtklapt) bij elke wijziging
+function ProjectCard({ project, updateStatus, updateProject, removeProject }) {
+  const [open, setOpen] = useState(false);
+  const statusInfo = PROJECT_STATUS.find(s => s.id === project.status);
+    return (
+      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+          onClick={() => setOpen(o => !o)}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 2 }}>{project.name}</div>
+            {project.nextAction && (
+              <div style={{ fontSize: 12, color: 'var(--sage)', fontWeight: 600 }}>→ {project.nextAction}</div>
+            )}
+          </div>
+          <div style={{ background: statusInfo?.color + '22', color: statusInfo?.color,
+            borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+            {statusInfo?.label}
+          </div>
+        </div>
+        {open && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--divide)' }}>
+            {/* Volledig bewerkbaar: naam, outcome, next action */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase', marginBottom: 3 }}>Naam</div>
+              <input className="os-input" defaultValue={project.name}
+                onBlur={e => e.target.value.trim() && updateProject(project.id, { name: e.target.value.trim() })} />
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase', marginBottom: 3 }}>Gewenst resultaat</div>
+              <input className="os-input" defaultValue={project.outcome || ''}
+                onBlur={e => updateProject(project.id, { outcome: e.target.value })} />
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase', marginBottom: 3 }}>Eerstvolgende actie</div>
+              <input className="os-input" defaultValue={project.nextAction || ''}
+                onBlur={e => updateProject(project.id, { nextAction: e.target.value })} />
+            </div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+              {PROJECT_STATUS.map(s => (
+                <button key={s.id}
+                  className={`os-toggle-chip ${project.status === s.id ? 'active green' : ''}`}
+                  onClick={() => updateStatus(project.id, s.id)}
+                  style={{ fontSize: 11 }}>
+                  {s.label}
+                </button>
+              ))}
+              <button onClick={() => removeProject(project.id)}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--rust)',
+                  cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                🗑 verwijder
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
 
 // ═══════════════════════════════════════════════════════════════
 // TAB: GELD
@@ -461,21 +513,57 @@ function loadGeld() {
 }
 function saveGeld(data) { localStorage.setItem(GELD_KEY, JSON.stringify(data)); }
 
+// Bufferhistorie: { id, date, amount, monthlySaving?, note? } — backdaten kan gewoon
+const GELD_HIST_KEY = 'gc_geld_history';
+export function loadGeldHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(GELD_HIST_KEY) || '[]')
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  } catch { return []; }
+}
+function saveGeldHistory(arr) {
+  localStorage.setItem(GELD_HIST_KEY, JSON.stringify(
+    [...arr].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  ));
+}
+
 function TabGeld() {
   const [data, setData] = useState(loadGeld);
   const [bufferInput, setBufferInput] = useState('');
   const [editing, setEditing] = useState(false);
   const [expForm, setExpForm] = useState({ label: '', amount: '', type: 'vast' });
   const [addingExp, setAddingExp] = useState(false);
+  const [history, setHistory] = useState(loadGeldHistory);
+  const [histForm, setHistForm] = useState(null); // {id?, date, amount, note}
 
   function persist(updated) { saveGeld(updated); setData(updated); }
+
+  function persistHistory(arr) {
+    saveGeldHistory(arr);
+    const sorted = loadGeldHistory();
+    setHistory(sorted);
+    // Buffer = meest recente stand uit de historie
+    if (sorted.length) persist({ ...data, buffer: sorted[0].amount });
+  }
 
   function saveBuffer() {
     const val = parseFloat(bufferInput.replace(',', '.'));
     if (isNaN(val)) return;
     persist({ ...data, buffer: val });
+    // Historie bijhouden zodat groei/tempo/ETA berekend kan worden
+    const today = new Date().toISOString().slice(0, 10);
+    persistHistory([{ id: `gh_${Date.now()}`, date: today, amount: val },
+      ...history.filter(h => h.date !== today)]);
     setBufferInput('');
     setEditing(false);
+  }
+
+  function saveHistEntry() {
+    const amount = parseFloat(String(histForm.amount || '').replace(',', '.'));
+    if (isNaN(amount) || !histForm.date) return;
+    const entry = { id: histForm.id || `gh_${Date.now()}`, date: histForm.date, amount, note: histForm.note || '' };
+    persistHistory([entry, ...history.filter(h => h.id !== entry.id)]);
+    setHistForm(null);
   }
 
   function addExpense() {
@@ -533,6 +621,52 @@ function TabGeld() {
           <button className="os-toggle-chip" onClick={() => { setEditing(true); setBufferInput(String(buffer)); }}
             style={{ fontSize: 13 }}>
             Buffer bijwerken
+          </button>
+        )}
+      </div>
+
+      {/* Bufferhistorie — ook oude standen met datum toevoegen */}
+      <div className="os-section-label">Bufferhistorie</div>
+      <div className="os-card">
+        {history.length === 0 && !histForm && (
+          <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 8 }}>
+            Nog geen historie. Voeg ook oude standen toe (met datum) — dan kan Progressie
+            groei en verwachte doelmaand berekenen.
+          </div>
+        )}
+        {history.slice(0, 8).map(h => (
+          <div key={h.id} className="os-detail-row">
+            <span className="os-dk">{h.date}{h.note ? <span style={{ color: 'var(--ghost)', fontSize: 11 }}> — {h.note}</span> : ''}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="os-dv" style={{ fontWeight: 700 }}>€{h.amount.toLocaleString('nl-NL')}</span>
+              <button onClick={() => setHistForm({ id: h.id, date: h.date, amount: String(h.amount), note: h.note || '' })}
+                style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 13 }}>✎</button>
+              <button onClick={() => { if (window.confirm('Deze stand verwijderen?')) persistHistory(history.filter(x => x.id !== h.id)); }}
+                style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 15 }}>×</button>
+            </span>
+          </div>
+        ))}
+        {histForm ? (
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--divide)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+              <input type="date" className="os-input" value={histForm.date}
+                onChange={e => setHistForm(f => ({ ...f, date: e.target.value }))} />
+              <input className="os-input" type="number" placeholder="bedrag (€)"
+                value={histForm.amount}
+                onChange={e => setHistForm(f => ({ ...f, amount: e.target.value }))} />
+            </div>
+            <input className="os-input" placeholder="notitie (optioneel)" value={histForm.note}
+              onChange={e => setHistForm(f => ({ ...f, note: e.target.value }))}
+              style={{ marginBottom: 8 }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="os-btn-save" onClick={saveHistEntry}>{histForm.id ? 'Bijwerken' : 'Toevoegen'}</button>
+              <button className="os-toggle-chip" onClick={() => setHistForm(null)}>Annuleer</button>
+            </div>
+          </div>
+        ) : (
+          <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 6 }}
+            onClick={() => setHistForm({ date: new Date().toISOString().slice(0, 10), amount: '', note: '' })}>
+            + Stand toevoegen (datum vrij te kiezen)
           </button>
         )}
       </div>
@@ -630,9 +764,14 @@ function saveRoutines(arr) { localStorage.setItem(ROUTINES_KEY, JSON.stringify(a
 function TabRoutines() {
   const [routines, setRoutines] = useState(loadRoutines);
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ name: '', stage: 'learning', trigger: '', time: '' });
 
   function persist(arr) { saveRoutines(arr); setRoutines(arr); }
+
+  function updateRoutine(id, patch) {
+    persist(routines.map(r => r.id === id ? { ...r, ...patch } : r));
+  }
 
   function add() {
     if (!form.name.trim()) return;
@@ -672,14 +811,38 @@ function TabRoutines() {
                 <div key={r.id} style={{ border: '1px solid var(--border)', borderRadius: 10,
                   padding: '10px 14px', marginBottom: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: r.trigger ? 2 : 0 }}>{r.name}</div>
-                      {r.trigger && (
-                        <div style={{ fontSize: 12, color: 'var(--sub)' }}>Na: {r.trigger}</div>
-                      )}
+                    {editingId === r.id ? (
+                      <div style={{ flex: 1, marginRight: 8 }}>
+                        <input className="os-input" defaultValue={r.name} autoFocus
+                          style={{ marginBottom: 6 }}
+                          onBlur={e => e.target.value.trim() && updateRoutine(r.id, { name: e.target.value.trim() })} />
+                        <input className="os-input" defaultValue={r.trigger || ''}
+                          placeholder="Trigger (na…)"
+                          onBlur={e => updateRoutine(r.id, { trigger: e.target.value })} />
+                        <input className="os-input" defaultValue={r.time || ''}
+                          placeholder="Moment/frequentie (bijv. dagelijks 8:00)"
+                          style={{ marginTop: 6 }}
+                          onBlur={e => updateRoutine(r.id, { time: e.target.value })} />
+                        <button className="os-toggle-chip" style={{ fontSize: 11, marginTop: 6 }}
+                          onClick={() => setEditingId(null)}>Klaar</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: r.trigger || r.time ? 2 : 0 }}>{r.name}</div>
+                        {r.trigger && (
+                          <div style={{ fontSize: 12, color: 'var(--sub)' }}>Na: {r.trigger}</div>
+                        )}
+                        {r.time && (
+                          <div style={{ fontSize: 11, color: 'var(--ghost)' }}>{r.time}</div>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => setEditingId(editingId === r.id ? null : r.id)}
+                        style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 13 }}>✎</button>
+                      <button onClick={() => window.confirm('Routine verwijderen?') && remove(r.id)}
+                        style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 16 }}>×</button>
                     </div>
-                    <button onClick={() => remove(r.id)}
-                      style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 16 }}>×</button>
                   </div>
                   <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
                     {ROUTINE_STAGES.map(s => (

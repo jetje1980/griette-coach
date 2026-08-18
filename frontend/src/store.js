@@ -100,6 +100,13 @@ export const store = {
     return ls.getMeasurements();
   },
 
+  async deleteMeasurement(date) {
+    const arr = ls.getMeasurements().filter(m => m.date !== date);
+    localStorage.setItem(`${P}measurements`, JSON.stringify(arr));
+    localStorage.setItem('gc_last_data_change', new Date().toISOString());
+    return { success: true };
+  },
+
   async saveMeasurements(date, data) {
     ls.saveMeasurements(date, data);
     await tryApi(() =>

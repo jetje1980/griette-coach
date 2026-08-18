@@ -6,8 +6,13 @@ import { RUNS } from '../data/runningSchema';
 import {
   PROGRAMS, PATTERN_LABELS, suggestedProgram, lastPerformance, overloadAdvice,
   upsertStrengthSession, getSessionFor, loadStrengthSessions, exerciseHistory,
+  saveStrengthSessions,
 } from '../data/strengthSchema';
-import { TRAINING_BLOCKS, getCurrentBlock, upcomingWeekFoci } from '../data/trainingBlocks';
+import { TRAINING_BLOCKS, getCurrentBlock, upcomingWeekFoci, blockExpectation } from '../data/trainingBlocks';
+import TrainingPlan from './TrainingPlan';
+import WorkoutForm from './WorkoutForm';
+import RecoveryCheck from './RecoveryCheck';
+import { workoutOn, loadWorkouts, computePace } from '../workouts';
 import { api } from '../api';
 import { store } from '../store';
 
@@ -75,11 +80,10 @@ const SUBTABS = ['Vandaag', 'Training', 'Herstel', 'Voeding', 'Cyclus', 'Maten',
 
 // ── Helpers ──────────────────────────────────────────────────────
 function getNextRunNr(logs) {
-  const done = new Set(
-    Object.values(logs || {}).filter(l => l.run_done && l.run_session).map(l => Number(l.run_session))
-  );
-  for (let n = 1; n <= RUNS.length; n++) if (!done.has(n)) return n;
-  return RUNS.length;
+  const done = Object.values(logs || {})
+    .filter(l => l.run_done && l.run_session).map(l => Number(l.run_session));
+  if (!done.length) return 1;
+  return Math.min(RUNS.length, Math.max(...done) + 1);
 }
 
 function ScaleBtns({ value, opts, onSelect }) {
@@ -187,12 +191,15 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
   const [entries, setEntries] = useState({});
   const [savedMsg, setSavedMsg] = useState('');
   const [histOpen, setHistOpen] = useState(false);
+  const [sessionDate, setSessionDate] = useState(currentDate);
 
   const prog = PROGRAMS[program] || PROGRAMS.A;
   const sessionsCount = loadStrengthSessions().filter(s => s.program !== 'snack').length;
 
+  useEffect(() => { setSessionDate(currentDate); }, [currentDate]);
+
   useEffect(() => {
-    const existing = getSessionFor(currentDate, program);
+    const existing = getSessionFor(sessionDate, program);
     if (existing) {
       const map = {};
       for (const e of existing.exercises || []) map[e.id] = e;
@@ -200,7 +207,7 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
     } else {
       setEntries({});
     }
-  }, [currentDate, program]);
+  }, [sessionDate, program]);
 
   function upd(exId, field, val) {
     setEntries(prev => ({ ...prev, [exId]: { ...(prev[exId] || { id: exId }), id: exId, [field]: val } }));
@@ -224,16 +231,39 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
       setTimeout(() => setSavedMsg(''), 2500);
       return;
     }
-    upsertStrengthSession({ id: `${currentDate}_${program}`, date: currentDate, program, exercises });
-    saveFields({ core_done: true, strength_done: true, strength_program: program });
-    setSavedMsg('Krachttraining opgeslagen ✓');
+    upsertStrengthSession({ id: `${sessionDate}_${program}`, date: sessionDate, program, exercises });
+    // Daglog van de sessiedatum markeren (ook bij backdaten)
+    store.saveLog(sessionDate, { core_done: true, strength_done: true, strength_program: program })
+      .then(() => saveFields?.({}))
+      .catch(() => {});
+    setSavedMsg(`Krachttraining opgeslagen ✓ (${sessionDate})`);
     setTimeout(() => setSavedMsg(''), 2500);
+  }
+
+  function deleteSession(date, prog2) {
+    if (!window.confirm(`Krachtsessie van ${date} verwijderen? Historie wordt herberekend.`)) return;
+    saveStrengthSessions(loadStrengthSessions().filter(s => !(s.date === date && s.program === prog2)));
+    setSavedMsg('Sessie verwijderd');
+    setTimeout(() => setSavedMsg(''), 2000);
+    setHistOpen(h => h); // re-render
+    setEntries(e => ({ ...e }));
   }
 
   const doneCount = prog.exercises.filter(ex => entries[ex.id]?.done).length;
 
   return (
     <div>
+      {/* Sessiedatum — ook een oude sessie kan gewoon worden ingevoerd */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.4px' }}>Datum</span>
+        <input type="date" className="os-input" value={sessionDate}
+          onChange={e => setSessionDate(e.target.value)} style={{ flex: 1 }} />
+        {sessionDate !== currentDate && (
+          <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 600 }}>historisch</span>
+        )}
+      </div>
+
       {/* Programma keuze */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
         {['A', 'B', 'snack'].map(p => (
@@ -261,7 +291,7 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
       {/* Oefeningen */}
       {prog.exercises.map(ex => {
         const e = entries[ex.id] || {};
-        const last = lastPerformance(ex.id, currentDate);
+        const last = lastPerformance(ex.id, sessionDate);
         return (
           <div key={ex.id} style={{ border: '1px solid var(--border)', borderRadius: 10,
             padding: '12px 14px', marginBottom: 8,
@@ -353,6 +383,22 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
       </button>
       {histOpen && (
         <div className="os-card" style={{ marginBottom: 8 }}>
+          {loadStrengthSessions().length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--ghost)', textTransform: 'uppercase',
+                letterSpacing: '0.4px', marginBottom: 4 }}>Sessies</div>
+              {loadStrengthSessions().slice(0, 10).map(s => (
+                <div key={`${s.date}_${s.program}`} className="os-detail-row" style={{ fontSize: 12 }}>
+                  <span className="os-dk">{s.date} · {PROGRAMS[s.program]?.emoji} {s.program === 'snack' ? 'Snack' : `Programma ${s.program}`}</span>
+                  <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span className="os-dv">{(s.exercises || []).filter(e => e.done).length} oef.</span>
+                    <button onClick={() => deleteSession(s.date, s.program)}
+                      style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 15 }}>×</button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           {[...PROGRAMS.A.exercises, ...PROGRAMS.B.exercises].map(ex => {
             const hist = exerciseHistory(ex.id, 5);
             if (!hist.length) return null;
@@ -436,6 +482,19 @@ function RunRoadmap({ logs, currentDate, nextSession }) {
         <div style={{ fontSize: 12, color: 'var(--rust)', lineHeight: 1.5 }}>
           <span style={{ fontWeight: 700 }}>Bewust niet: </span>{block.not}
         </div>
+        {(() => {
+          const exp = blockExpectation(currentDate);
+          if (!exp || exp.shiftDays === 0) return null;
+          return (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--divide)',
+              fontSize: 12, lineHeight: 1.5 }}>
+              <div><span style={{ fontWeight: 700 }}>Oorspronkelijk einde:</span> {exp.originalEnd}</div>
+              <div style={{ color: 'var(--gold)', fontWeight: 700 }}>Nieuwe verwachting: {exp.expectedEnd}</div>
+              <div style={{ color: 'var(--sub)' }}>Reden: {exp.reason}</div>
+              {exp.raceNote && <div style={{ color: 'var(--ghost)', marginTop: 3 }}>{exp.raceNote}</div>}
+            </div>
+          );
+        })()}
       </div>
 
       {/* B: Deze week */}
@@ -530,7 +589,7 @@ function RunRoadmap({ logs, currentDate, nextSession }) {
 }
 
 // ── Main component ───────────────────────────────────────────────
-export default function LichaamScreen({ log, logs, currentDate, saveField, saveFields, showFlash, isFuture }) {
+export default function LichaamScreen({ log, logs, currentDate, saveField, saveFields, deleteLog, showFlash, isFuture }) {
   const [subTab, setSubTab] = useState(0);
   const [weight, setWeight] = useState('');
   const [bpSys, setBpSys] = useState('');
@@ -540,6 +599,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   const [flash, setFlash] = useState('');
   const [measurements, setMeasurements] = useState([]);
   const [maten, setMaten] = useState({ waist: '', hip: '', chest: '', arm: '', thigh: '' });
+  const [matenDate, setMatenDate] = useState(currentDate);
   const [savingMaten, setSavingMaten] = useState(false);
   const [stravaStatus, setStravaStatus] = useState(null);
   const [stravaActivities, setStravaActivities] = useState([]);
@@ -551,6 +611,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     setBpDia (log?.bp_dia    ? String(log.bp_dia)         : '');
     setBattStart(log?.battery_start != null ? String(log.battery_start) : '');
     setBattEnd  (log?.battery_end   != null ? String(log.battery_end)   : '');
+    setMatenDate(currentDate);
   }, [log, currentDate]);
 
   useEffect(() => {
@@ -563,6 +624,9 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   }, []);
 
   const [trainMode, setTrainMode] = useState('run');
+  const [showWorkoutForm, setShowWorkoutForm] = useState(false);
+  const [editingWorkout, setEditingWorkout] = useState(null);
+  const [planRefresh, setPlanRefresh] = useState(0);
 
   const coach = computeHeadCoach(log, logs, currentDate);
   const r = READINESS_MAP[coach.decision] || READINESS_MAP.AMBER;
@@ -628,7 +692,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     if (!Object.keys(vals).length) return;
     setSavingMaten(true);
     try {
-      await store.saveMeasurements(currentDate, vals);
+      await store.saveMeasurements(matenDate || currentDate, vals);
       const updated = await store.getMeasurements();
       setMeasurements(updated);
       setMaten({ waist: '', hip: '', chest: '', arm: '', thigh: '' });
@@ -743,6 +807,16 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
             style={{ resize: 'vertical', fontFamily: 'var(--font)', lineHeight: 1.55, width: '100%' }}
           />
         </div>
+
+        {log && deleteLog && (
+          <button className="os-toggle-chip"
+            style={{ fontSize: 12, color: 'var(--rust)', borderColor: 'var(--rust)', alignSelf: 'flex-start' }}
+            onClick={() => {
+              if (window.confirm(`Alle dagdata van ${currentDate} verwijderen? Trends worden herberekend.`)) deleteLog();
+            }}>
+            🗑 Dagdata van {currentDate} verwijderen
+          </button>
+        )}
       </div>
     );
   }
@@ -769,6 +843,11 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
         )}
 
         {trainMode === 'run' && (<>
+        {/* Herstelcheck — closed loop: eerst check, dan vrijgave */}
+        {!isFuture && (
+          <RecoveryCheck log={log} logs={logs} currentDate={currentDate} saveField={saveField} />
+        )}
+
         {/* Adaptive training state */}
         {coach.adaptive && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10,
@@ -782,6 +861,11 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
               <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.4 }}>
                 {coach.adaptive.desc}
               </div>
+              {coach.gateReason && (
+                <div style={{ fontSize: 12, color: 'var(--rust)', fontWeight: 600, lineHeight: 1.4, marginTop: 4 }}>
+                  {coach.gateReason}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -818,16 +902,43 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
           </div>
         </div>
 
-        {/* Run done — with run_session fix */}
+        {/* Training registreren — handmatig / screenshot / Strava, één WorkoutResult */}
         {!isFuture && (
           <>
             <SectionLabel style={{ marginTop: 0 }}>Vastleggen</SectionLabel>
-            <CheckItem
-              checked={!!log?.run_done}
-              label="Hardlopen gedaan"
-              sub={log?.run_session ? `T${log.run_session}/35 opgeslagen` : `Slaat op als T${nextRunNr}/35`}
-              onClick={() => saveRunDone(!log?.run_done)}
-            />
+            {(() => {
+              const todayW = workoutOn(currentDate);
+              return todayW ? (
+                <div style={{ background: 'var(--card)', border: '1px solid var(--green)', borderRadius: 10,
+                  padding: '10px 14px', marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)', marginBottom: 2 }}>
+                    ✓ Training geregistreerd{todayW.plannedSessionId ? ` — T${todayW.plannedSessionId}` : ''}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--sub)' }}>
+                    {[todayW.distance ? `${todayW.distance} km` : null,
+                      todayW.duration ? `${todayW.duration} min` : null,
+                      (todayW.averagePace || computePace(todayW.distance, todayW.duration)) ? `${todayW.averagePace || computePace(todayW.distance, todayW.duration)}/km` : null,
+                      todayW.averageHR ? `HR ${todayW.averageHR}` : null,
+                      todayW.rpe != null ? `RPE ${todayW.rpe}` : null,
+                    ].filter(Boolean).join(' · ') || 'details in het trainingsplan'}
+                  </div>
+                  <button className="os-toggle-chip" style={{ fontSize: 11, marginTop: 6 }}
+                    onClick={() => setShowWorkoutForm(true)}>
+                    + Nog een training registreren
+                  </button>
+                </div>
+              ) : (
+                <button className="os-btn-save" style={{ width: '100%', marginBottom: 10 }}
+                  onClick={() => setShowWorkoutForm(true)}>
+                  🏃 Training registreren — screenshot, handmatig of Strava
+                </button>
+              );
+            })()}
+            {log?.run_done && !workoutOn(currentDate) && (
+              <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 8 }}>
+                ✓ Snel gemarkeerd als gedaan (T{log.run_session || nextRunNr}) — registreer details voor betere coaching.
+              </div>
+            )}
 
             <SectionLabel>Trainingszone</SectionLabel>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -889,6 +1000,11 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
             )}
           </>
         )}
+
+        {/* Volledig trainingsplan T1–T35 */}
+        <TrainingPlan key={planRefresh} logs={logs} currentNr={nextRunNr}
+          refresh={() => setPlanRefresh(k => k + 1)}
+          onEditWorkout={(w) => { setEditingWorkout(w); setShowWorkoutForm(true); }} />
 
         {/* Roadmap */}
         <RunRoadmap logs={logs} currentDate={currentDate} nextSession={nextSession} />
@@ -1069,14 +1185,37 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
 
   // ── SUBTAB: CYCLUS ───────────────────────────────────────────
   function TabCyclus() {
-    const CYCLUS_INFO = {
-      menstruatie: 'Dag 1–5: lager energieniveau normaal. Lichte beweging is OK. Voorzichtig met intensiteit.',
-      folliculair: 'Dag 6–13: energie stijgt. Goed moment voor iets zwaarder trainingsblok.',
-      ovulatie: 'Dag 14–16: piek-energie. Beste moment voor intensere training indien readiness groen.',
-      luteaal: 'Dag 17–28: energie kan dalen. Herstel-first. PMS-klachten mogelijk.',
-      'weet-niet': 'Cyclusfase onbekend — gebruik readiness als primaire gids.',
+    // Cyclusfase is CONTEXT, geen voorschrift. Algemene regels ("ovulatie =
+    // beste trainingsmoment") gelden niet per definitie in perimenopauze —
+    // de tool leert eerst Griëtte's eigen patronen en toont altijd het
+    // aantal waarnemingen (confidence).
+    const NEUTRAL_INFO = {
+      menstruatie: 'Dag 1–5 (indicatief). Context voor je data — jouw eigen waarnemingen bepalen wat dit voor training betekent.',
+      folliculair: 'Dag 6–13 (indicatief). Geen aanname over energie — kijk hieronder wat jouw eigen data laat zien.',
+      ovulatie: 'Rond dag 14–16 (indicatief). In perimenopauze is dit patroon vaak onregelmatig — readiness blijft leidend.',
+      luteaal: 'Dag 17+ (indicatief). Kijk hieronder of jouw eigen data hier een patroon laat zien.',
+      'weet-niet': 'Cyclusfase onbekend — prima. Readiness is altijd de primaire gids.',
     };
-    const info = CYCLUS_INFO[log?.cycle_phase];
+    const info = NEUTRAL_INFO[log?.cycle_phase];
+
+    // Persoonlijke patronen per fase — pas tonen mét confidence
+    const MIN_OBS = 5;
+    const phaseStats = ['menstruatie', 'folliculair', 'ovulatie', 'luteaal'].map(phase => {
+      const entries = Object.values(logs || {}).filter(l => l.cycle_phase === phase);
+      const av = (key) => {
+        const v = entries.map(l => l[key]).filter(x => x != null);
+        return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+      };
+      return {
+        phase,
+        label: CYCLUS_OPTS.find(o => o.id === phase)?.label || phase,
+        n: entries.length,
+        sleep: av('sleep_hours'),
+        energy: av('energy'),
+        pem: entries.filter(l => l.symptom_pem).length,
+      };
+    });
+    const withEnough = phaseStats.filter(p => p.n >= MIN_OBS);
 
     return (
       <div>
@@ -1097,6 +1236,54 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
             {info}
           </div>
         )}
+
+        <SectionLabel>Jouw eigen patronen per fase</SectionLabel>
+        <div className="os-card" style={{ marginBottom: 14 }}>
+          {phaseStats.every(p => p.n === 0) ? (
+            <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5 }}>
+              Nog geen fase-waarnemingen. Vink je cyclusfase aan op dagen dat je die weet —
+              na ±{MIN_OBS} waarnemingen per fase laat ik hier jouw persoonlijke patroon zien.
+            </div>
+          ) : (
+            <>
+              {phaseStats.filter(p => p.n > 0).map(p => (
+                <div key={p.phase} style={{ padding: '6px 0', borderBottom: '1px solid var(--divide)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ fontWeight: 700 }}>{p.label}</span>
+                    <span style={{ fontSize: 11, color: p.n >= MIN_OBS ? 'var(--green)' : 'var(--ghost)' }}>
+                      {p.n} waarneming{p.n !== 1 ? 'en' : ''}{p.n < MIN_OBS ? ` (min. ${MIN_OBS} nodig)` : ''}
+                    </span>
+                  </div>
+                  {p.n >= MIN_OBS ? (
+                    <div style={{ fontSize: 12, color: 'var(--sub)', marginTop: 2 }}>
+                      {[p.sleep != null ? `slaap gem. ${p.sleep.toFixed(1)}u` : null,
+                        p.energy != null ? `energie gem. ${p.energy.toFixed(1)}/3` : null,
+                        p.pem > 0 ? `${p.pem}× PEM` : null,
+                      ].filter(Boolean).join(' · ') || 'nog geen slaap/energie-data in deze fase'}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 2 }}>
+                      Te weinig waarnemingen voor persoonlijke conclusies.
+                    </div>
+                  )}
+                </div>
+              ))}
+              {withEnough.length >= 2 && (() => {
+                const sorted = [...withEnough].filter(p => p.sleep != null).sort((a, b) => a.sleep - b.sleep);
+                if (sorted.length < 2) return null;
+                const low = sorted[0], high = sorted[sorted.length - 1];
+                if (high.sleep - low.sleep < 0.4) return null;
+                return (
+                  <div style={{ fontSize: 12, color: 'var(--sage)', fontWeight: 600, marginTop: 8, lineHeight: 1.5 }}>
+                    Patroon in jouw data: in je {low.n} {low.label.toLowerCase()}-waarnemingen sliep je gemiddeld{' '}
+                    {(high.sleep - low.sleep).toFixed(1)}u korter dan in de {high.label.toLowerCase()}-fase.
+                    De coach weegt dit voorzichtig mee — als context, niet als regel.
+                  </div>
+                );
+              })()}
+            </>
+          )}
+        </div>
 
         <SectionLabel>Hormonale klachten</SectionLabel>
         {['Opvliegers','Stemmingswisselingen','Slaapproblemen','Gewrichtsklachten','Breinmist (meno)'].map((label, i) => {
@@ -1124,6 +1311,14 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     return (
       <div>
         <SectionLabel style={{ marginTop: 0 }}>Nieuwe meting (cm)</SectionLabel>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700 }}>Datum</span>
+          <input type="date" className="os-input" value={matenDate}
+            onChange={e => setMatenDate(e.target.value)} style={{ flex: 1 }} />
+          {matenDate !== currentDate && (
+            <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 600 }}>historisch</span>
+          )}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
           {MAAT_FIELDS.map(f => (
             <div key={f.key}>
@@ -1165,6 +1360,14 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
                           {m[f.key] ? `${m[f.key]}` : '—'}
                         </td>
                       ))}
+                      <td style={{ textAlign: 'right', padding: '7px 0' }}>
+                        <button onClick={async () => {
+                          if (!window.confirm(`Meting van ${m.date} verwijderen?`)) return;
+                          await store.deleteMeasurement(m.date);
+                          setMeasurements(await store.getMeasurements());
+                        }}
+                          style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 14 }}>×</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1215,6 +1418,19 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   // ── RENDER ───────────────────────────────────────────────────
   return (
     <div>
+      {/* Workout registratie modal */}
+      {showWorkoutForm && (
+        <WorkoutForm
+          defaultDate={currentDate}
+          defaultSessionNr={nextSession.nr}
+          logs={logs}
+          saveFields={saveFields}
+          initialWorkout={editingWorkout}
+          onSaved={() => setPlanRefresh(k => k + 1)}
+          onClose={() => { setShowWorkoutForm(false); setEditingWorkout(null); }}
+        />
+      )}
+
       {/* Readiness header */}
       <div className="os-readiness" style={{ borderRadius: 0, margin: 0, border: 'none', borderBottom: '1px solid var(--divide)' }}>
         <div className="os-readiness-label" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--ghost)', marginBottom: 4 }}>

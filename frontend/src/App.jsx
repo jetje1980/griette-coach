@@ -177,6 +177,7 @@ export default function App() {
           currentDate={currentDate}
           saveField={saveField}
           saveFields={saveFields}
+          deleteLog={deleteLog}
           showFlash={showFlash}
           isFuture={isFuture}
         />

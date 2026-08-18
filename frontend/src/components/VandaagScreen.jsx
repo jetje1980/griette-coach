@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { computeHeadCoach } from './CoachAdvice';
+import RecoveryCheck from './RecoveryCheck';
 import { USER, PERSONAL_EVENTS } from '../config';
 import { RUNS } from '../data/runningSchema';
 
@@ -484,6 +485,11 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
         <span className="os-chip-dot" />
         {season.name}
       </div>
+
+      {/* Herstelcheck na training gisteren — closed loop */}
+      {!isFuture && (
+        <RecoveryCheck log={log} logs={logs} currentDate={currentDate} saveField={saveField} />
+      )}
 
       {/* Coach verdict */}
       {!isFuture ? (

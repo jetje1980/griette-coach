@@ -56,6 +56,43 @@ export function getBlockFor(dateStr) {
   return TRAINING_BLOCKS.find(b => dateStr >= b.start && dateStr <= b.end) || null;
 }
 
+// ── Adaptieve blokverwachting ───────────────────────────────────
+// Kalenderdatums zijn de wens; werkelijke readiness bepaalt het tempo.
+// Herhaalde/teruggeschaalde sessies schuiven de verwachte einddatum op.
+// Races (Trail 3 okt, Bereloop 30 okt, Ameland 13 dec) blijven vast staan.
+export function blockExpectation(currentDate) {
+  const block = getCurrentBlock(currentDate);
+  if (!block) return null;
+  let events = [];
+  try {
+    events = JSON.parse(localStorage.getItem('gc_adaptive_log') || '[]')
+      .filter(e => e.date >= block.start && e.date <= currentDate);
+  } catch { /* geen log */ }
+  const setbacks = events.filter(e =>
+    ['repeated', 'deload', 'poorly_tolerated', 'stopped', 'done_modified'].includes(e.event)
+  );
+  const shiftDays = Math.min(21, setbacks.length * 3);
+  const expectedEnd = (() => {
+    const d = new Date(block.end + 'T12:00:00');
+    d.setDate(d.getDate() + shiftDays);
+    return d.toISOString().slice(0, 10);
+  })();
+  const raceNote = shiftDays > 0 && (block.id === 'aerobic' || block.id === 'economy')
+    ? 'De racedatum blijft vast staan — het haalbare doel voor die dag schuift mee met je werkelijke opbouw.'
+    : null;
+  return {
+    block,
+    originalEnd: block.end,
+    expectedEnd,
+    shiftDays,
+    setbackCount: setbacks.length,
+    reason: setbacks.length > 0
+      ? `${setbacks.length} sessie${setbacks.length > 1 ? 's' : ''} herhaald/aangepast/teruggeschaald wegens vertraagde herstelrespons`
+      : null,
+    raceNote,
+  };
+}
+
 // Weekfocus voor de komende N weken: per week (maandag) het actieve blok
 export function upcomingWeekFoci(fromDateStr, weeks = 4) {
   const monday = (ds) => {

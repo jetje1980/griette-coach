@@ -637,6 +637,67 @@ export const ai = {
   // Returns true if client key is set OR server proxy is reachable (optimistic)
   hasKey: () => !!getKey() || true,
 
+  // Screenshot(s) van Garmin/Strava/Apple/Polar/Fitbit/loopband → gestructureerde workoutdata.
+  // Regels: NOOIT gokken. Onzekere velden = null (UI toont "niet betrouwbaar herkend").
+  // images = [{ base64, mimeType }]
+  async extractWorkout(images) {
+    const prompt = `Je ziet ${images.length} screenshot(s) van een sportapp (Garmin Connect, Strava, Apple Fitness, Polar, Fitbit, Samsung Health, loopband, of vergelijkbaar).
+
+Extraheer ALLEEN wat je werkelijk en duidelijk kunt aflezen. GOK NOOIT. Als een waarde niet zichtbaar of onzeker is: gebruik null. Dit is een harde eis — een verzonnen waarde is erger dan een lege.
+
+Antwoord met UITSLUITEND een JSON-object (geen tekst eromheen, geen markdown):
+{
+  "date": "YYYY-MM-DD of null (alleen als een datum expliciet zichtbaar is)",
+  "activityType": "run|walk|bike|swim|other of null",
+  "duration": <totale duur in minuten, decimaal, of null>,
+  "movingTime": <bewegende tijd in minuten of null>,
+  "distance": <afstand in km, decimaal, of null>,
+  "averagePace": "<m:ss per km of null>",
+  "averageHR": <gemiddelde hartslag of null>,
+  "maxHR": <maximale hartslag of null>,
+  "hrZones": <object {"z1":min,...} alleen indien zichtbaar, anders null>,
+  "splits": <array van {"km":1,"pace":"m:ss","hr":128} alleen indien een splits/laps-tabel zichtbaar is, anders null>,
+  "cadence": <gemiddelde cadans of null>,
+  "elevation": <hoogtemeters of null>,
+  "calories": <alleen indien zichtbaar, null anders>,
+  "confidence": "<high|medium|low — hoe zeker ben je over het geheel>",
+  "notes": "<korte opmerking over wat je NIET kon aflezen, in het Nederlands>"
+}`;
+
+    const content = images.map(img => ({
+      type: 'image',
+      source: { type: 'base64', media_type: img.mimeType, data: img.base64 },
+    }));
+    content.push({ type: 'text', text: prompt });
+
+    const raw = await callClaude([{ role: 'user', content }], 900);
+    // JSON parsen — codefences en omliggende tekst wegstrippen
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('AI gaf geen leesbare data terug');
+    const parsed = JSON.parse(m[0]);
+    return parsed;
+  },
+
+  // Coach-interpretatie van een bevestigde workout (optionele verrijking; de app
+  // heeft ook een lokaal regel-gebaseerd oordeel dat zonder AI werkt).
+  async workoutVerdict(workout, plannedRun, logs) {
+    const context = buildContext(logs || {}, []);
+    const prompt = `${context}
+
+ZOJUIST BEVESTIGDE TRAINING:
+${JSON.stringify(workout, null, 2)}
+
+GEPLANDE SESSIE:
+${plannedRun ? `T${plannedRun.nr}: ${plannedRun.description} — ${plannedRun.duration} min — ${plannedRun.hrZone} — doel: ${plannedRun.goal}` : 'geen geplande sessie gekozen'}
+
+Geef een kort coach-oordeel (max 110 woorden, Nederlands):
+1. Voldeed de sessie aan het aerobe doel? Gebruik ALLEEN werkelijk aanwezige data (HR, pace, duur, RPE). Geen schijnprecisie over data die er niet is.
+2. Als HR + pace beide beschikbaar: iets over de verhouding (bijv. cardiac drift alleen als splits dat echt laten zien).
+3. Sluit af met: de definitieve beoordeling volgt pas na de vertraagde herstelcheck (24-48u).
+Geen medische diagnoses. Direct en concreet.`;
+    return callClaude([{ role: 'user', content: prompt }], 400);
+  },
+
   async coachCheck(logs, measurements) {
     const context = buildContext(logs, measurements);
     const prompt = `${context}

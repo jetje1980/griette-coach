@@ -4,6 +4,7 @@ import { dreamStore } from '../dreamStore';
 import { USER, PERSONAL_EVENTS } from '../config';
 import { RUNS } from '../data/runningSchema';
 import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
+import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
 import { protectedHours } from './WeekScreen';
 import { store } from '../store';
 import SubTabs from './SubTabs';
@@ -26,9 +27,10 @@ function avg(arr) {
 }
 
 function getNextRunNr(logs) {
-  const done = new Set(Object.values(logs || {}).filter(l => l.run_done && l.run_session).map(l => l.run_session));
-  for (let nr = 1; nr <= RUNS.length; nr++) if (!done.has(nr)) return nr;
-  return RUNS.length;
+  const done = Object.values(logs || {})
+    .filter(l => l.run_done && l.run_session).map(l => Number(l.run_session));
+  if (!done.length) return 1;
+  return Math.min(RUNS.length, Math.max(...done) + 1);
 }
 
 function getRunWeekStreak(logs) {
@@ -475,14 +477,11 @@ function TabHardlopen({ logs }) {
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 8);
 
-  const totalKm = Object.values(logs)
-    .filter(l => l.run_done && l.run_session)
-    .reduce((sum, l) => {
-      const run = RUNS.find(r => r.nr === l.run_session);
-      if (!run) return sum;
-      const km = run.km_estimate ? parseFloat(run.km_estimate) : 0;
-      return sum + (isNaN(km) ? 0 : km);
-    }, 0);
+  // ACTUAL (bevestigde workoutdata) heeft prioriteit; plan-schatting alleen
+  // voor sessies zonder registratie — en dan duidelijk gelabeld als schatting.
+  const totals = actualTotals(logs);
+  const totalKm = totals.actualKm + totals.estKm;
+  const economy = paceAtHRTrend();
 
   const runWeekStreak = getRunWeekStreak(logs);
   const trailDays = daysBetween(tod, TRAIL_DATE);
@@ -500,17 +499,27 @@ function TabHardlopen({ logs }) {
       return run && run.duration > max ? run.duration : max;
     }, 0);
 
-  // 5K tests (handmatig vastgelegd)
+  // 5K tests — met datum (backdaten kan), HR/RPE optioneel, bewerken/verwijderen
   const [tests, setTests] = useState(() => {
     try { return JSON.parse(localStorage.getItem('gc_5k_tests') || '[]'); } catch { return []; }
   });
-  function addTest() {
-    const t = window.prompt('5K tijd in minuten (bijv. 42.5):');
-    const min = parseFloat((t || '').replace(',', '.'));
-    if (isNaN(min) || min <= 0) return;
-    const next = [{ date: todayStr(), minutes: min }, ...tests];
-    localStorage.setItem('gc_5k_tests', JSON.stringify(next));
-    setTests(next);
+  const [testForm, setTestForm] = useState(null); // null | {id?, date, minutes, hr, rpe}
+  function persistTests(arr) {
+    const sorted = [...arr].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    localStorage.setItem('gc_5k_tests', JSON.stringify(sorted));
+    setTests(sorted);
+  }
+  function saveTest() {
+    const min = parseFloat(String(testForm.minutes || '').replace(',', '.'));
+    if (isNaN(min) || min <= 0 || !testForm.date) return;
+    const entry = {
+      id: testForm.id || `t5k_${Date.now()}`,
+      date: testForm.date, minutes: min,
+      hr: testForm.hr ? parseInt(testForm.hr, 10) : null,
+      rpe: testForm.rpe ? parseInt(testForm.rpe, 10) : null,
+    };
+    persistTests([entry, ...tests.filter(t => t.id !== entry.id)]);
+    setTestForm(null);
   }
 
   // Trainingsbelasting: runs per week, laatste 4 weken
@@ -544,8 +553,21 @@ function TabHardlopen({ logs }) {
         <ProgressBar pct={runPct} color="var(--sage)" />
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 12, color: 'var(--sub)' }}>
           <span>{TOTAL_RUNS - completedRuns} sessies te gaan</span>
-          {totalKm > 0 && <span>~{totalKm.toFixed(1)} km gelopen</span>}
+          {totalKm > 0 && <span>{totalKm.toFixed(1)} km totaal</span>}
         </div>
+        {(totals.actualKm > 0 || totals.estKm > 0) && (
+          <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 4, lineHeight: 1.5 }}>
+            {totals.actualKm > 0 && (
+              <span style={{ color: 'var(--sage)', fontWeight: 600 }}>
+                ACTUAL: {totals.actualKm} km ({totals.actualCount} geregistreerd)
+              </span>
+            )}
+            {totals.actualKm > 0 && totals.estKm > 0 && ' · '}
+            {totals.estKm > 0 && (
+              <span>PLAN-schatting: ~{totals.estKm} km ({totals.estCount} sessies zonder registratie)</span>
+            )}
+          </div>
+        )}
         {runWeekStreak > 0 && (
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--sage)', fontWeight: 600 }}>
             {runWeekStreak} week{runWeekStreak !== 1 ? 'en' : ''} op rij getraind
@@ -577,27 +599,91 @@ function TabHardlopen({ logs }) {
         </div>
       </div>
 
+      {/* Running economy: pace bij vergelijkbare HR */}
+      <div className="os-section-label">Running economy — pace bij vergelijkbare HR</div>
+      <div className="os-card">
+        {economy.enough ? (
+          <>
+            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+              <span style={{ color: 'var(--sub)' }}>Eerder ({economy.early.from?.slice(5)}):</span>{' '}
+              <strong>{fmtPace(economy.early.pace)}/km</strong> bij HR ~{economy.early.hr}
+              <br />
+              <span style={{ color: 'var(--sub)' }}>Nu ({economy.late.to?.slice(5)}):</span>{' '}
+              <strong style={{ color: economy.improvementSec > 0 ? 'var(--green)' : 'var(--text)' }}>
+                {fmtPace(economy.late.pace)}/km
+              </strong> bij HR ~{economy.late.hr}
+            </div>
+            <div style={{ fontSize: 12, marginTop: 6, fontWeight: 600,
+              color: economy.improvementSec > 5 ? 'var(--green)' : 'var(--sub)' }}>
+              {economy.improvementSec > 5
+                ? `${economy.improvementSec} sec/km sneller bij vergelijkbare hartslag — dit is echte aerobe progressie.`
+                : economy.improvementSec < -5
+                  ? `${Math.abs(economy.improvementSec)} sec/km langzamer bij vergelijkbare HR — kan vermoeidheid of omstandigheden zijn.`
+                  : 'Stabiel — dezelfde belasting bij dezelfde hartslag.'}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 4 }}>
+              op basis van {economy.count} sessies met HR 120–135
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5 }}>
+            Nog te weinig geregistreerde sessies met hartslag ({economy.count}/3) om pace-bij-HR
+            te vergelijken. Registreer je runs met gemiddelde HR — dan verschijnt hier je echte
+            aerobe progressie.
+          </div>
+        )}
+      </div>
+
       {/* 5K tests */}
       <div className="os-section-label">5K test</div>
       <div className="os-card">
-        {tests.length === 0 ? (
+        {tests.length === 0 && !testForm && (
           <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 8 }}>
-            Nog geen 5K-test gelogd. Komt in het TEST-blok van de roadmap.
+            Nog geen 5K-test gelogd. Komt in het TEST-blok van de roadmap — maar een oude test
+            (bijv. van juni) kun je hier gewoon met datum toevoegen.
+          </div>
+        )}
+        {tests.slice(0, 6).map((t, i) => (
+          <div key={t.id || i} className="os-detail-row">
+            <span className="os-dk">{t.date}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="os-dv" style={{ fontWeight: 700 }}>
+                {Math.floor(t.minutes)}:{String(Math.round((t.minutes % 1) * 60)).padStart(2, '0')}
+                {t.hr ? ` · HR ${t.hr}` : ''}{t.rpe ? ` · RPE ${t.rpe}` : ''}
+              </span>
+              <button onClick={() => setTestForm({ id: t.id, date: t.date, minutes: String(t.minutes), hr: t.hr || '', rpe: t.rpe || '' })}
+                style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 13 }}>✎</button>
+              <button onClick={() => { if (window.confirm('Deze 5K-test verwijderen?')) persistTests(tests.filter(x => x.id !== t.id)); }}
+                style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 15 }}>×</button>
+            </span>
+          </div>
+        ))}
+        {testForm ? (
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--divide)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+              <input type="date" className="os-input" value={testForm.date}
+                onChange={e => setTestForm(f => ({ ...f, date: e.target.value }))} />
+              <input className="os-input" type="number" step="0.1" placeholder="tijd (min, bijv. 42.5)"
+                value={testForm.minutes}
+                onChange={e => setTestForm(f => ({ ...f, minutes: e.target.value }))} />
+              <input className="os-input" type="number" placeholder="gem. HR (optioneel)"
+                value={testForm.hr}
+                onChange={e => setTestForm(f => ({ ...f, hr: e.target.value }))} />
+              <input className="os-input" type="number" placeholder="RPE (optioneel)"
+                value={testForm.rpe}
+                onChange={e => setTestForm(f => ({ ...f, rpe: e.target.value }))} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="os-btn-save" onClick={saveTest}>{testForm.id ? 'Bijwerken' : 'Toevoegen'}</button>
+              <button className="os-toggle-chip" onClick={() => setTestForm(null)}>Annuleer</button>
+            </div>
           </div>
         ) : (
-          tests.slice(0, 5).map((t, i) => (
-            <div key={i} className="os-detail-row">
-              <span className="os-dk">{t.date}</span>
-              <span className="os-dv" style={{ fontWeight: 700 }}>
-                {Math.floor(t.minutes)}:{String(Math.round((t.minutes % 1) * 60)).padStart(2, '0')} min
-                {i < tests.length - 1 && tests[i + 1] && t.minutes < tests[i + 1].minutes ? ' ▲' : ''}
-              </span>
-            </div>
-          ))
+          <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 4 }}
+            onClick={() => setTestForm({ date: todayStr(), minutes: '', hr: '', rpe: '' })}>
+            + 5K test vastleggen (datum vrij te kiezen)
+          </button>
         )}
-        <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 4 }} onClick={addTest}>
-          + 5K tijd vastleggen
-        </button>
       </div>
 
       {/* Next run */}
@@ -825,11 +911,62 @@ function TabRoutines() {
 // ═══════════════════════════════════════════════════════════════
 function TabTijdlijn({ sessions }) {
   const tod = todayStr();
-  const sorted = [...PERSONAL_EVENTS].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  // Eigen mijlpalen: toevoegen, bewerken (datum incl.), verwijderen
+  const [customEvents, setCustomEvents] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gc_custom_events') || '[]'); } catch { return []; }
+  });
+  const [evForm, setEvForm] = useState(null); // {id?, startDate, title, emoji, description}
+  function persistEvents(arr) {
+    localStorage.setItem('gc_custom_events', JSON.stringify(arr));
+    setCustomEvents(arr);
+  }
+  function saveEvent() {
+    if (!evForm.title?.trim() || !evForm.startDate) return;
+    const entry = {
+      id: evForm.id || `ce_${Date.now()}`,
+      startDate: evForm.startDate,
+      title: evForm.title.trim(),
+      emoji: evForm.emoji || '⭐',
+      description: evForm.description || '',
+      custom: true,
+    };
+    persistEvents([entry, ...customEvents.filter(e => e.id !== entry.id)]);
+    setEvForm(null);
+  }
+
+  const sorted = [...PERSONAL_EVENTS, ...customEvents].sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   return (
     <div>
       <div className="os-section-label" style={{ marginTop: 0 }}>Mijlpalen</div>
+
+      {evForm && (
+        <div className="os-card" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 6, marginBottom: 8 }}>
+            <input className="os-input" placeholder="emoji" value={evForm.emoji || ''}
+              onChange={e => setEvForm(f => ({ ...f, emoji: e.target.value }))} />
+            <input className="os-input" placeholder="Titel…" value={evForm.title || ''}
+              onChange={e => setEvForm(f => ({ ...f, title: e.target.value }))} autoFocus />
+          </div>
+          <input type="date" className="os-input" value={evForm.startDate || ''}
+            onChange={e => setEvForm(f => ({ ...f, startDate: e.target.value }))}
+            style={{ marginBottom: 8 }} />
+          <input className="os-input" placeholder="Omschrijving (optioneel)" value={evForm.description || ''}
+            onChange={e => setEvForm(f => ({ ...f, description: e.target.value }))}
+            style={{ marginBottom: 10 }} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="os-btn-save" onClick={saveEvent}>{evForm.id ? 'Bijwerken' : 'Toevoegen'}</button>
+            <button className="os-toggle-chip" onClick={() => setEvForm(null)}>Annuleer</button>
+          </div>
+        </div>
+      )}
+      {!evForm && (
+        <button className="os-toggle-chip" style={{ fontSize: 12, marginBottom: 12 }}
+          onClick={() => setEvForm({ startDate: tod, emoji: '⭐', title: '', description: '' })}>
+          + Eigen mijlpaal toevoegen
+        </button>
+      )}
       <div style={{ position: 'relative', paddingLeft: 24, marginBottom: 16 }}>
         {/* Vertical timeline line */}
         <div style={{ position: 'absolute', left: 8, top: 0, bottom: 0, width: 2,
@@ -853,8 +990,17 @@ function TabTijdlijn({ sessions }) {
 
               <div style={{ opacity: isPast ? 0.55 : 1 }}>
                 <div style={{ fontSize: 11, color: 'var(--ghost)', marginBottom: 2 }}>{dateLabel}</div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: isToday ? 'var(--rust)' : 'var(--text)', marginBottom: 2 }}>
-                  {e.emoji} {e.title}
+                <div style={{ fontWeight: 700, fontSize: 14, color: isToday ? 'var(--rust)' : 'var(--text)', marginBottom: 2,
+                  display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>{e.emoji} {e.title}</span>
+                  {e.custom && (
+                    <>
+                      <button onClick={() => setEvForm({ id: e.id, startDate: e.startDate, title: e.title, emoji: e.emoji, description: e.description })}
+                        style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 12 }}>✎</button>
+                      <button onClick={() => window.confirm('Mijlpaal verwijderen?') && persistEvents(customEvents.filter(x => x.id !== e.id))}
+                        style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 14 }}>×</button>
+                    </>
+                  )}
                 </div>
                 {e.description && (
                   <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.4 }}>{e.description}</div>
@@ -1023,6 +1169,29 @@ function TabMoney() {
   const vast = geld.expenses.filter(e => e.type === 'vast').reduce((s, e) => s + (e.amount || 0), 0);
   const maandenBuffer = vast > 0 ? (geld.buffer / vast) : null;
 
+  // Bufferhistorie → groei, gemiddelde maandelijkse toename, verwachte doelmaand
+  const history = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('gc_geld_history') || '[]')
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    } catch { return []; }
+  })();
+  const growth = (() => {
+    if (history.length < 2) return null;
+    const first = history[0], last = history[history.length - 1];
+    const months = Math.max(0.5, (new Date(last.date) - new Date(first.date)) / (30.44 * 86400000));
+    const total = last.amount - first.amount;
+    const perMonth = total / months;
+    const remaining = Math.max(0, BUFFER_DOEL - last.amount);
+    let eta = null;
+    if (perMonth > 0 && remaining > 0) {
+      const d = new Date(last.date + 'T12:00:00');
+      d.setDate(d.getDate() + Math.round((remaining / perMonth) * 30.44));
+      eta = d.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' });
+    }
+    return { total, perMonth, remaining, eta, span: `${first.date} → ${last.date}`, n: history.length };
+  })();
+
   return (
     <div>
       <div className="os-section-label" style={{ marginTop: 0 }}>Buffer → €{BUFFER_DOEL.toLocaleString('nl-NL')}</div>
@@ -1046,8 +1215,42 @@ function TabMoney() {
           </div>
         )}
       </div>
+
+      {growth && (
+        <>
+          <div className="os-section-label">Groei</div>
+          <div className="os-card">
+            <div className="os-detail-row">
+              <span className="os-dk">Totale groei ({growth.span})</span>
+              <span className="os-dv" style={{ fontWeight: 700, color: growth.total >= 0 ? 'var(--green)' : 'var(--rust)' }}>
+                {growth.total >= 0 ? '+' : ''}€{Math.round(growth.total).toLocaleString('nl-NL')}
+              </span>
+            </div>
+            <div className="os-detail-row">
+              <span className="os-dk">Gemiddeld per maand</span>
+              <span className="os-dv" style={{ fontWeight: 700 }}>
+                {growth.perMonth >= 0 ? '+' : ''}€{Math.round(growth.perMonth).toLocaleString('nl-NL')}
+              </span>
+            </div>
+            <div className="os-detail-row">
+              <span className="os-dk">Resterend tot doel</span>
+              <span className="os-dv">€{Math.round(growth.remaining).toLocaleString('nl-NL')}</span>
+            </div>
+            {growth.eta && (
+              <div className="os-detail-row">
+                <span className="os-dk">Verwachte doelmaand (huidig tempo)</span>
+                <span className="os-dv" style={{ fontWeight: 700, color: 'var(--sage)' }}>{growth.eta}</span>
+              </div>
+            )}
+            <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 4 }}>
+              op basis van {growth.n} geregistreerde standen
+            </div>
+          </div>
+        </>
+      )}
+
       <div style={{ fontSize: 12, color: 'var(--ghost)', lineHeight: 1.5 }}>
-        Buffer bijwerken doe je in Leven → Geld.
+        Buffer en historie bijwerken doe je in Leven → Geld.
       </div>
     </div>
   );

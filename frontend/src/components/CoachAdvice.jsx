@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { USER } from '../config';
 import { RUNS } from '../data/runningSchema';
+import { lastRunWorkout, workoutWasHeavy, toleranceFor, workoutsForSession } from '../workouts';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -15,17 +16,14 @@ function avg(arr) {
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
 }
 
-// Find next undone run nr (1-based)
+// Volgende logische sessie: hoogste gedane + 1 (niet "eerste gat" — wie
+// midden in het schema instapt, hoeft niet terug naar T1)
 function getNextRunNr(logs) {
-  const doneNrs = new Set(
-    Object.values(logs || {})
-      .filter(l => l.run_done && l.run_session)
-      .map(l => l.run_session)
-  );
-  for (let nr = 1; nr <= RUNS.length; nr++) {
-    if (!doneNrs.has(nr)) return nr;
-  }
-  return RUNS.length;
+  const doneNrs = Object.values(logs || {})
+    .filter(l => l.run_done && l.run_session)
+    .map(l => Number(l.run_session));
+  if (!doneNrs.length) return 1;
+  return Math.min(RUNS.length, Math.max(...doneNrs) + 1);
 }
 
 // ─── HEAD COACH decision engine ─────────────────────────────────────────────
@@ -172,7 +170,7 @@ export function computeHeadCoach(log, logs, currentDate) {
     else if (decision === 'AMBER') why.push('Gemengde signalen — lichtere variant is de veiligste keuze');
     else why.push('Herstel heeft vandaag prioriteit boven training');
   }
-  const whyFinal = why.slice(0, 4);
+  // (whyFinal wordt ná het workout-blok bepaald zodat die signalen meetellen)
 
   // ── adaptive training state ──────────────────────────────────────────────
   // BUILD: ready to progress · HOLD: repeat current · REPEAT: redo last
@@ -206,6 +204,77 @@ export function computeHeadCoach(log, logs, currentDate) {
     adaptiveState = 'TEST';
   }
 
+  // ── WorkoutResult-signalen: echte trainingsdata stuurt de volgende beslissing ──
+  // Bron-onafhankelijk (handmatig / screenshot / Strava).
+  let pendingRecoveryCheck = false;
+  let gateReason = null;
+  const lastW = lastRunWorkout(currentDate);
+  const lastWDays = lastW ? Math.floor((new Date(currentDate) - new Date(lastW.date)) / 86400000) : null;
+
+  if (lastW && lastWDays != null && lastWDays <= 2) {
+    const heavy = workoutWasHeavy(lastW);
+    const tol = toleranceFor(lastW, logs);
+    const todayRecovery = log?.recovery_check; // 'good' | 'bad' — ochtend-herstelcheck
+    // Expliciet beantwoord op enige dag ná de workout?
+    const checkAnswered = (() => {
+      const d = new Date(lastW.date + 'T12:00:00');
+      for (let i = 1; i <= 2; i++) {
+        d.setDate(d.getDate() + 1);
+        const l = logs?.[d.toISOString().slice(0, 10)];
+        if (l && (l.recovery_check === 'good' || l.recovery_check === 'bad')) return l.recovery_check;
+      }
+      return null;
+    })();
+
+    if (tol === 'poor' || todayRecovery === 'bad') {
+      // Slecht verdragen → nooit doorbouwen, ook niet bij groene ochtend
+      if (adaptiveState === 'BUILD' || adaptiveState === 'TEST' || adaptiveState === 'HOLD') {
+        adaptiveState = recentPem || log?.symptom_pem ? 'DELOAD' : 'REPEAT';
+      }
+      gateReason = `Je training van ${lastW.date.slice(5)} werd niet goed verdragen (vertraagde respons) — die sessie telt als onvoldoende verdragen, dus geen opbouw nu.`;
+      why.push('Vorige training werd niet goed verdragen (vertraagde respons) — geen opbouw nu');
+    } else if (heavy) {
+      // Hoge RPE / zware benen / "nee" op meer gekund / gestopt → niet automatisch verder
+      if (adaptiveState === 'BUILD' || adaptiveState === 'TEST') {
+        adaptiveState = lastW.completedAsPlanned === 'stopped' ? 'DELOAD' : 'HOLD';
+      }
+      const signals = [
+        lastW.rpe != null && lastW.rpe >= 7 ? `RPE ${lastW.rpe}` : null,
+        lastW.legs === 'zwaar' ? 'zware benen' : null,
+        lastW.couldDoMore === 'nee' ? 'geen reserve' : null,
+        lastW.completedAsPlanned === 'stopped' ? 'gestopt' : null,
+      ].filter(Boolean).join(', ');
+      gateReason = `Je laatste sessie was zwaar (${signals}) — ook al is je ochtend groen, ik bouw niet automatisch verder.`;
+      why.push(`Laatste sessie was zwaar (${signals}) — eerst laten landen`);
+    } else if (lastWDays >= 1 && tol !== 'poor' && !checkAnswered) {
+      // Herstelcheck nog niet expliciet beantwoord → sessie nog niet vrijgeven
+      if (adaptiveState === 'BUILD') {
+        adaptiveState = 'HOLD';
+        pendingRecoveryCheck = true;
+        gateReason = 'Herstelcheck na je laatste training nog niet ingevuld — vul die eerst in, dan geef ik de volgende sessie vrij.';
+        why.push('Herstelcheck na je laatste training nog niet ingevuld — vul die eerst in, dan geef ik de volgende sessie vrij');
+      }
+    } else if (todayRecovery === 'good' && tol !== 'poor' && !heavy &&
+               (decision === 'GREEN' || decision === 'AMBER') && adaptiveState === 'HOLD' && !delayedBad) {
+      // Expliciet goed hersteld → vrijgeven
+      adaptiveState = decision === 'GREEN' ? 'BUILD' : adaptiveState;
+    }
+
+    // Progressie-signaal: zelfde sessie 2× goed verdragen met lagere HR/RPE
+    if (adaptiveState === 'BUILD' && lastW.plannedSessionId) {
+      const sameSession = workoutsForSession(lastW.plannedSessionId)
+        .filter(w => toleranceFor(w, logs) === 'good');
+      if (sameSession.length >= 2) {
+        const [b, a] = sameSession; // nieuwste eerst
+        const lowerLoad = (b.averageHR != null && a.averageHR != null && b.averageHR <= a.averageHR) ||
+                          (b.rpe != null && a.rpe != null && b.rpe <= a.rpe);
+        if (lowerLoad) why.push('Zelfde sessie twee keer goed verdragen met lagere belasting — klaar voor de volgende stap');
+      }
+    }
+  }
+
+  const whyFinal = why.slice(0, 4);
+
   const ADAPTIVE_META = {
     BUILD:  { emoji: '📈', label: 'Bouwen',      desc: 'Je bent klaar voor de volgende sessie in het schema.' },
     HOLD:   { emoji: '⏸',  label: 'Houd tempo',  desc: 'Herhaal de huidige sessie — lichaam is nog niet klaar om te stappen.' },
@@ -229,6 +298,9 @@ export function computeHeadCoach(log, logs, currentDate) {
     score: Math.round(score * 10) / 10,
     adaptiveState,
     adaptive: ADAPTIVE_META[adaptiveState],
+    pendingRecoveryCheck,
+    gateReason,
+    lastWorkout: lastW || null,
   };
 }
 
@@ -250,7 +322,9 @@ export function computeNextSession(log, logs, currentDate) {
   switch (state) {
     case 'HOLD':
       nr = lastNr || nextNr;
-      note = 'Zelfde niveau als je laatste sessie — bewust niet opbouwen vandaag.';
+      note = coach.pendingRecoveryCheck
+        ? 'Vul eerst je herstelcheck in (hoe reageerde je lichaam op de vorige training?) — daarna geef ik de volgende sessie vrij.'
+        : 'Zelfde niveau als je laatste sessie — bewust niet opbouwen vandaag.';
       break;
     case 'REPEAT':
       nr = lastNr || nextNr;
@@ -275,7 +349,10 @@ export function computeNextSession(log, logs, currentDate) {
       note = 'Je bent klaar voor de volgende stap in de opbouw.';
   }
   nr = Math.min(RUNS.length, Math.max(1, nr));
-  return { state, nr, run: RUNS[nr - 1], adaptive: coach.adaptive, note };
+  return {
+    state, nr, run: RUNS[nr - 1], adaptive: coach.adaptive, note,
+    pendingRecoveryCheck: !!coach.pendingRecoveryCheck,
+  };
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
