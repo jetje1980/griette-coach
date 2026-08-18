@@ -8,17 +8,17 @@ import { TIPS } from './data/tips';
 
 import Header from './components/Header';
 import TabBar from './components/TabBar';
-import CheckIn from './components/CheckIn';
-import Training from './components/Training';
-import PlanningHub from './components/PlanningHub';
+import DecisionToday from './components/DecisionToday';
+import WeekHub from './components/WeekHub';
+import LichaamHub from './components/LichaamHub';
+import LevenHub from './components/LevenHub';
 import VoortgangHub from './components/VoortgangHub';
-import MeerTab from './components/MeerTab';
 import Coach from './components/Coach';
 import Settings from './components/Settings';
 import Onboarding from './components/Onboarding';
 import StravaCallback from './components/StravaCallback';
 
-const TABS = ['Vandaag', 'Training', 'Planning', 'Voortgang', 'Coach', 'Meer'];
+const TABS = ['Vandaag', 'Week', 'Lichaam', 'Leven', 'Progressie', 'Coach'];
 const MAX_FUTURE_DAYS = 90;
 
 function today() {
@@ -111,7 +111,6 @@ export default function App() {
     setStreak(s);
   }, []);
 
-  // App is rendered only after AuthGate has confirmed a Supabase session.
   useEffect(() => {
     restoreFromCloud().then(count => {
       if (count > 0) { loadLog(currentDate); loadLogs(); }
@@ -180,7 +179,23 @@ export default function App() {
     return <Onboarding onDone={() => { setOnboardingDone(true); loadLogs(); }} />;
   }
 
-  const sharedProps = { log, saveField, saveFields, currentDate, logs: actualLogs, dayNum, showFlash, isFuture, deleteLog, syncStatus };
+  const sharedProps = {
+    log,
+    saveField,
+    saveFields,
+    currentDate,
+    logs: actualLogs,
+    dayNum,
+    showFlash,
+    isFuture,
+    deleteLog,
+    syncStatus,
+  };
+
+  const navigateFromToday = (target) => {
+    if (target === 'week') setTab(1);
+    if (target === 'training') setTab(2);
+  };
 
   return (
     <>
@@ -209,19 +224,19 @@ export default function App() {
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       <div>
-        {tab === 0 && <CheckIn {...sharedProps} tip={tip} />}
-        {tab === 1 && <Training {...sharedProps} />}
-        {tab === 2 && (
-          <PlanningHub
+        {tab === 0 && <DecisionToday {...sharedProps} tip={tip} onNavigate={navigateFromToday} />}
+        {tab === 1 && (
+          <WeekHub
             currentDate={currentDate}
             logs={logs}
             onSelectDate={(d) => { setCurrentDate(d); setTab(0); }}
             maxDate={maxFutureDate}
           />
         )}
-        {tab === 3 && <VoortgangHub logs={actualLogs} streak={streak} />}
-        {tab === 4 && <Coach logs={actualLogs} />}
-        {tab === 5 && <MeerTab {...sharedProps} tip={tip} />}
+        {tab === 2 && <LichaamHub {...sharedProps} />}
+        {tab === 3 && <LevenHub {...sharedProps} tip={tip} />}
+        {tab === 4 && <VoortgangHub logs={actualLogs} streak={streak} />}
+        {tab === 5 && <Coach logs={actualLogs} />}
       </div>
     </>
   );
