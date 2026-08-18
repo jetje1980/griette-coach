@@ -14,7 +14,7 @@ import WorkoutForm from './WorkoutForm';
 import RecoveryCheck from './RecoveryCheck';
 import CycleHistory from './CycleHistory';
 import { workoutOn, loadWorkouts, computePace } from '../workouts';
-import { api } from '../api';
+import { strava } from '../integrations';
 import { store } from '../store';
 
 // ── Constants ────────────────────────────────────────────────────
@@ -720,10 +720,10 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     // Onderscheid tussen "niet gekoppeld" en "backend onbereikbaar": op
     // statische hosting bestaat /api niet, en dan mag de UI niet suggereren
     // dat koppelen mogelijk is.
-    api.stravaStatus()
-      .then(s => setStravaStatus(s || { connected: false, reachable: true }))
+    strava.status()
+      .then(s => setStravaStatus(s || { connected: false, reachable: false }))
       .catch(() => setStravaStatus({ connected: false, reachable: false }));
-    api.stravaActivities().then(a => setStravaActivities(a)).catch(() => {});
+    strava.activities().then(a => setStravaActivities(a)).catch(() => {});
   }, []);
 
   const [trainMode, setTrainMode] = useState('run');
@@ -806,18 +806,19 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   async function syncStrava() {
     setSyncing(true);
     try {
-      const res = await api.stravaSync();
-      showFlash?.('🏃', `${res.count} activiteiten gesynchroniseerd`);
-      const acts = await api.stravaActivities();
-      setStravaActivities(acts);
+      const res = await strava.sync();
+      if (res?.error) { showFlash?.('❌', res.error); return; }
+      showFlash?.('🏃', `${res.count} nieuw, ${res.skipped || 0} al bekend`);
+      setStravaActivities(await strava.activities());
     } catch { showFlash?.('❌', 'Sync mislukt'); }
     finally { setSyncing(false); }
   }
 
   async function connectStrava() {
     try {
-      const { url } = await api.stravaAuth();
-      window.open(url, '_blank');
+      const url = await strava.authUrl();
+      if (!url) { showFlash?.('❌', 'Strava nog niet geconfigureerd op de server'); return; }
+      window.location.href = url;
     } catch (err) { showFlash?.('❌', err.message); }
   }
 
@@ -1162,7 +1163,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
                 );
               })}
               <button className="os-toggle-chip" style={{ marginTop: 10, fontSize: 12 }}
-                onClick={() => api.stravaDisconnect().then(() => setStravaStatus({ connected: false })).catch(() => {})}>
+                onClick={() => strava.disconnect().then(() => setStravaStatus({ connected: false, reachable: true, configured: true })).catch(() => {})}>
                 Ontkoppelen
               </button>
             </div>
@@ -1171,11 +1172,21 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
               {stravaStatus && stravaStatus.reachable === false ? (
                 <>
                   <div style={{ fontSize: 13, color: 'var(--rust)', fontWeight: 600, marginBottom: 6 }}>
-                    Strava-backend niet bereikbaar
+                    Strava-service niet bereikbaar
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5 }}>
-                    Koppelen vraagt een draaiende backend (/api). Handmatig invoeren en
-                    screenshot-import werken volledig zonder Strava.
+                    Handmatig invoeren en screenshot-import werken volledig zonder Strava.
+                  </div>
+                </>
+              ) : stravaStatus && stravaStatus.configured === false ? (
+                <>
+                  <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 600, marginBottom: 6 }}>
+                    Strava nog niet ingesteld
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5 }}>
+                    De serverfunctie draait, maar de Strava-app-sleutels ontbreken nog.
+                    Zet STRAVA_CLIENT_ID en STRAVA_CLIENT_SECRET in Supabase → Edge
+                    Functions → Secrets, dan werkt koppelen direct.
                   </div>
                 </>
               ) : (

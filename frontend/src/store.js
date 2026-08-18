@@ -1,12 +1,7 @@
 // Unified storage: localStorage always, backend optional (Mac only)
-import { createClient } from '@supabase/supabase-js';
+import { supabase as _sb, getUserId } from './supabase';
 
 const P = 'gc_';
-
-const _sb = createClient(
-  'https://osuqtfsxmquwqsbgzlqn.supabase.co',
-  'sb_publishable_6T-JJKX10RgLkWGwBwYaxg_gFANhdHS'
-);
 
 const ls = {
   getLog(date) {
@@ -79,7 +74,8 @@ export const store = {
     localStorage.removeItem(key);
     localStorage.setItem('gc_last_data_change', new Date().toISOString());
     try {
-      await _sb.from('gc_coach_data').delete().eq('key', key);
+      const uid = await getUserId();
+      if (uid) await _sb.from('gc_coach_data').delete().eq('user_id', uid).eq('key', key);
     } catch (e) {
       console.warn('Delete van cloud mislukt:', e.message);
     }

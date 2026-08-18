@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { store } from '../store';
+import { getSession } from '../supabase';
+import { pendingCount, forceSyncNow } from '../sync';
+import { LogoutButton } from './AuthGate';
+import Integrations from './Integrations';
 
 const FOOD_PREF_KEY = 'gc_food_prefs';
 
@@ -206,6 +210,39 @@ function FoodPrefs() {
   );
 }
 
+// Toont met welk account je bent ingelogd en waar de data staat.
+function AccountInfo() {
+  const [email, setEmail] = useState('');
+  const [pending, setPending] = useState(0);
+
+  useEffect(() => {
+    getSession().then(s => setEmail(s?.user?.email || '')).catch(() => {});
+    setPending(pendingCount());
+    const t = setInterval(() => setPending(pendingCount()), 3000);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
+        Ingelogd als <strong>{email || '—'}</strong>.<br />
+        Je gegevens staan in je eigen afgeschermde cloudopslag en zijn op elk
+        toestel beschikbaar na inloggen.
+      </div>
+      {pending > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 600, marginBottom: 8 }}>
+          {pending} wijziging{pending > 1 ? 'en' : ''} wacht op synchronisatie
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="os-toggle-chip" style={{ fontSize: 12 }}
+          onClick={() => forceSyncNow()}>Nu synchroniseren</button>
+        <LogoutButton />
+      </div>
+    </div>
+  );
+}
+
 export default function Settings({ onClose }) {
   const [apiKey, setApiKey] = useState('');
   const [aiEndpoint, setAiEndpointState] = useState('');
@@ -289,51 +326,18 @@ export default function Settings({ onClose }) {
           <button onClick={onClose} style={{ background: 'var(--border)', border: 'none', borderRadius: 99, width: 28, height: 28, cursor: 'pointer', fontSize: 14 }}>✕</button>
         </div>
 
-        {/* API Key */}
+        {/* AI — sleutel staat server-side */}
         <div className="card" style={{ marginBottom: 12 }}>
           <div className="card-header">
             <div className="card-accent" style={{ background: 'var(--rust)' }} />
-            <div className="card-title">🤖 Anthropic API-sleutel</div>
+            <div className="card-title">🤖 AI-coach</div>
           </div>
           <div className="card-body">
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.6 }}>
-              De AI-coach draait bij voorkeur via de <strong>server-proxy</strong>: zet
-              ANTHROPIC_API_KEY in de backend .env — dan hoeft er géén sleutel in de browser.
+            <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.6 }}>
+              De AI-analyses lopen via een beveiligde serverfunctie. De API-sleutel
+              staat uitsluitend server-side en komt nooit in je browser. Je hoeft
+              hier niets in te vullen.
             </div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              Backend-URL (optioneel, geen geheim)
-            </div>
-            <input
-              type="text"
-              placeholder="bijv. https://coach-api.example.com (leeg = zelfde server)"
-              value={aiEndpoint}
-              onChange={e => setAiEndpointState(e.target.value)}
-              style={{ marginBottom: 10, fontFamily: 'var(--font-mono)', fontSize: 12 }}
-            />
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              Sessie-sleutel (fallback — wordt niet bewaard na sluiten browser)
-            </div>
-            <input
-              type="password"
-              placeholder="sk-ant-... (alleen deze browsersessie)"
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              style={{ marginBottom: 8, fontFamily: 'var(--font-mono)', fontSize: 12 }}
-            />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-rust" style={{ flex: 1 }} onClick={saveKey}>
-                Opslaan
-              </button>
-              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={testKey} disabled={testing || !apiKey}>
-                {testing ? '⏳' : 'Test'}
-              </button>
-            </div>
-            {saved && <div className="saved-note">✓ Opgeslagen</div>}
-            {testResult && (
-              <div style={{ marginTop: 8, fontSize: 11, color: testResult.ok ? 'var(--sage)' : 'var(--alert)', fontWeight: 600 }}>
-                {testResult.msg}
-              </div>
-            )}
           </div>
         </div>
 
@@ -354,11 +358,25 @@ export default function Settings({ onClose }) {
           </div>
         </div>
 
+        {/* Integraties */}
+        <Integrations />
+
         {/* Data export / import */}
         <DataPortability />
 
         {/* Voedingsvoorkuren */}
         <FoodPrefs />
+
+        {/* Account */}
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="card-header">
+            <div className="card-accent" style={{ background: 'var(--sage)' }} />
+            <div className="card-title">👤 Account</div>
+          </div>
+          <div className="card-body">
+            <AccountInfo />
+          </div>
+        </div>
 
         {/* Reset */}
         <div className="card">

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   loadTasks, createTask, updateTask, deleteTask, TASK_STATUSES,
   destinationText, getDayActions, saveDayActions,
 } from '../tasks';
+import { trello, getTrelloConfig } from '../integrations';
 
 // Canonieke Capture Center: één plek voor alles wat je vastlegt.
 // Elk item houdt een zichtbare status én bestemming — niets verdwijnt.
@@ -11,10 +12,8 @@ const DESTINATIONS = [
   { id: 'today', emoji: '☀️', label: 'Vandaag', desc: 'Als actie op je dag' },
   { id: 'week',  emoji: '🗓', label: 'Deze week', desc: 'Als weekprioriteit' },
   { id: 'later', emoji: '🅿️', label: 'Later', desc: 'Parkeren, blijft vindbaar' },
-  // Externe bestemmingen: alleen selecteerbaar als de koppeling echt bestaat.
-  // Zolang dat niet zo is, zegt de UI dat eerlijk in plaats van te doen alsof.
-  { id: 'trello', emoji: '📋', label: 'Trello Backlog',
-    desc: 'Trello nog niet gekoppeld', disabled: true },
+  // Externe bestemming: pas selecteerbaar als de koppeling echt werkt.
+  { id: 'trello', emoji: '📋', label: 'Trello Backlog', desc: 'Naar je Trello-backlog' },
 ];
 
 function weekMondayOf(dateStr) {
@@ -33,6 +32,11 @@ export default function CaptureCenter({ currentDate, onChange }) {
   const [delForm, setDelForm] = useState({ to: '', followUpDate: '', note: '' });
   const [editingId, setEditingId] = useState(null);
   const [msg, setMsg] = useState('');
+  const [trelloState, setTrelloState] = useState(null);   // null = nog onbekend
+
+  useEffect(() => {
+    trello.status().then(setTrelloState).catch(() => setTrelloState({ connected: false }));
+  }, []);
 
   function refresh() {
     setTasks(loadTasks());
@@ -49,7 +53,7 @@ export default function CaptureCenter({ currentDate, onChange }) {
   }
 
   // Bestemming kiezen — "plannen" betekent altijd: kies waar dit heengaat
-  function applyDestination(task, destId) {
+  async function applyDestination(task, destId) {
     if (destId === 'today') {
       const actions = getDayActions(currentDate);
       if (!actions.some(a => a.taskId === task.id)) {
@@ -70,6 +74,28 @@ export default function CaptureCenter({ currentDate, onChange }) {
       localStorage.setItem(key, JSON.stringify(prio));
       updateTask(task.id, { status: 'planned', destination: 'week', date: monday });
       flash('Als weekprioriteit toegevoegd');
+    } else if (destId === 'trello') {
+      if (!trelloState?.connected) {
+        flash('Trello nog niet gekoppeld — regel dat eerst in Instellingen');
+        return;
+      }
+      setPlanning(null);
+      flash('Trello-card aanmaken…');
+      const res = await trello.createCard({ taskId: task.id, title: task.title });
+      if (res?.error) {
+        updateTask(task.id, { syncState: 'error' });
+        flash(`Trello-fout: ${res.error}`);
+      } else {
+        updateTask(task.id, {
+          status: 'planned', destination: 'trello',
+          trelloCardId: res.cardId, trelloUrl: res.url,
+          trelloBoardId: res.boardId, trelloListId: res.listId,
+          syncState: 'synced', lastSyncedAt: new Date().toISOString(),
+        });
+        flash(res.duplicate ? 'Card bestond al — geen dubbele aangemaakt' : 'Trello-card aangemaakt');
+      }
+      refresh();
+      return;
     } else {
       updateTask(task.id, { status: 'parked', destination: 'later' });
       flash('Geparkeerd — terug te vinden onder Geparkeerd');
@@ -131,20 +157,28 @@ export default function CaptureCenter({ currentDate, onChange }) {
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
             Waar gaat dit heen? — "{planning.title}"
           </div>
-          {DESTINATIONS.map(d => (
-            <div key={d.id}
-              onClick={() => { if (!d.disabled) applyDestination(planning, d.id); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px',
-                cursor: d.disabled ? 'not-allowed' : 'pointer', opacity: d.disabled ? 0.45 : 1,
-                borderBottom: '1px solid var(--divide)' }}>
-              <span style={{ fontSize: 17 }}>{d.emoji}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{d.label}</div>
-                <div style={{ fontSize: 11, color: d.disabled ? 'var(--rust)' : 'var(--ghost)' }}>{d.desc}</div>
+          {DESTINATIONS.map(d => {
+            const off = d.id === 'trello' && !trelloState?.connected;
+            const desc = d.id === 'trello'
+              ? (trelloState === null ? 'verbinding controleren…'
+                 : trelloState.connected ? `Board-lijst: ${getTrelloConfig().backlogListName || 'ingesteld'}`
+                 : 'Trello nog niet gekoppeld')
+              : d.desc;
+            return (
+              <div key={d.id}
+                onClick={() => { if (!off) applyDestination(planning, d.id); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px',
+                  cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.45 : 1,
+                  borderBottom: '1px solid var(--divide)' }}>
+                <span style={{ fontSize: 17 }}>{d.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{d.label}</div>
+                  <div style={{ fontSize: 11, color: off ? 'var(--rust)' : 'var(--ghost)' }}>{desc}</div>
+                </div>
+                <span style={{ color: 'var(--ghost)' }}>{off ? '—' : '›'}</span>
               </div>
-              <span style={{ color: 'var(--ghost)' }}>{d.disabled ? '—' : '›'}</span>
-            </div>
-          ))}
+            );
+          })}
           <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 10 }}
             onClick={() => setPlanning(null)}>Annuleer</button>
         </div>

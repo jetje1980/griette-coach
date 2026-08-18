@@ -4,94 +4,45 @@
 // Er wordt GEEN API-sleutel meer persistent client-side (localStorage) bewaard.
 
 import { USER } from './config';
+import { SUPABASE_URL, getAccessToken } from './supabase';
 
 const MODEL = 'claude-sonnet-4-6';
-const SESSION_KEY = 'gc_api_key_session';
-const LEGACY_KEY = 'gc_api_key';
+const EDGE_FN = `${SUPABASE_URL}/functions/v1/coach-ai`;
 
-// Migratie: verwijder oude persistente sleutel uit localStorage.
-// Eén keer naar sessionStorage zodat de huidige browsersessie blijft werken.
+// Alle AI-verkeer loopt via een geauthenticeerde Edge Function. De
+// Anthropic-sleutel staat uitsluitend server-side als Edge Function secret.
+// Er is bewust GEEN directe browser-route meer: die vereiste een sleutel in
+// de client en de dangerous-direct-browser-access header.
+
+// Eenmalige opruiming van sleutels uit eerdere versies.
 (() => {
   try {
-    const legacy = localStorage.getItem(LEGACY_KEY);
-    if (legacy) {
-      if (!sessionStorage.getItem(SESSION_KEY)) sessionStorage.setItem(SESSION_KEY, legacy);
-      localStorage.removeItem(LEGACY_KEY);
-    }
+    localStorage.removeItem('gc_api_key');
+    sessionStorage.removeItem('gc_api_key_session');
   } catch { /* storage niet beschikbaar */ }
 })();
 
-function getKey() {
-  try { return sessionStorage.getItem(SESSION_KEY) || ''; } catch { return ''; }
-}
+async function callClaude(messages, maxTokens = 1024) {
+  const token = await getAccessToken();
+  if (!token) throw new Error('Niet ingelogd — log in om de AI-coach te gebruiken.');
 
-export function setSessionKey(key) {
-  try {
-    if (key) sessionStorage.setItem(SESSION_KEY, key.trim());
-    else sessionStorage.removeItem(SESSION_KEY);
-  } catch { /* storage niet beschikbaar */ }
-}
-
-// Optionele backend-URL (geen geheim) voor als de app statisch gehost wordt
-// en de backend elders draait, bijv. https://coach-api.example.com
-export function getAiEndpoint() {
-  try { return (localStorage.getItem('gc_ai_endpoint') || '').replace(/\/$/, ''); } catch { return ''; }
-}
-export function setAiEndpoint(url) {
-  try {
-    if (url && url.trim()) localStorage.setItem('gc_ai_endpoint', url.trim());
-    else localStorage.removeItem('gc_ai_endpoint');
-  } catch { /* storage niet beschikbaar */ }
-}
-
-async function callClaudeViaServer(messages, maxTokens) {
-  const endpoint = `${getAiEndpoint()}/api/ai/messages`;
-  const r = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages }),
-  });
-  if (r.status === 503 || r.status === 404) return null; // server niet geconfigureerd
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Server API fout ${r.status}`);
-  }
-  const data = await r.json();
-  return data.content[0].text;
-}
-
-async function callClaudeDirect(messages, maxTokens) {
-  const key = getKey();
-  if (!key) throw new Error('AI-server niet bereikbaar en geen sessie-sleutel ingesteld — ga naar Instellingen');
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await fetch(EDGE_FN, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages }),
   });
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API fout ${r.status}`);
-  }
-  const data = await r.json();
-  return data.content[0].text;
-}
 
-async function callClaude(messages, maxTokens = 1024) {
-  // Try server proxy first (no client-side key needed)
-  try {
-    const result = await callClaudeViaServer(messages, maxTokens);
-    if (result !== null) return result;
-  } catch (serverErr) {
-    // Server error (not 503) — rethrow only if no client key to fall back to
-    if (!getKey()) throw serverErr;
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 503) {
+    throw new Error('AI-sleutel nog niet ingesteld op de server (Supabase → Edge Functions → Secrets).');
   }
-  // Fall back to direct browser access with localStorage key
-  return callClaudeDirect(messages, maxTokens);
+  if (!r.ok) {
+    throw new Error(data?.error?.message || data?.error || `AI-fout ${r.status}`);
+  }
+  return data.content[0].text;
 }
 
 function buildContext(logs, measurements) {
@@ -649,7 +600,8 @@ ${measurementLines.length ? `MATEN VERLOOP (cm):\n${measurementLines.join('\n')}
 
 export const ai = {
   // Returns true if client key is set OR server proxy is reachable (optimistic)
-  hasKey: () => !!getKey() || true,
+  // De sleutel staat server-side; de client hoeft er niets van te weten.
+  hasKey: () => true,
 
   // Screenshot(s) van Garmin/Strava/Apple/Polar/Fitbit/loopband → gestructureerde workoutdata.
   // Regels: NOOIT gokken. Onzekere velden = null (UI toont "niet betrouwbaar herkend").

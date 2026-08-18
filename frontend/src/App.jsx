@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { USER } from './config';
 import { store } from './store';
-import { restoreFromCloud, onSyncStatus, getSyncStatus } from './sync';
+import { restoreFromCloud, onSyncStatus, getSyncStatus, forceSyncNow } from './sync';
 import { photoStore } from './photoStore';
+import { dreamStore } from './dreamStore';
+import { workoutImages } from './workoutImages';
 
 import VandaagScreen   from './components/VandaagScreen';
 import WeekScreen      from './components/WeekScreen';
@@ -77,10 +79,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Cloud is de bron: eerst hydrateren, daarna media synchroniseren.
     restoreFromCloud().then(count => {
       if (count > 0) { loadLog(currentDate); loadLogs(); }
     });
     photoStore.restoreFromCloud();
+    // Beeldmateriaal dat eerder alleen lokaal stond alsnog veiligstellen
+    dreamStore.syncWithCloud?.().catch(() => {});
+    workoutImages.migrateToCloud?.().catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -156,6 +162,20 @@ export default function App() {
           ⚙
         </button>
       </nav>
+
+      {/* Synchronisatie zichtbaar maken: een mislukte schrijfactie mag niet
+          stil verdwijnen. Wachtrij blijft staan en wordt opnieuw geprobeerd. */}
+      {(syncStatus === 'error' || syncStatus === 'offline') && (
+        <div style={{ position: 'fixed', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 150, background: 'var(--card)', border: '1px solid var(--rust)',
+          borderRadius: 99, padding: '6px 14px', fontSize: 12, color: 'var(--rust)',
+          fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, maxWidth: '92vw' }}>
+          {syncStatus === 'offline' ? '📴 Offline — wijzigingen staan klaar' : '⚠️ Sync mislukt — wijzigingen bewaard'}
+          <button onClick={() => forceSyncNow()}
+            style={{ background: 'none', border: 'none', color: 'var(--sage)', cursor: 'pointer',
+              fontWeight: 700, fontSize: 12 }}>opnieuw</button>
+        </div>
+      )}
 
       {/* Screens */}
       {tab === 0 && (
