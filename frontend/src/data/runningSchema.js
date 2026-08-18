@@ -2,31 +2,6 @@
 // Tempo hardlopen: ~10:00-11:00 min/km · Tempo wandelen: 6:30-7:00 min/km
 // Grensregel: boven 130 bpm → direct wandelen tot < 105 bpm, dan hervat
 
-// Bereken geplande datum: startdatum + week- en dagoffset (ma/wo/vr)
-// Runs met fixedDate hebben een vaste datum (races)
-export function getRunDate(runNr, startDate) {
-  const run = RUNS.find(r => r.nr === runNr);
-  if (run?.fixedDate) return run.fixedDate;
-  const start = new Date(startDate);
-  const week = Math.ceil(runNr / 3);
-  const posInWeek = (runNr - 1) % 3; // 0=ma, 1=wo, 2=vr
-  const daysOffset = 1 + (week - 1) * 7 + [0, 2, 4][posInWeek];
-  const d = new Date(start);
-  d.setDate(d.getDate() + daysOffset);
-  return d.toISOString().slice(0, 10);
-}
-
-// Loopstatus voor een training: gedaan / verplaatst / toekomst
-export function getRunStatus(runNr, startDate, logs) {
-  const date = getRunDate(runNr, startDate);
-  const log = logs?.[date] || Object.values(logs || {}).find(l => l.run_session === runNr);
-  if (log?.run_done) return { done: true, date, log };
-  if (log?.run_skipped) return { skipped: true, date, log };
-  const override = (() => { try { return JSON.parse(localStorage.getItem(`gc_plan_override_${date}`)); } catch { return null; } })();
-  if (override) return { overridden: true, date, override };
-  return { done: false, date };
-}
-
 export const RUNS = [
   // ── Week 1 · Aug 18-22 · Eerste stappen — hartslag is de baas ─────────────
   {

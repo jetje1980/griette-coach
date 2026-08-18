@@ -61,6 +61,14 @@ const HERSTEL_OPTS = [
 ];
 const SLEEP_H_OPTS = [4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9];
 
+const BLEEDING_OPTS = [
+  { id: 'geen',     label: 'Geen' },
+  { id: 'spotting', label: 'Spotting' },
+  { id: 'licht',    label: 'Licht' },
+  { id: 'normaal',  label: 'Normaal' },
+  { id: 'zwaar',    label: 'Zwaar' },
+];
+
 const CYCLUS_OPTS = [
   { id: 'menstruatie', label: 'Menstruatie' },
   { id: 'folliculair', label: 'Folliculair' },
@@ -76,7 +84,10 @@ const READINESS_MAP = {
   RED:   { word: 'Laag',  cls: 'low',  sub: 'Volledige rust vandaag' },
 };
 
-const SUBTABS = ['Vandaag', 'Training', 'Herstel', 'Voeding', 'Cyclus', 'Maten', 'Medicatie'];
+// Lichaam is de detailhub voor alles fysiek. Training staat vooraan omdat
+// dat het vaakst gebruikt wordt; de dagelijkse check-in zit in Body samen
+// met de metingen (gewicht, bloeddruk, maten) — één plek per functie.
+const SUBTABS = ['Training', 'Herstel', 'Body', 'Cyclus', 'Voeding', 'Medicatie'];
 
 // ── Helpers ──────────────────────────────────────────────────────
 function getNextRunNr(logs) {
@@ -718,8 +729,19 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     } catch (err) { showFlash?.('❌', err.message); }
   }
 
-  // ── SUBTAB: VANDAAG ──────────────────────────────────────────
-  function TabVandaag() {
+  // ── SUBTAB: BODY ─────────────────────────────────────────────
+  // Dagelijkse check-in in detail + alle metingen op één plek.
+  function TabBody() {
+    return (
+      <div>
+        {TabCheckInDetail()}
+        <div style={{ borderTop: '1px solid var(--divide)', marginTop: 20, paddingTop: 4 }} />
+        {TabMaten()}
+      </div>
+    );
+  }
+
+  function TabCheckInDetail() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {flash && <div style={{ fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>{flash}</div>}
@@ -1064,23 +1086,14 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
 
   // ── SUBTAB: HERSTEL ──────────────────────────────────────────
   function TabHerstel() {
-    const activeSymptoms = SYMPTOMS_LIST.filter(s => log?.[s.id]).length;
+    // Het volledige coachbesluit staat op Vandaag (Decision Cockpit) — hier
+    // alleen de invoer en de directe PEM-signalering.
     const pemSignals = [
       log?.delayed_fatigue, log?.delayed_brainfog, log?.delayed_breathless, log?.symptom_pem
     ].filter(Boolean).length;
 
     return (
       <div>
-        {/* Coach advice */}
-        <div className="os-card" style={{ borderLeft: `4px solid var(--${coach.decision === 'GREEN' ? 'green' : coach.decision === 'BLUE' ? 'blue' : coach.decision === 'RED' ? 'alert' : 'gold'})`, marginBottom: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
-            {r.word} — {r.sub}
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.5 }}>
-            {coach.why?.[0]}
-          </div>
-        </div>
-
         {pemSignals > 0 && (
           <div style={{ background: 'var(--alert-l)', border: '1px solid var(--alert)', borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 14, fontSize: 13, color: 'var(--alert)', fontWeight: 600 }}>
             {pemSignals} PEM-signalen gedetecteerd — volledige rust heeft prioriteit
@@ -1217,9 +1230,61 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     });
     const withEnough = phaseStats.filter(p => p.n >= MIN_OBS);
 
+    // Cyclusdag afleiden uit de laatst gemarkeerde dag 1 — met handmatige
+    // override; geen rigide dogma, alleen context.
+    const cycleStarts = (() => {
+      try {
+        const hist = JSON.parse(localStorage.getItem('gc_cycle_history') || '[]');
+        const cur = localStorage.getItem('gc_cycle_start');
+        return [...new Set([...(cur ? [cur] : []), ...hist])].sort();
+      } catch { return []; }
+    })();
+    const lastStart = cycleStarts.filter(d => d <= currentDate).pop();
+    const cycleDay = lastStart
+      ? Math.floor((new Date(currentDate) - new Date(lastStart)) / 86400000) + 1
+      : null;
+
+    function markDayOne() {
+      if (!window.confirm(`${currentDate} markeren als dag 1 van een nieuwe menstruatie?`)) return;
+      try {
+        const hist = JSON.parse(localStorage.getItem('gc_cycle_history') || '[]');
+        const prev = localStorage.getItem('gc_cycle_start');
+        const next = [...new Set([...(prev ? [prev] : []), ...hist])];
+        localStorage.setItem('gc_cycle_history', JSON.stringify(next));
+        localStorage.setItem('gc_cycle_start', currentDate);
+      } catch { /* storage niet beschikbaar */ }
+      saveFields({ cycle_day_one: true, bleeding: log?.bleeding || 'normaal' });
+      flashMsg('Dag 1 vastgelegd');
+    }
+
     return (
       <div>
-        <SectionLabel style={{ marginTop: 0 }}>Cyclusfase</SectionLabel>
+        {/* Dagelijkse bloeding — de feitelijke observatie */}
+        <SectionLabel style={{ marginTop: 0 }}>Bloeding vandaag</SectionLabel>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          {BLEEDING_OPTS.map(o => (
+            <button key={o.id}
+              className={`os-toggle-chip ${log?.bleeding === o.id ? 'active' : ''}`}
+              onClick={() => saveField('bleeding', log?.bleeding === o.id ? null : o.id)}
+              style={{ fontSize: 13 }}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <button className={`os-toggle-chip ${log?.cycle_day_one ? 'active green' : ''}`}
+            onClick={markDayOne} style={{ fontSize: 13 }}>
+            {log?.cycle_day_one ? '✓ Dag 1 vastgelegd' : 'Nieuwe menstruatie gestart?'}
+          </button>
+          {cycleDay != null && (
+            <span style={{ fontSize: 12, color: 'var(--sub)' }}>
+              Cyclusdag {cycleDay} <span style={{ color: 'var(--ghost)' }}>(berekend)</span>
+            </span>
+          )}
+        </div>
+
+        <SectionLabel>Cyclusfase — handmatige override</SectionLabel>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
           {CYCLUS_OPTS.map(o => (
             <button key={o.id}
@@ -1447,13 +1512,12 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
           functies krijgen elke render een nieuwe identiteit en zouden anders
           hun hele subtree (incl. KrachtModule-state) remounten. */}
       <div className="os-content" style={{ paddingTop: 16 }}>
-        {subTab === 0 && TabVandaag()}
-        {subTab === 1 && TabTraining()}
-        {subTab === 2 && TabHerstel()}
-        {subTab === 3 && TabVoeding()}
-        {subTab === 4 && TabCyclus()}
-        {subTab === 5 && TabMaten()}
-        {subTab === 6 && TabMedicatie()}
+        {subTab === 0 && TabTraining()}
+        {subTab === 1 && TabHerstel()}
+        {subTab === 2 && TabBody()}
+        {subTab === 3 && TabCyclus()}
+        {subTab === 4 && TabVoeding()}
+        {subTab === 5 && TabMedicatie()}
       </div>
     </div>
   );

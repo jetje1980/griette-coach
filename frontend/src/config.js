@@ -1,10 +1,13 @@
-export const USER = {
+// ── Lichaamsprofiel — één centrale, bewerkbare bron ──────────────
+// Alle doelwaarden staan hier. Overschrijfbaar via Instellingen
+// (gc_body_config); nergens anders hardcoded doelgewichten.
+const BODY_DEFAULTS = {
   name: 'Griette',
   age: 46,
   height: 163,
   startWeight: 62.7,
   goalWeight: 57,
-  minWeight: 45,
+  minWeight: 45,       // ondergrens — nooit onder, ongeacht tempo
   startDate: '2026-08-17',
   durationDays: 119,
   hrZone: { low: 106, high: 132 },
@@ -12,11 +15,32 @@ export const USER = {
   currentRun: 10,
 };
 
+function loadBodyConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('gc_body_config') || 'null');
+    return saved ? { ...BODY_DEFAULTS, ...saved } : BODY_DEFAULTS;
+  } catch { return BODY_DEFAULTS; }
+}
+
+export const USER = loadBodyConfig();
+
+export function saveBodyConfig(patch) {
+  const next = { ...loadBodyConfig(), ...patch };
+  localStorage.setItem('gc_body_config', JSON.stringify(next));
+  Object.assign(USER, next);
+  return next;
+}
+
+export const BODY_DEFAULT_VALUES = BODY_DEFAULTS;
+
+// Gewoontes ondersteunen herstel, spiermassa en energie — geen
+// restrictieprotocollen. "Geen suiker"/"weinig zout" zijn bewust
+// vervangen: harde restrictie kan herstel en performance schaden.
 export const HABITS = [
-  { id: 'water',       label: 'Water 2L',         emoji: '💧' },
-  { id: 'protein',     label: 'Voldoende eiwit',   emoji: '🥩' },
-  { id: 'no_sugar',    label: 'Geen suiker',        emoji: '🚫' },
-  { id: 'no_salt',     label: 'Weinig zout',        emoji: '🧂' },
+  { id: 'water',       label: 'Voldoende drinken',  emoji: '💧' },
+  { id: 'protein',     label: 'Eiwit bij elke maaltijd', emoji: '🥩' },
+  { id: 'no_sugar',    label: 'Bewust met suiker',  emoji: '🍬' },
+  { id: 'no_salt',     label: 'Zout naar behoefte', emoji: '🧂' },
   { id: 'bed_on_time', label: 'Bed vóór 23u',       emoji: '🛏️' },
   { id: 'low_stress',  label: 'Stress laag',        emoji: '🧘' },
 ];

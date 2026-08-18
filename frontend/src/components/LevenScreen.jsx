@@ -1,8 +1,116 @@
 import React, { useState, useEffect, useRef } from 'react';
 import SubTabs from './SubTabs';
 import { dreamStore, fileToDreamImage } from '../dreamStore';
+import CaptureCenter from './CaptureCenter';
 
-const SUBTABS = ['Glow', 'Projecten', 'Geld', 'Routines', 'Toekomst', 'Eten'];
+// Leven = levensorganisatie en Future Self. Taken bundelt Capture en
+// projecten zodat er geen concurrerende taakmodules meer zijn.
+const SUBTABS = ['Taken', 'Focus', 'Routines', 'Geld', 'Toekomst', 'Glow', 'Eten'];
+
+// ═══════════════════════════════════════════════════════════════
+// FOCUS SEASONS — twee expliciet gescheiden modellen
+// ═══════════════════════════════════════════════════════════════
+// gc_executive_focus  : de huidige werkperiode (één seizoen, drie velden)
+// gc_future_focus_seasons : per levensdomein een stand (PRIMARY/MAINTAIN/NOT_NOW)
+// Ze delen bewust GEEN storage en overschrijven elkaar nooit.
+const EXEC_FOCUS_KEY   = 'gc_executive_focus';
+const FUTURE_FOCUS_KEY = 'gc_future_focus_seasons';
+const LEGACY_SEASON_KEY = 'gc_focus_season';   // alleen gelezen, nooit overschreven
+
+export const FOCUS_STATES = [
+  { id: 'PRIMARY',  label: 'Primary',  emoji: '🔺', desc: 'Hier gaat energie heen' },
+  { id: 'MAINTAIN', label: 'Maintain', emoji: '➖', desc: 'Op peil houden, niet uitbouwen' },
+  { id: 'NOT_NOW',  label: 'Not now',  emoji: '💤', desc: 'Bewust even niet' },
+];
+
+const FOCUS_DOMAINS = [
+  { id: 'BODY',    emoji: '💪', label: 'Body' },
+  { id: 'RUN',     emoji: '🏃', label: 'Run' },
+  { id: 'WORK',    emoji: '💼', label: 'Work' },
+  { id: 'MONEY',   emoji: '💰', label: 'Money' },
+  { id: 'FREEDOM', emoji: '🌊', label: 'Freedom' },
+  { id: 'GLOW',    emoji: '✨', label: 'Glow' },
+];
+
+export function loadExecutiveFocus() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(EXEC_FOCUS_KEY) || 'null');
+    if (saved) return saved;
+    // Eenmalige, niet-destructieve overname van de oude seizoensnaam
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_SEASON_KEY) || 'null');
+    return { seasonName: legacy?.name || '', primaryFocus: '', maintainFocus: '', notNowFocus: '' };
+  } catch { return { seasonName: '', primaryFocus: '', maintainFocus: '', notNowFocus: '' }; }
+}
+function saveExecutiveFocus(obj) { localStorage.setItem(EXEC_FOCUS_KEY, JSON.stringify(obj)); }
+
+function loadFutureFocus() {
+  try { return JSON.parse(localStorage.getItem(FUTURE_FOCUS_KEY) || '{}'); } catch { return {}; }
+}
+function saveFutureFocus(obj) { localStorage.setItem(FUTURE_FOCUS_KEY, JSON.stringify(obj)); }
+
+function TabFocus() {
+  const [exec, setExec] = useState(loadExecutiveFocus);
+  const [domains, setDomains] = useState(loadFutureFocus);
+
+  function updExec(key, val) {
+    const next = { ...exec, [key]: val };
+    saveExecutiveFocus(next); setExec(next);
+  }
+  function setDomain(id, state) {
+    const next = { ...domains, [id]: domains[id] === state ? null : state };
+    saveFutureFocus(next); setDomains(next);
+  }
+
+  const EXEC_FIELDS = [
+    { key: 'primaryFocus',  label: 'Primary — waar energie heen gaat', ph: 'Bijv. hardloopopbouw afmaken' },
+    { key: 'maintainFocus', label: 'Maintain — op peil houden',        ph: 'Bijv. krachttraining 2× per week' },
+    { key: 'notNowFocus',   label: 'Not now — bewust even niet',        ph: 'Bijv. nieuwe projecten aannemen' },
+  ];
+
+  return (
+    <div>
+      <div className="os-section-label" style={{ marginTop: 0 }}>Huidig seizoen</div>
+      <div className="os-card">
+        <input className="os-input" value={exec.seasonName || ''}
+          onChange={e => updExec('seasonName', e.target.value)}
+          placeholder="Naam van dit seizoen…" style={{ marginBottom: 12 }} />
+        {EXEC_FIELDS.map(f => (
+          <div key={f.key} style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase',
+              letterSpacing: '0.4px', fontWeight: 700, marginBottom: 3 }}>{f.label}</div>
+            <input className="os-input" value={exec[f.key] || ''}
+              onChange={e => updExec(f.key, e.target.value)} placeholder={f.ph} />
+          </div>
+        ))}
+      </div>
+
+      <div className="os-section-label">Levensdomeinen dit seizoen</div>
+      <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5, marginBottom: 10 }}>
+        Niet alles kan tegelijk primary. Dit staat los van je seizoensnaam hierboven.
+      </div>
+      {FOCUS_DOMAINS.map(d => (
+        <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 0', borderBottom: '1px solid var(--divide)' }}>
+          <span style={{ fontSize: 16, minWidth: 24 }}>{d.emoji}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, minWidth: 62 }}>{d.label}</span>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {FOCUS_STATES.map(s => (
+              <button key={s.id}
+                className={`os-toggle-chip ${domains[d.id] === s.id ? 'active green' : ''}`}
+                onClick={() => setDomain(d.id, s.id)}
+                style={{ fontSize: 11 }}>
+                {s.emoji} {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 10, lineHeight: 1.5 }}>
+        {FOCUS_STATES.map(s => `${s.emoji} ${s.label}: ${s.desc}`).join(' · ')}
+      </div>
+    </div>
+  );
+}
 
 // ── Shared helpers ──────────────────────────────────────────────
 function ExpandSection({ label, children, initialOpen = false }) {
@@ -1348,6 +1456,26 @@ function TabEten() {
 // ═══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
+// Taken = één plek voor Capture (inbox met statussen) én projecten met
+// WIP-limiet. Geen concurrerende taakmodules meer.
+function TabTaken() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [view, setView] = useState('capture');
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+        {[{ id: 'capture', label: '📥 Capture' }, { id: 'projects', label: '📁 Projecten' }].map(v => (
+          <button key={v.id} className={`os-scale-btn ${view === v.id ? 'active' : ''}`}
+            onClick={() => setView(v.id)} style={{ flex: 1, padding: '9px 4px', fontSize: 12 }}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+      {view === 'capture' ? <CaptureCenter currentDate={today} /> : <TabProjecten />}
+    </div>
+  );
+}
+
 export default function LevenScreen() {
   const [activeTab, setActiveTab] = useState(0);
 
@@ -1355,12 +1483,13 @@ export default function LevenScreen() {
     <div className="os-content">
       <SubTabs tabs={SUBTABS} active={activeTab} onChange={setActiveTab} />
 
-      {activeTab === 0 && <TabGlow />}
-      {activeTab === 1 && <TabProjecten />}
-      {activeTab === 2 && <TabGeld />}
-      {activeTab === 3 && <TabRoutines />}
+      {activeTab === 0 && <TabTaken />}
+      {activeTab === 1 && <TabFocus />}
+      {activeTab === 2 && <TabRoutines />}
+      {activeTab === 3 && <TabGeld />}
       {activeTab === 4 && <TabToekomst />}
-      {activeTab === 5 && <TabEten />}
+      {activeTab === 5 && <TabGlow />}
+      {activeTab === 6 && <TabEten />}
     </div>
   );
 }

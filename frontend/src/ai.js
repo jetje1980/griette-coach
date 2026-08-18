@@ -3,6 +3,8 @@
 // Fallback: een sessie-sleutel in sessionStorage (verdwijnt bij sluiten browser).
 // Er wordt GEEN API-sleutel meer persistent client-side (localStorage) bewaard.
 
+import { USER } from './config';
+
 const MODEL = 'claude-sonnet-4-6';
 const SESSION_KEY = 'gc_api_key_session';
 const LEGACY_KEY = 'gc_api_key';
@@ -416,7 +418,7 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
       { emoji: '🏝️', title: 'Ameland gezinsvakantie', startDate: '2026-08-21', endDate: '2026-08-28', description: 'Gezinsvakantie Ameland — beperkte training mogelijk (fietsen, wandelen)', goal: 'Mounjaro-herstart verankeren, stabiliseren na zomervakantie' },
       { emoji: '💍', title: '22 jaar getrouwd — TROUWJURK', startDate: '2026-09-02', endDate: '2026-09-02', description: 'Huwelijksverjaardag — de trouwjurk passen is HET persoonlijke mijlpaal', goal: 'In de trouwjurk passen — emotioneel belangrijkste milestone van het hele traject' },
       { emoji: '🏃', title: 'Terschelling Bereloop', startDate: '2026-10-30', endDate: '2026-11-02', description: '10 km hardloopevenement op Terschelling — strand + duin, zone B tempo', goal: '10 km finishen in zone B, ~80–90 min — het eerste officiële hardloopevenement ooit' },
-      { emoji: '🥂', title: 'Oud & Nieuw met vrienden', startDate: '2026-12-29', endDate: '2027-01-02', description: 'Oud & nieuw vieren met vrienden', goal: 'Stralend het nieuwe jaar ingaan — ondergrens eigen keuze: nooit onder 45 kg' },
+      { emoji: '🥂', title: 'Oud & Nieuw met vrienden', startDate: '2026-12-29', endDate: '2027-01-02', description: 'Oud & nieuw vieren met vrienden', goal: 'Stralend het nieuwe jaar ingaan — ondergrens eigen keuze: nooit onder de ingestelde ondergrens' },
     ];
     return EVENTS.map(e => {
       const days = Math.max(0, Math.floor((new Date(e.startDate) - new Date(today)) / 86400000));
@@ -439,7 +441,7 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
       if (days <= 0) return null;
       return +(latest.weight - (weeklyRate / 7) * days).toFixed(1);
     };
-    const MIN_WEIGHT = 45;
+    const MIN_WEIGHT = USER.minWeight;
     const milestones = [
       { label: '🏖️ Vakantie (27 jul)', date: '2026-07-27' },
       { label: '🏝️ Ameland (21 aug)', date: '2026-08-21' },
@@ -501,8 +503,20 @@ ${dataRange}
 GRIETTE — 46 jaar, 163 cm
 Gezondheidsprofiel: long covid herstel, ADHD, waarschijnlijk laat-perimenopauze / vroeg menopauze
 Medicatie: Mounjaro 2.5mg/wk (GLP-1, eetlustremmer + insulinegevoeligheid), Candesartan 12mg/dag (hypertensie), ADHD-meds
-Doel: huidige weging → 55 kg (herstart 70-dagen traject 2026-05-27)
-Gewichtsondergrens (eigen keuze, absoluut): NOOIT onder 45 kg — als prognose richting 45 kg gaat, altijd signaleren en tempo bijstellen
+Doel: huidige weging → ${USER.goalWeight} kg (één centrale bron: lichaamsconfig)
+
+CANONIEKE VOEDINGS- EN BODY-COMPOSITIELOGICA (leidend — negeer oudere restrictieregels):
+- Voeding ondersteunt: herstel, spiermassa, training, lichaamssamenstelling, energie,
+  gezond ouder worden, hormonale gezondheid en long-covid-herstel.
+- Bescherm actief tegen low energy availability: te weinig eten remt herstel, spieropbouw,
+  hormonale functie en trainingsadaptatie. Bij twijfel: méér eiwit en voldoende energie.
+- GEEN harde restrictieregels. Niet adviseren: geen koolhydraten na een bepaald tijdstip,
+  zout schrappen, strikte eetvensters, snel vocht kwijtraken, of versneld gewichtsverlies.
+- Beoordeel voortgang op de COMBINATIE van: gewichtstrend, taille, foto's, kledingfit,
+  kracht, performance en herstel. Stabiel gewicht met een kleinere taille en meer kracht
+  is positieve progressie — benoem dat ook zo.
+- Ondergrens ${USER.minWeight} kg is absoluut; bij prognose in die richting altijd tempo bijstellen.
+Gewichtsondergrens (eigen keuze, absoluut): NOOIT onder ${USER.minWeight} kg — als prognose richting 45 kg gaat, altijd signaleren en tempo bijstellen
 Zone B hartslag: 106–132 bpm (alle aerobe training hierin houden)
 
 HORMONALE VOORGESCHIEDENIS (cruciaal voor context):
@@ -565,7 +579,7 @@ VAKANTIE- EN MIJLPALENPLANNING:
 LANGE-TERMIJN STRATEGIE (door Griette zelf bepaald):
 - Mounjaro 2.5mg continueren door peri- en menopauze (~5 jaar, tot ~51e jaar)
 - Geen dosisverhoging — bewuste keuze, 2.5mg werkt aantoonbaar (was 60 kg op jan 2026)
-- Doel: 55 kg bereiken en minimaal 6 maanden vasthouden VOORDAT gestopt wordt
+- Doel: ${USER.goalWeight} kg bereiken en minimaal 6 maanden vasthouden VOORDAT gestopt wordt
 - Stoppoging pas realistisch postmenopauze als gewicht gestabiliseerd en eetgewoontes automatisch zijn
 - Pijlers voor "ooit stoppen": spiermassa opbouwen (zone B + core), eiwitgewoontes automatiseren, vetverbrandingscapaciteit trainen
 - Vakantie-pauzes zijn onvermijdelijk maar minimaliseerbaar door timing van laatste/eerste prik
@@ -745,7 +759,7 @@ Toon: direct, nieuwsgierig, data-gedreven. Behandel haar als iemand die haar eig
     const prompt = `${context}
 ${prevContext}
 HUIDIGE FOTO-SESSIE: dag ${dayNum} van 70 | aanzichten: ${availableViews}
-Huidig gewicht: ${currentWeight ?? '?'} kg | doel: 55 kg | start: 62.7 kg
+Huidig gewicht: ${currentWeight ?? '?'} kg | doel: ${USER.goalWeight} kg | start: ${USER.startWeight} kg
 ${hasPrevPhotos ? `VERGELIJKINGSFOTO'S: sessie ${prevDate} | aanzichten: ${prevViews} (staan VÓÓR de huidige foto's hierboven)` : ''}
 
 ${hasPrevPhotos

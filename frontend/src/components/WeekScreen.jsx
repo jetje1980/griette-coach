@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { computeHeadCoach } from './CoachAdvice';
+import { completeTask } from '../tasks';
 import { PERSONAL_EVENTS } from '../config';
 
 const NL_DAYS   = ['Zo','Ma','Di','Wo','Do','Vr','Za'];
@@ -44,6 +45,79 @@ function getWeekReview(monday) {
   try { return JSON.parse(localStorage.getItem(`gc_week_review_${monday}`) || '{}'); } catch { return {}; }
 }
 function saveWeekReview(monday, obj) { localStorage.setItem(`gc_week_review_${monday}`, JSON.stringify(obj)); }
+
+function getWeekFocus(monday) {
+  try { return localStorage.getItem(`gc_week_goal_${monday}`) || ''; } catch { return ''; }
+}
+function saveWeekFocus(monday, txt) { localStorage.setItem(`gc_week_goal_${monday}`, txt); }
+
+// ── Bottleneck + conflicten ─────────────────────────────────────
+// Eén hoofdknelpunt van de week plus concrete conflicten tussen
+// tijd, training en herstel. Alleen signalen die een besluit sturen.
+function computeWeekSignals({ days, priorities, protectedHoursTotal, logs, tod }) {
+  const conflicts = [];
+
+  // Training gepland op een dag die om herstel vroeg
+  for (const d of days) {
+    if (!d.past && !d.isToday) continue;
+    const log = logs?.[d.date];
+    if (!log) continue;
+    const plannedTrain = d.dayPlan.training && d.dayPlan.training !== 'rest' && d.dayPlan.training !== 'free';
+    const coach = computeHeadCoach(log, logs, d.date);
+    if (plannedTrain && (coach.decision === 'RED' || coach.decision === 'BLUE') && !log.run_done) {
+      conflicts.push({
+        icon: '⚠️',
+        text: `${NL_DAYS[d.d.getDay()]}: training gepland terwijl je herstelstatus ${coach.decision === 'RED' ? 'rood' : 'blauw'} was`,
+      });
+    }
+  }
+
+  // Training in een beschermd blok
+  for (const d of days) {
+    const fb = d.dayPlan.freeBlocks || [];
+    const plannedTrain = d.dayPlan.training && d.dayPlan.training !== 'rest' && d.dayPlan.training !== 'free';
+    if (fb.includes('fullday') && plannedTrain) {
+      conflicts.push({ icon: '🌿', text: `${NL_DAYS[d.d.getDay()]}: hele dag beschermd én training gepland` });
+    }
+  }
+
+  // Werkblokken en training op dezelfde dag, meer dan twee keer
+  const heavyDays = days.filter(d =>
+    (d.dayPlan.workBlocks || []).length >= 2 &&
+    d.dayPlan.training && d.dayPlan.training !== 'rest' && d.dayPlan.training !== 'free'
+  );
+  if (heavyDays.length >= 3) {
+    conflicts.push({ icon: '🔋', text: `${heavyDays.length} dagen met zowel meerdere werkblokken als training` });
+  }
+
+  // PEM-signalen deze week
+  const pemDays = days.filter(d => logs?.[d.date]?.symptom_pem).length;
+
+  // Hoofdknelpunt kiezen — de zwaarste eerst
+  let bottleneck;
+  if (pemDays > 0) {
+    bottleneck = { icon: '🛌', title: 'Herstel is de bottleneck',
+      desc: `${pemDays} PEM-signaal${pemDays > 1 ? 'en' : ''} deze week. Volume verlagen gaat voor alles.` };
+  } else if (conflicts.length > 0) {
+    bottleneck = { icon: '⚠️', title: 'Planning botst met herstel',
+      desc: conflicts[0].text + '. Verplaats of schrap — dat telt niet als gemist.' };
+  } else if (protectedHoursTotal === 0) {
+    bottleneck = { icon: '🌿', title: 'Geen beschermde vrije tijd',
+      desc: 'Er staat geen enkel vrij blok. Markeer minstens één avond als beschermd.' };
+  } else if (priorities.length === 0) {
+    bottleneck = { icon: '🎯', title: 'Geen weekprioriteiten gekozen',
+      desc: 'Zonder gekozen prioriteiten wint het dringende van het belangrijke.' };
+  } else {
+    const openPrio = priorities.filter(p => !p.done).length;
+    bottleneck = openPrio > 0
+      ? { icon: '🎯', title: `${openPrio} prioriteit${openPrio > 1 ? 'en' : ''} open`,
+          desc: `"${priorities.find(p => !p.done).text}" is nu het belangrijkste van je week.` }
+      : { icon: '✓', title: 'Geen knelpunt',
+          desc: 'Prioriteiten afgerond, herstel op orde, vrije tijd beschermd.' };
+  }
+
+  return { bottleneck, conflicts };
+}
 
 // ── dot colors ──────────────────────────────────────────────────
 const DOT = { GREEN: 'os-dot-green', AMBER: 'os-dot-amber', BLUE: 'os-dot-blue', RED: 'os-dot-red' };
@@ -121,6 +195,45 @@ function ExpandSection({ label, children, initialOpen = false, badge }) {
   );
 }
 
+// ── Weekfocus ───────────────────────────────────────────────────
+function WeekFocusLine({ monday }) {
+  const [focus, setFocus] = useState(() => getWeekFocus(monday));
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => { setFocus(getWeekFocus(monday)); setEditing(false); }, [monday]);
+
+  function save(v) { saveWeekFocus(monday, v); setFocus(v); setEditing(false); }
+
+  if (!focus && !editing) {
+    return (
+      <button className="os-toggle-chip" style={{ fontSize: 12.5, marginBottom: 12 }}
+        onClick={() => setEditing(true)}>
+        + Weekdoel bepalen
+      </button>
+    );
+  }
+  if (editing) {
+    return (
+      <input className="os-input" defaultValue={focus} autoFocus
+        style={{ marginBottom: 12 }}
+        placeholder="Waar draait deze week om?"
+        onBlur={e => save(e.target.value.trim())}
+        onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+    );
+  }
+  return (
+    <div onClick={() => setEditing(true)}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer' }}>
+      <span style={{ fontSize: 15 }}>🎯</span>
+      <div>
+        <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.5px',
+          textTransform: 'uppercase' }}>Weekdoel</div>
+        <div style={{ fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-serif)' }}>{focus}</div>
+      </div>
+    </div>
+  );
+}
+
 // ── Weekprioriteiten ────────────────────────────────────────────
 function WeekPriorities({ monday }) {
   const [items, setItems] = useState(() => getPriorities(monday));
@@ -130,13 +243,19 @@ function WeekPriorities({ monday }) {
   useEffect(() => { setItems(getPriorities(monday)); }, [monday]);
 
   function persist(arr) { savePriorities(monday, arr); setItems(arr); }
+  // Komt de prioriteit uit Capture? Dan het bronitem meteen afronden.
+  function toggleWithSource(id) {
+    const item = items.find(i => i.id === id);
+    persist(items.map(i => i.id === id ? { ...i, done: !i.done } : i));
+    if (item?.taskId && !item.done) completeTask(item.taskId, null);
+  }
   function add() {
     const t = text.trim();
     if (!t || items.length >= 3) return;
     persist([...items, { id: Date.now().toString(), text: t, done: false }]);
     setText('');
   }
-  function toggle(id) { persist(items.map(i => i.id === id ? { ...i, done: !i.done } : i)); }
+  const toggle = toggleWithSource;
   function remove(id) { persist(items.filter(i => i.id !== id)); }
 
   const allDone = items.length > 0 && items.every(i => i.done);
@@ -532,6 +651,9 @@ export default function WeekScreen({ logs }) {
     }));
 
   const isPastWeek = addDays(currentMonday, 6) < tod;
+  const signals = computeWeekSignals({
+    days, priorities, protectedHoursTotal: protectedThisWeek.hours, logs, tod,
+  });
 
   return (
     <div className="os-content">
@@ -557,6 +679,43 @@ export default function WeekScreen({ logs }) {
           <button className="os-nav-arrow" onClick={() => setWeekOffset(o => o + 1)}>›</button>
         </div>
       </div>
+
+      {/* Weekfocus — één zin die de week stuurt */}
+      <WeekFocusLine monday={currentMonday} />
+
+      {/* Bottleneck van de week */}
+      <div className="os-card" style={{ display: 'flex', gap: 12, alignItems: 'flex-start',
+        borderLeft: `4px solid ${signals.bottleneck.icon === '✓' ? 'var(--green)' : 'var(--gold)'}` }}>
+        <span style={{ fontSize: 22, lineHeight: 1 }}>{signals.bottleneck.icon}</span>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.5px',
+            textTransform: 'uppercase', marginBottom: 3 }}>Bottleneck deze week</div>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{signals.bottleneck.title}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--sub)', lineHeight: 1.45 }}>{signals.bottleneck.desc}</div>
+        </div>
+      </div>
+
+      {/* Weekprioriteiten — direct zichtbaar, max 3 */}
+      <div className="os-section-label">Weekprioriteiten</div>
+      <div className="os-card">
+        <WeekPriorities monday={currentMonday} />
+      </div>
+
+      {/* Conflicten tijd vs training vs herstel */}
+      {signals.conflicts.length > 0 && (
+        <>
+          <div className="os-section-label">Conflicten</div>
+          <div className="os-card">
+            {signals.conflicts.slice(0, 4).map((c, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
+                fontSize: 12.5, color: 'var(--sub)', lineHeight: 1.45,
+                padding: '5px 0', borderBottom: i < Math.min(4, signals.conflicts.length) - 1 ? '1px solid var(--divide)' : 'none' }}>
+                <span>{c.icon}</span><span>{c.text}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* WIP warning */}
       {wip.warn && (
@@ -643,11 +802,6 @@ export default function WeekScreen({ logs }) {
           </div>
         ))}
       </div>
-
-      {/* Weekprioriteiten */}
-      <ExpandSection label="Weekprioriteiten" initialOpen={priorities.length > 0}>
-        <WeekPriorities monday={currentMonday} />
-      </ExpandSection>
 
       {/* Upcoming events */}
       {upcoming.length > 0 && (

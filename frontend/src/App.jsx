@@ -167,6 +167,7 @@ export default function App() {
           saveFields={saveFields}
           shiftDay={shiftDay}
           isFuture={isFuture}
+          goToTab={setTab}
         />
       )}
       {tab === 1 && <WeekScreen logs={logs} />}

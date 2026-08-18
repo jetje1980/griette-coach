@@ -224,98 +224,197 @@ function PhotoTimeline({ sessions }) {
 // TAB 0: OVERZICHT
 // ═══════════════════════════════════════════════════════════════
 function TabOverzicht({ logs, streak, sessions, goToTab }) {
+  const [measurements, setMeasurements] = useState([]);
+  useEffect(() => {
+    store.getMeasurements().then(m => setMeasurements(Array.isArray(m) ? m : [])).catch(() => {});
+  }, []);
+
   const tod = todayStr();
-  const latestWeight = (() => {
-    const sorted = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
-    return sorted[0]?.weight || null;
+
+  // ── Bewijs verzamelen: alleen tonen wat er echt is ──
+  const weights = Object.values(logs).filter(l => l.weight)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const nowW = weights.length ? weights[weights.length - 1].weight : null;
+  const startW = USER.startWeight;
+
+  const withWaist = measurements.filter(m => m.waist)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const economy = paceAtHRTrend();
+  const totals = actualTotals(logs);
+
+  const tests = (() => {
+    try { return JSON.parse(localStorage.getItem('gc_5k_tests') || '[]')
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '')); } catch { return []; }
   })();
-  const completedRuns = Object.values(logs).filter(l => l.run_done).length;
-  const trailDays = daysBetween(tod, TRAIL_DATE);
-  const weightPct = latestWeight
-    ? Math.min(100, Math.max(0, ((USER.startWeight - latestWeight) / (USER.startWeight - USER.goalWeight)) * 100))
-    : 0;
-  const runPct = Math.min(100, (completedRuns / TOTAL_RUNS) * 100);
-  const trailPct = (() => {
-    const totalDays = daysBetween(USER.startDate, TRAIL_DATE);
-    const elapsed = daysBetween(USER.startDate, tod);
-    return Math.min(100, Math.max(0, (elapsed / totalDays) * 100));
+
+  const bestLift = (() => {
+    let best = null;
+    for (const s of loadStrengthSessions()) {
+      for (const e of s.exercises || []) {
+        const w = parseFloat(e.weight) || 0;
+        if (w > 0 && (!best || w > best.weight)) {
+          best = { weight: w, name: findExercise(e.id)?.name || 'lift', reps: e.reps, date: s.date };
+        }
+      }
+    }
+    return best;
   })();
-  const weightLost = latestWeight ? +(USER.startWeight - latestWeight).toFixed(1) : 0;
-  const weightToGo = latestWeight ? +(latestWeight - USER.goalWeight).toFixed(1) : null;
+
+  const buffer = (() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('gc_geld') || 'null');
+      return typeof raw === 'number' ? raw : (raw?.buffer || 0);
+    } catch { return 0; }
+  })();
+
+  const freeEvenings = (() => {
+    const monday = (() => {
+      const d = new Date(tod + 'T12:00:00');
+      const dow = d.getDay();
+      d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+      return d;
+    })();
+    let n = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday); d.setDate(monday.getDate() + i);
+      try {
+        const p = JSON.parse(localStorage.getItem(`gc_day_plan_${d.toISOString().slice(0, 10)}`) || '{}');
+        const fb = p.freeBlocks || [];
+        if (fb.includes('evening') || fb.includes('fullday')) n++;
+      } catch { /* leeg */ }
+    }
+    return n;
+  })();
+
+  const automatic = (() => {
+    try { return JSON.parse(localStorage.getItem('gc_routines') || '[]')
+      .filter(r => r.stage === 'automatic').length; } catch { return 0; }
+  })();
+
+  const nextEvent = [...PERSONAL_EVENTS].filter(e => e.startDate >= tod)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+
+  // Foto's: start / vorige / nu
+  const photoSorted = [...(sessions || [])].sort((a, b) => a.date.localeCompare(b.date));
+  const pick = (s) => s && (s.views?.voor || Object.values(s.views || {})[0]);
+  const trio = photoSorted.length >= 2
+    ? [
+        { label: 'Start', p: pick(photoSorted[0]), date: photoSorted[0].date },
+        photoSorted.length >= 3
+          ? { label: 'Vorige', p: pick(photoSorted[photoSorted.length - 2]), date: photoSorted[photoSorted.length - 2].date }
+          : null,
+        { label: 'Nu', p: pick(photoSorted[photoSorted.length - 1]), date: photoSorted[photoSorted.length - 1].date },
+      ].filter(Boolean)
+    : null;
+
+  // Bewijsregels — alleen met echte data
+  const proof = [];
+  if (nowW != null) {
+    const d = +(startW - nowW).toFixed(1);
+    proof.push({ label: 'Gewicht', value: `${startW} → ${nowW} kg`,
+      delta: d > 0 ? `−${d} kg` : d < 0 ? `+${Math.abs(d)} kg` : 'stabiel',
+      good: d > 0 });
+  }
+  if (withWaist.length >= 2) {
+    const a = withWaist[0].waist, b = withWaist[withWaist.length - 1].waist;
+    proof.push({ label: 'Taille', value: `${a} → ${b} cm`,
+      delta: b < a ? `−${(a - b).toFixed(1)} cm` : b > a ? `+${(b - a).toFixed(1)} cm` : 'gelijk',
+      good: b < a });
+  }
+  if (totals.actualCount > 0 || totals.estCount > 0) {
+    proof.push({ label: 'Hardlopen', value: `${totals.actualCount + totals.estCount} sessies`,
+      delta: totals.actualKm > 0 ? `${totals.actualKm} km` : null, good: true });
+  }
+  if (economy.enough) {
+    proof.push({ label: 'Pace bij HR', value: `${fmtPace(economy.early.pace)} → ${fmtPace(economy.late.pace)}/km`,
+      delta: economy.improvementSec > 0 ? `${economy.improvementSec} s/km sneller` : null,
+      good: economy.improvementSec > 0 });
+  }
+  if (tests.length) {
+    const t = tests[0];
+    proof.push({ label: '5K', value: `${Math.floor(t.minutes)}:${String(Math.round((t.minutes % 1) * 60)).padStart(2, '0')}`,
+      delta: tests.length > 1 ? (t.minutes < tests[1].minutes ? 'sneller' : 'langzamer') : null,
+      good: tests.length > 1 && t.minutes < tests[1].minutes });
+  }
+  if (bestLift) {
+    proof.push({ label: 'Sterkste lift', value: `${bestLift.name} ${bestLift.weight} kg`,
+      delta: bestLift.reps ? `×${bestLift.reps}` : null, good: true });
+  }
+  if (buffer > 0) {
+    proof.push({ label: 'Buffer', value: `€${buffer.toLocaleString('nl-NL')}`,
+      delta: `${Math.round((buffer / 15000) * 100)}% van doel`, good: true });
+  }
+  proof.push({ label: 'Vrije avonden', value: `${freeEvenings} deze week`, delta: null, good: freeEvenings > 0 });
+  if (automatic > 0) {
+    proof.push({ label: 'Routines automatisch', value: `${automatic}`, delta: '🌳', good: true });
+  }
 
   return (
     <div>
-      <div className="os-section-label" style={{ marginTop: 0 }}>Resultaten</div>
-      <div className="os-outcomes">
-        <div className="os-outcome-tile">
-          <div className="os-outcome-label">Gewicht</div>
-          <div className="os-outcome-num" style={{ color: 'var(--rust)' }}>{latestWeight || '—'}</div>
-          <div className="os-outcome-sub">{latestWeight ? `kg · doel ${USER.goalWeight}` : 'nog niet ingevuld'}</div>
-          <ProgressBar pct={weightPct} color="var(--rust)" />
-        </div>
-        <div className="os-outcome-tile">
-          <div className="os-outcome-label">Trainingen</div>
-          <div className="os-outcome-num" style={{ color: 'var(--sage)' }}>{completedRuns}</div>
-          <div className="os-outcome-sub">van {TOTAL_RUNS} gelopen</div>
-          <ProgressBar pct={runPct} color="var(--sage)" />
-        </div>
-        <div className="os-outcome-tile">
-          <div className="os-outcome-label">Trail 10 km</div>
-          <div className="os-outcome-num" style={{ color: trailDays < 14 ? 'var(--gold)' : 'var(--text)' }}>
-            {trailDays > 0 ? trailDays : '!'}
+      {/* Bewijs dat ik verander */}
+      <div className="os-section-label" style={{ marginTop: 0 }}>Bewijs dat ik verander</div>
+      <div className="os-card">
+        {proof.map((p, i) => (
+          <div key={p.label} style={{ display: 'flex', alignItems: 'baseline', gap: 10,
+            padding: '7px 0', borderBottom: i < proof.length - 1 ? '1px solid var(--divide)' : 'none' }}>
+            <span style={{ fontSize: 12, color: 'var(--sub)', minWidth: 104 }}>{p.label}</span>
+            <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{p.value}</span>
+            {p.delta && (
+              <span style={{ fontSize: 12, fontWeight: 700,
+                color: p.good ? 'var(--green)' : 'var(--sub)' }}>{p.delta}</span>
+            )}
           </div>
-          <div className="os-outcome-sub">{trailDays > 0 ? 'dagen' : 'nu!'}</div>
-          <ProgressBar pct={trailPct} color="var(--gold)" />
-        </div>
-        <div className="os-outcome-tile">
-          <div className="os-outcome-label">Streak</div>
-          <div className="os-outcome-num" style={{ color: streak > 0 ? 'var(--green)' : 'var(--muted)' }}>{streak}</div>
-          <div className="os-outcome-sub">{streak === 1 ? 'dag op rij' : 'dagen op rij'}</div>
-          <ProgressBar pct={Math.min(100, streak * 5)} color="var(--green)" />
-        </div>
+        ))}
+        {proof.length === 0 && (
+          <div style={{ fontSize: 13, color: 'var(--sub)' }}>
+            Nog te weinig data. Log een paar dagen — dan verschijnt hier je bewijs.
+          </div>
+        )}
       </div>
 
-      {latestWeight && (
-        <ExpandSection label="Gewicht — details">
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-              {[
-                { label: 'Start', val: `${USER.startWeight} kg` },
-                { label: 'Nu', val: `${latestWeight} kg`, accent: 'var(--rust)' },
-                { label: 'Doel', val: `${USER.goalWeight} kg` },
-              ].map(({ label, val, accent }) => (
-                <div key={label} style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>{label}</div>
-                  <div style={{ fontSize: accent ? 20 : 15, fontWeight: 800,
-                    color: accent || 'var(--text)', fontFamily: 'var(--font-serif)' }}>{val}</div>
+      {/* Foto's: start → vorige → nu */}
+      {trio && (
+        <>
+          <div className="os-section-label">Zichtbaar verschil</div>
+          <div className="os-card" style={{ cursor: 'pointer' }} onClick={() => goToTab(8)}>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${trio.length}, 1fr)`, gap: 6 }}>
+              {trio.map(t => (
+                <div key={t.label} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700,
+                    textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>{t.label}</div>
+                  {t.p ? (
+                    <img src={`data:${t.p.mimeType};base64,${t.p.base64}`} alt={t.label}
+                      style={{ width: '100%', height: 112, objectFit: 'cover', borderRadius: 8 }} />
+                  ) : (
+                    <div style={{ height: 112, background: 'var(--bg)', borderRadius: 8,
+                      border: '1px dashed var(--border)' }} />
+                  )}
+                  <div style={{ fontSize: 9, color: 'var(--ghost)', marginTop: 3 }}>{t.date?.slice(5)}</div>
                 </div>
               ))}
             </div>
-            <MiniWeightLine logs={logs} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 12 }}>
-              <span style={{ color: weightLost > 0 ? 'var(--sage)' : 'var(--muted)' }}>
-                {weightLost > 0 ? `−${weightLost} kg afgevallen` : weightLost < 0 ? `+${Math.abs(weightLost)} kg` : 'geen verandering'}
-              </span>
-              {weightToGo !== null && (
-                <span style={{ color: 'var(--muted)' }}>nog {weightToGo} kg te gaan</span>
-              )}
-            </div>
           </div>
-        </ExpandSection>
+        </>
       )}
 
-      <div className="os-section-label">Foto-tijdlijn</div>
-      <div className="os-card" style={{ cursor: 'pointer' }} onClick={() => goToTab(8)}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Progressiefoto's</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
-              {sessions.length > 0
-                ? `${sessions.length} sessie${sessions.length !== 1 ? 's' : ''} opgeslagen`
-                : "Nog geen foto's — bekijk tijdlijn"}
-            </div>
-          </div>
-          <span style={{ fontSize: 18, color: 'var(--muted)' }}>→</span>
+      {/* Volgende mijlpaal + streak, compact */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div className="os-card" style={{ flex: 1, marginBottom: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.4px', marginBottom: 3 }}>Volgende mijlpaal</div>
+          {nextEvent ? (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>{nextEvent.emoji} {nextEvent.title}</div>
+              <div style={{ fontSize: 11, color: 'var(--sub)' }}>
+                over {daysBetween(tod, nextEvent.startDate)} dagen
+              </div>
+            </>
+          ) : <div style={{ fontSize: 13, color: 'var(--sub)' }}>—</div>}
+        </div>
+        <div className="os-card" style={{ width: 96, textAlign: 'center', marginBottom: 0 }}>
+          <div style={{ fontSize: 24, fontWeight: 900, fontFamily: 'var(--font-serif)',
+            color: streak > 0 ? 'var(--green)' : 'var(--muted)' }}>{streak}</div>
+          <div style={{ fontSize: 10, color: 'var(--ghost)' }}>dagen op rij</div>
         </div>
       </div>
     </div>
