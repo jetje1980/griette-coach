@@ -22,13 +22,39 @@ const TABS = ['Vandaag', 'Training', 'Planning', 'Voortgang', 'Coach', 'Meer'];
 const MAX_FUTURE_DAYS = 90;
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function parseDateKey(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
+
+function dateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(dateStr, delta) {
+  const d = parseDateKey(dateStr);
+  d.setDate(d.getDate() + delta);
+  return dateKey(d);
 }
 
 function dayNumber(date) {
-  const start = new Date(USER.startDate);
-  const d = new Date(date);
+  const start = parseDateKey(USER.startDate);
+  const d = parseDateKey(date);
   return Math.max(1, Math.floor((d - start) / 86400000) + 1);
+}
+
+function isActualLog(log, date) {
+  return !!log && date <= today() && log.entry_type !== 'planned';
 }
 
 export default function App() {
@@ -48,6 +74,10 @@ export default function App() {
   const dayNum = dayNumber(currentDate);
   const quote = QUOTES[(dayNum - 1) % QUOTES.length];
   const tip = TIPS[(dayNum - 1) % TIPS.length];
+
+  const actualLogs = Object.fromEntries(
+    Object.entries(logs).filter(([date, value]) => isActualLog(value, date))
+  );
 
   useEffect(() => {
     const unsub = onSyncStatus(setSyncStatus);
@@ -70,19 +100,18 @@ export default function App() {
     const map = {};
     for (const r of rows) map[r.date] = r;
     setLogs(map);
+
     let s = 0;
     for (let i = 0; i < 90; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dk = d.toISOString().slice(0, 10);
+      const dk = addDays(today(), -i);
       const l = map[dk];
-      if (l && (l.run_done || l.core_done || l.mounjaro || l.candesartan || l.adhd_meds)) s++;
+      if (l && l.entry_type !== 'planned' && (l.run_done || l.core_done || l.mounjaro || l.candesartan || l.adhd_meds)) s++;
       else if (i > 0) break;
     }
     setStreak(s);
   }, []);
 
-  // On first mount: restore data + photos from cloud
+  // App is rendered only after AuthGate has confirmed a Supabase session.
   useEffect(() => {
     restoreFromCloud().then(count => {
       if (count > 0) { loadLog(currentDate); loadLogs(); }
@@ -96,16 +125,18 @@ export default function App() {
   }, [currentDate, loadLog, loadLogs]);
 
   const saveField = useCallback(async (field, value) => {
-    const updated = await store.saveLog(currentDate, { [field]: value });
+    const marker = currentDate <= today() && log?.entry_type === 'planned' ? { entry_type: 'actual' } : {};
+    const updated = await store.saveLog(currentDate, { ...marker, [field]: value });
     setLog(updated);
     loadLogs();
-  }, [currentDate, loadLogs]);
+  }, [currentDate, log, loadLogs]);
 
   const saveFields = useCallback(async (fields) => {
-    const updated = await store.saveLog(currentDate, fields);
+    const marker = currentDate <= today() && log?.entry_type === 'planned' ? { entry_type: 'actual' } : {};
+    const updated = await store.saveLog(currentDate, { ...marker, ...fields });
     setLog(updated);
     loadLogs();
-  }, [currentDate, loadLogs]);
+  }, [currentDate, log, loadLogs]);
 
   const deleteLog = useCallback(async () => {
     await store.deleteLog(currentDate);
@@ -114,16 +145,10 @@ export default function App() {
     showFlash('🗑️', `Dagdata ${currentDate} verwijderd`);
   }, [currentDate, loadLogs, showFlash]);
 
-  const maxFutureDate = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + MAX_FUTURE_DAYS);
-    return d.toISOString().slice(0, 10);
-  })();
+  const maxFutureDate = addDays(today(), MAX_FUTURE_DAYS);
 
   const shiftDay = (delta) => {
-    const d = new Date(currentDate);
-    d.setDate(d.getDate() + delta);
-    const newDate = d.toISOString().slice(0, 10);
+    const newDate = addDays(currentDate, delta);
     if (newDate <= maxFutureDate) setCurrentDate(newDate);
   };
 
@@ -131,18 +156,17 @@ export default function App() {
   const isFuture = currentDate > today();
 
   const progressPct = (() => {
-    const sorted = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
+    const sorted = Object.values(actualLogs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
     const w = sorted[0]?.weight;
     if (!w) return 0;
     return Math.min(100, Math.max(0, ((USER.startWeight - w) / (USER.startWeight - USER.goalWeight)) * 100));
   })();
 
   const latestWeight = (() => {
-    const sorted = Object.values(logs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
+    const sorted = Object.values(actualLogs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
     return sorted[0]?.weight || null;
   })();
 
-  // Strava OAuth callback
   if (window.location.pathname.endsWith('/strava/callback')) {
     return (
       <StravaCallback onDone={(ok, msg) => {
@@ -152,12 +176,11 @@ export default function App() {
     );
   }
 
-  // Onboarding
   if (!onboardingDone) {
     return <Onboarding onDone={() => { setOnboardingDone(true); loadLogs(); }} />;
   }
 
-  const sharedProps = { log, saveField, saveFields, currentDate, logs, dayNum, showFlash, isFuture, deleteLog, syncStatus };
+  const sharedProps = { log, saveField, saveFields, currentDate, logs: actualLogs, dayNum, showFlash, isFuture, deleteLog, syncStatus };
 
   return (
     <>
@@ -196,8 +219,8 @@ export default function App() {
             maxDate={maxFutureDate}
           />
         )}
-        {tab === 3 && <VoortgangHub logs={logs} streak={streak} />}
-        {tab === 4 && <Coach logs={logs} />}
+        {tab === 3 && <VoortgangHub logs={actualLogs} streak={streak} />}
+        {tab === 4 && <Coach logs={actualLogs} />}
         {tab === 5 && <MeerTab {...sharedProps} tip={tip} />}
       </div>
     </>
