@@ -5,6 +5,7 @@ const nativeGet = localStorage.getItem.bind(localStorage);
 const nativeSet = localStorage.setItem.bind(localStorage);
 const nativeRemove = localStorage.removeItem.bind(localStorage);
 const SERVER_AI_MARKER = 'beveiligd-via-coachserver';
+const CLEANUP_MARKER = 'gc_cleanup_2026_08_18';
 
 function localDateKey(date = new Date()) {
   const y = date.getFullYear();
@@ -60,6 +61,15 @@ nativeSet('gc_api_key', SERVER_AI_MARKER);
 // Remove the competing legacy AI week-plan. WeekFocus is the sole week-plan source.
 for (const key of ['gc_training_plan', 'gc_training_plan_date', 'gc_training_plans_history']) {
   nativeRemove(key);
+}
+
+// One-time cleanup of the incorrect 17/21 August report history that was based
+// on future planned values. New reports created after this migration may persist normally.
+if (!nativeGet(CLEANUP_MARKER)) {
+  nativeRemove('gc_coach_reports_history');
+  nativeRemove('gc_coach_report');
+  nativeRemove('gc_coach_report_date');
+  nativeSet(CLEANUP_MARKER, new Date().toISOString());
 }
 
 // Sanitize already cached future logs and repair cached week dates before the app reads them.
