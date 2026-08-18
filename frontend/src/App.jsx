@@ -13,7 +13,7 @@ import WeekHub from './components/WeekHub';
 import LichaamHub from './components/LichaamHub';
 import LevenHub from './components/LevenHub';
 import VoortgangHub from './components/VoortgangHub';
-import Coach from './components/Coach';
+import CoachHub from './components/CoachHub';
 import Settings from './components/Settings';
 import Onboarding from './components/Onboarding';
 import StravaCallback from './components/StravaCallback';
@@ -28,216 +28,54 @@ function today() {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
-
-function parseDateKey(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d, 12, 0, 0);
-}
-
-function dateKey(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function addDays(dateStr, delta) {
-  const d = parseDateKey(dateStr);
-  d.setDate(d.getDate() + delta);
-  return dateKey(d);
-}
-
-function dayNumber(date) {
-  const start = parseDateKey(USER.startDate);
-  const d = parseDateKey(date);
-  return Math.max(1, Math.floor((d - start) / 86400000) + 1);
-}
-
-function isActualLog(log, date) {
-  return !!log && date <= today() && log.entry_type !== 'planned';
-}
+function parseDateKey(dateStr) { const [y,m,d]=dateStr.split('-').map(Number); return new Date(y,m-1,d,12,0,0); }
+function dateKey(date) { const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0'); return `${y}-${m}-${d}`; }
+function addDays(dateStr, delta) { const d=parseDateKey(dateStr); d.setDate(d.getDate()+delta); return dateKey(d); }
+function dayNumber(date) { const start=parseDateKey(USER.startDate), d=parseDateKey(date); return Math.max(1,Math.floor((d-start)/86400000)+1); }
+function isActualLog(log,date){ return !!log && date<=today() && log.entry_type!=='planned'; }
 
 export default function App() {
-  const [tab, setTab] = useState(0);
-  const [currentDate, setCurrentDate] = useState(today());
-  const [log, setLog] = useState(null);
-  const [logs, setLogs] = useState({});
-  const [streak, setStreak] = useState(0);
-  const [flash, setFlash] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [syncStatus, setSyncStatus] = useState(() => getSyncStatus());
-  const [onboardingDone, setOnboardingDone] = useState(
-    () => !!localStorage.getItem('gc_onboarding_done')
-  );
-  const flashTimer = useRef(null);
+  const [tab,setTab]=useState(0), [currentDate,setCurrentDate]=useState(today()), [log,setLog]=useState(null), [logs,setLogs]=useState({}), [streak,setStreak]=useState(0), [flash,setFlash]=useState(null), [showSettings,setShowSettings]=useState(false), [syncStatus,setSyncStatus]=useState(()=>getSyncStatus()), [onboardingDone,setOnboardingDone]=useState(()=>!!localStorage.getItem('gc_onboarding_done'));
+  const flashTimer=useRef(null);
+  const dayNum=dayNumber(currentDate), quote=QUOTES[(dayNum-1)%QUOTES.length], tip=TIPS[(dayNum-1)%TIPS.length];
+  const actualLogs=Object.fromEntries(Object.entries(logs).filter(([date,value])=>isActualLog(value,date)));
 
-  const dayNum = dayNumber(currentDate);
-  const quote = QUOTES[(dayNum - 1) % QUOTES.length];
-  const tip = TIPS[(dayNum - 1) % TIPS.length];
+  useEffect(()=>onSyncStatus(setSyncStatus),[]);
+  const showFlash=useCallback((icon,text)=>{if(flashTimer.current)clearTimeout(flashTimer.current);setFlash({icon,text});flashTimer.current=setTimeout(()=>setFlash(null),3000)},[]);
+  const loadLog=useCallback(async date=>setLog(await store.getLog(date)),[]);
+  const loadLogs=useCallback(async()=>{const rows=await store.getLogs();const map={};for(const r of rows)map[r.date]=r;setLogs(map);let s=0;for(let i=0;i<90;i++){const dk=addDays(today(),-i),l=map[dk];if(l&&l.entry_type!=='planned'&&(l.run_done||l.core_done||l.mounjaro||l.candesartan||l.adhd_meds))s++;else if(i>0)break}setStreak(s)},[]);
 
-  const actualLogs = Object.fromEntries(
-    Object.entries(logs).filter(([date, value]) => isActualLog(value, date))
-  );
+  useEffect(()=>{restoreFromCloud().then(count=>{if(count>0){loadLog(currentDate);loadLogs()}});photoStore.restoreFromCloud()},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{loadLog(currentDate);loadLogs()},[currentDate,loadLog,loadLogs]);
 
-  useEffect(() => {
-    const unsub = onSyncStatus(setSyncStatus);
-    return unsub;
-  }, []);
+  const saveField=useCallback(async(field,value)=>{const marker=currentDate<=today()&&log?.entry_type==='planned'?{entry_type:'actual'}:{};const updated=await store.saveLog(currentDate,{...marker,[field]:value});setLog(updated);loadLogs()},[currentDate,log,loadLogs]);
+  const saveFields=useCallback(async fields=>{const marker=currentDate<=today()&&log?.entry_type==='planned'?{entry_type:'actual'}:{};const updated=await store.saveLog(currentDate,{...marker,...fields});setLog(updated);loadLogs()},[currentDate,log,loadLogs]);
+  const deleteLog=useCallback(async()=>{await store.deleteLog(currentDate);setLog(null);loadLogs();showFlash('🗑️',`Dagdata ${currentDate} verwijderd`)},[currentDate,loadLogs,showFlash]);
 
-  const showFlash = useCallback((icon, text) => {
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    setFlash({ icon, text });
-    flashTimer.current = setTimeout(() => setFlash(null), 3000);
-  }, []);
+  const maxFutureDate=addDays(today(),MAX_FUTURE_DAYS);
+  const shiftDay=delta=>{const newDate=addDays(currentDate,delta);if(newDate<=maxFutureDate)setCurrentDate(newDate)};
+  const isToday=currentDate===today(), isFuture=currentDate>today();
+  const progressPct=(()=>{const sorted=Object.values(actualLogs).filter(l=>l.weight).sort((a,b)=>b.date.localeCompare(a.date));const w=sorted[0]?.weight;if(!w)return 0;return Math.min(100,Math.max(0,((USER.startWeight-w)/(USER.startWeight-USER.goalWeight))*100))})();
+  const latestWeight=(()=>{const sorted=Object.values(actualLogs).filter(l=>l.weight).sort((a,b)=>b.date.localeCompare(a.date));return sorted[0]?.weight||null})();
 
-  const loadLog = useCallback(async (date) => {
-    const data = await store.getLog(date);
-    setLog(data);
-  }, []);
+  if(window.location.pathname.endsWith('/strava/callback')) return <StravaCallback onDone={(ok,msg)=>showFlash(ok?'🏃':'❌',ok?`Strava gekoppeld: ${msg}`:`Strava fout: ${msg}`)}/>;
+  if(!onboardingDone) return <Onboarding onDone={()=>{setOnboardingDone(true);loadLogs()}}/>;
 
-  const loadLogs = useCallback(async () => {
-    const rows = await store.getLogs();
-    const map = {};
-    for (const r of rows) map[r.date] = r;
-    setLogs(map);
+  const sharedProps={log,saveField,saveFields,currentDate,logs:actualLogs,dayNum,showFlash,isFuture,deleteLog,syncStatus};
+  const navigateFromToday=target=>{if(target==='week')setTab(1);if(target==='training')setTab(2)};
 
-    let s = 0;
-    for (let i = 0; i < 90; i++) {
-      const dk = addDays(today(), -i);
-      const l = map[dk];
-      if (l && l.entry_type !== 'planned' && (l.run_done || l.core_done || l.mounjaro || l.candesartan || l.adhd_meds)) s++;
-      else if (i > 0) break;
-    }
-    setStreak(s);
-  }, []);
-
-  useEffect(() => {
-    restoreFromCloud().then(count => {
-      if (count > 0) { loadLog(currentDate); loadLogs(); }
-    });
-    photoStore.restoreFromCloud();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    loadLog(currentDate);
-    loadLogs();
-  }, [currentDate, loadLog, loadLogs]);
-
-  const saveField = useCallback(async (field, value) => {
-    const marker = currentDate <= today() && log?.entry_type === 'planned' ? { entry_type: 'actual' } : {};
-    const updated = await store.saveLog(currentDate, { ...marker, [field]: value });
-    setLog(updated);
-    loadLogs();
-  }, [currentDate, log, loadLogs]);
-
-  const saveFields = useCallback(async (fields) => {
-    const marker = currentDate <= today() && log?.entry_type === 'planned' ? { entry_type: 'actual' } : {};
-    const updated = await store.saveLog(currentDate, { ...marker, ...fields });
-    setLog(updated);
-    loadLogs();
-  }, [currentDate, log, loadLogs]);
-
-  const deleteLog = useCallback(async () => {
-    await store.deleteLog(currentDate);
-    setLog(null);
-    loadLogs();
-    showFlash('🗑️', `Dagdata ${currentDate} verwijderd`);
-  }, [currentDate, loadLogs, showFlash]);
-
-  const maxFutureDate = addDays(today(), MAX_FUTURE_DAYS);
-
-  const shiftDay = (delta) => {
-    const newDate = addDays(currentDate, delta);
-    if (newDate <= maxFutureDate) setCurrentDate(newDate);
-  };
-
-  const isToday = currentDate === today();
-  const isFuture = currentDate > today();
-
-  const progressPct = (() => {
-    const sorted = Object.values(actualLogs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
-    const w = sorted[0]?.weight;
-    if (!w) return 0;
-    return Math.min(100, Math.max(0, ((USER.startWeight - w) / (USER.startWeight - USER.goalWeight)) * 100));
-  })();
-
-  const latestWeight = (() => {
-    const sorted = Object.values(actualLogs).filter(l => l.weight).sort((a, b) => b.date.localeCompare(a.date));
-    return sorted[0]?.weight || null;
-  })();
-
-  if (window.location.pathname.endsWith('/strava/callback')) {
-    return (
-      <StravaCallback onDone={(ok, msg) => {
-        if (ok) showFlash('🏃', `Strava gekoppeld: ${msg}`);
-        else showFlash('❌', `Strava fout: ${msg}`);
-      }} />
-    );
-  }
-
-  if (!onboardingDone) {
-    return <Onboarding onDone={() => { setOnboardingDone(true); loadLogs(); }} />;
-  }
-
-  const sharedProps = {
-    log,
-    saveField,
-    saveFields,
-    currentDate,
-    logs: actualLogs,
-    dayNum,
-    showFlash,
-    isFuture,
-    deleteLog,
-    syncStatus,
-  };
-
-  const navigateFromToday = (target) => {
-    if (target === 'week') setTab(1);
-    if (target === 'training') setTab(2);
-  };
-
-  return (
-    <>
-      <div className={`flash ${flash ? 'visible' : ''}`}>
-        <span className="flash-icon">{flash?.icon}</span>
-        <span className="flash-text">{flash?.text}</span>
-      </div>
-
-      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
-
-      <Header
-        currentDate={currentDate}
-        log={log}
-        streak={streak}
-        latestWeight={latestWeight}
-        progressPct={progressPct}
-        quote={quote}
-        isToday={isToday}
-        isFuture={isFuture}
-        onShiftDay={shiftDay}
-        dayNum={dayNum}
-        onSettings={() => setShowSettings(true)}
-        syncStatus={syncStatus}
-      />
-
-      <TabBar tabs={TABS} active={tab} onChange={setTab} />
-
-      <div>
-        {tab === 0 && <DecisionToday {...sharedProps} tip={tip} onNavigate={navigateFromToday} />}
-        {tab === 1 && (
-          <WeekHub
-            currentDate={currentDate}
-            logs={logs}
-            onSelectDate={(d) => { setCurrentDate(d); setTab(0); }}
-            maxDate={maxFutureDate}
-          />
-        )}
-        {tab === 2 && <LichaamHub {...sharedProps} />}
-        {tab === 3 && <LevenHub {...sharedProps} tip={tip} />}
-        {tab === 4 && <VoortgangHub logs={actualLogs} streak={streak} />}
-        {tab === 5 && <Coach logs={actualLogs} />}
-      </div>
-    </>
-  );
+  return <>
+    <div className={`flash ${flash?'visible':''}`}><span className="flash-icon">{flash?.icon}</span><span className="flash-text">{flash?.text}</span></div>
+    {showSettings&&<Settings onClose={()=>setShowSettings(false)}/>}    
+    <Header currentDate={currentDate} log={log} streak={streak} latestWeight={latestWeight} progressPct={progressPct} quote={quote} isToday={isToday} isFuture={isFuture} onShiftDay={shiftDay} dayNum={dayNum} onSettings={()=>setShowSettings(true)} syncStatus={syncStatus}/>
+    <TabBar tabs={TABS} active={tab} onChange={setTab}/>
+    <div>
+      {tab===0&&<DecisionToday {...sharedProps} tip={tip} onNavigate={navigateFromToday}/>}      
+      {tab===1&&<WeekHub currentDate={currentDate} logs={logs} onSelectDate={d=>{setCurrentDate(d);setTab(0)}} maxDate={maxFutureDate}/>}      
+      {tab===2&&<LichaamHub {...sharedProps}/>}      
+      {tab===3&&<LevenHub {...sharedProps} tip={tip}/>}      
+      {tab===4&&<VoortgangHub logs={actualLogs} streak={streak}/>}      
+      {tab===5&&<CoachHub logs={actualLogs}/>}    
+    </div>
+  </>;
 }
