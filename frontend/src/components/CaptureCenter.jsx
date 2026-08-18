@@ -11,6 +11,10 @@ const DESTINATIONS = [
   { id: 'today', emoji: '☀️', label: 'Vandaag', desc: 'Als actie op je dag' },
   { id: 'week',  emoji: '🗓', label: 'Deze week', desc: 'Als weekprioriteit' },
   { id: 'later', emoji: '🅿️', label: 'Later', desc: 'Parkeren, blijft vindbaar' },
+  // Externe bestemmingen: alleen selecteerbaar als de koppeling echt bestaat.
+  // Zolang dat niet zo is, zegt de UI dat eerlijk in plaats van te doen alsof.
+  { id: 'trello', emoji: '📋', label: 'Trello Backlog',
+    desc: 'Trello nog niet gekoppeld', disabled: true },
 ];
 
 function weekMondayOf(dateStr) {
@@ -128,15 +132,17 @@ export default function CaptureCenter({ currentDate, onChange }) {
             Waar gaat dit heen? — "{planning.title}"
           </div>
           {DESTINATIONS.map(d => (
-            <div key={d.id} onClick={() => applyDestination(planning, d.id)}
+            <div key={d.id}
+              onClick={() => { if (!d.disabled) applyDestination(planning, d.id); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px',
-                cursor: 'pointer', borderBottom: '1px solid var(--divide)' }}>
+                cursor: d.disabled ? 'not-allowed' : 'pointer', opacity: d.disabled ? 0.45 : 1,
+                borderBottom: '1px solid var(--divide)' }}>
               <span style={{ fontSize: 17 }}>{d.emoji}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{d.label}</div>
-                <div style={{ fontSize: 11, color: 'var(--ghost)' }}>{d.desc}</div>
+                <div style={{ fontSize: 11, color: d.disabled ? 'var(--rust)' : 'var(--ghost)' }}>{d.desc}</div>
               </div>
-              <span style={{ color: 'var(--ghost)' }}>›</span>
+              <span style={{ color: 'var(--ghost)' }}>{d.disabled ? '—' : '›'}</span>
             </div>
           ))}
           <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 10 }}

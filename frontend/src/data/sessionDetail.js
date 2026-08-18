@@ -3,22 +3,24 @@
 // "coach observeert vandaag" — zodat elke training ook een datapunt is.
 
 import { RUNS } from './runningSchema';
+import { loadHrSettings } from '../goals';
 
 function rpeTarget(run) {
-  if (run.race) return '5–6/10 (race — maar zone B blijft de grens)';
+  const hr = loadHrSettings();
+  if (run.race) return `${hr.rpeThreshold - 1}–${hr.rpeThreshold}/10 (race — easy HR blijft de grens)`;
   if (run.restDay) return '1–2/10';
-  if (run.duration <= 18) return '2–3/10';
-  return '3–4/10';
+  if (run.duration <= 18) return `${Math.max(1, hr.rpeEasy - 2)}–${Math.max(2, hr.rpeEasy - 1)}/10`;
+  return `${Math.max(2, hr.rpeEasy - 1)}–${hr.rpeEasy}/10`;
 }
 
 function coachObserves(run) {
   const prev = RUNS.find(r => r.nr === run.nr - 1);
   const obs = [];
   if (run.race) {
-    obs.push('Kan de hele race in zone B worden uitgelopen?');
+    obs.push('Kan de hele race binnen je easy HR-band worden uitgelopen?');
     obs.push('Waar zit de beperkende factor: hartslag, benen of algemene energie?');
   } else {
-    obs.push('Blijft de hartslag stabiel binnen zone B tijdens de loopblokken?');
+    obs.push('Blijft de hartslag stabiel binnen je easy HR-band tijdens de loopblokken?');
     if (prev && run.walkMin < prev.walkMin) obs.push(`Daalt de HR snel genoeg in de kortere wandelpauze (${run.walkMin} min)?`);
     else obs.push('Hoe snel daalt de HR in de wandelpauzes?');
     if (prev && run.runMin > prev.runMin) obs.push(`Verdraagt het lichaam de langere loopblokken (${run.runMin} min)?`);
@@ -47,7 +49,7 @@ export function sessionDetail(run) {
     type: run.race ? 'Race' : run.restDay ? 'Actief herstel' : 'Run/walk — aeroob',
     warmup: run.race
       ? '10 min rustig wandelen + 2× 1 min heel rustig indraven'
-      : '5 min rustig wandelen (HR onder 106)',
+      : `5 min rustig wandelen (HR onder ${loadHrSettings().easyLow})`,
     core: kern,
     runWalk: run.runMin != null && run.walkMin != null
       ? `${run.runMin} min lopen / ${run.walkMin} min wandelen`
@@ -55,7 +57,7 @@ export function sessionDetail(run) {
     reps: run.reps,
     duration: run.duration,
     km: run.km_estimate,
-    hrZone: run.hrZone,
+    hrZone: `Easy HR: ${loadHrSettings().easyLow}–${loadHrSettings().easyHigh} bpm`,
     hrTip: run.hrTip,
     rpe: rpeTarget(run),
     tempo: run.tempo || null,
@@ -68,8 +70,8 @@ export function sessionDetail(run) {
     }`,
     cooldown: '5 min rustig wandelen + kort losmaken (kuiten, heupen)',
     stopCriteria: [
-      'Hartslag onverwacht hoog voor het tempo → wandelen tot < 105, eventueel sessie inkorten',
-      'RPE wordt hoger dan 5 → terug naar wandelen',
+      `Boven ${loadHrSettings().walkTrigger} bpm → wandelen tot onder ${loadHrSettings().resumeBelow} bpm, eventueel sessie inkorten`,
+      `RPE hoger dan ${loadHrSettings().rpeEasy + 1} → terug naar wandelen`,
       'Zware benen of duizeligheid → stoppen, dit is data, geen falen',
       'Herstelstatus is Amber → de lichtere variant kiezen',
       run.hrTip,

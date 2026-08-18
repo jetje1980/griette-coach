@@ -5,6 +5,50 @@ import CaptureCenter from './CaptureCenter';
 import { USER } from '../config';
 import { loadTasks, dueFollowUps, getDayActions, saveDayActions, completeTask } from '../tasks';
 import { loadExecutiveFocus } from './LevenScreen';
+import { recoveryScore, runBuildScore, shapeScore, capacityLevel } from '../performance';
+
+// ── Performance strip ───────────────────────────────────────────
+// Alleen percentages met een verdedigbare berekening; bij te weinig
+// data een streepje in plaats van een verzonnen getal.
+function PerformanceStrip({ log, logs, currentDate }) {
+  const rec   = recoveryScore(logs, currentDate);
+  const build = runBuildScore(logs);
+  const shape = shapeScore(logs);
+  const cap   = capacityLevel(log, logs, currentDate);
+
+  const cells = [
+    { label: 'Herstel',   value: rec.value != null ? `${rec.value}%` : '—',
+      pct: rec.value, color: 'var(--sage)', sub: rec.value == null ? rec.reason : `${rec.n} dagen` },
+    { label: 'Run build', value: `${build.value}%`, pct: build.value,
+      color: 'var(--blue)', sub: build.label },
+    { label: 'Shape',     value: shape.value != null ? `${shape.value}%` : '—',
+      pct: shape.value, color: 'var(--rust)', sub: shape.value == null ? shape.reason : shape.label },
+    { label: 'Capaciteit', value: cap.word, pct: null, color: cap.color, sub: null },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 12 }}>
+      {cells.map(c => (
+        <div key={c.label} style={{ background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: 10, padding: '9px 7px' }}>
+          <div style={{ fontSize: 9, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.4px',
+            textTransform: 'uppercase', marginBottom: 3 }}>{c.label}</div>
+          <div style={{ fontSize: 17, fontWeight: 900, fontFamily: 'var(--font-serif)',
+            color: c.color, lineHeight: 1.1 }}>{c.value}</div>
+          {c.pct != null && (
+            <div style={{ height: 3, background: 'var(--border)', borderRadius: 99, marginTop: 5, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, c.pct)}%`, background: c.color, borderRadius: 99 }} />
+            </div>
+          )}
+          {c.sub && (
+            <div style={{ fontSize: 9, color: 'var(--ghost)', marginTop: 3, overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.sub}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const NL_DAYS   = ['Zondag','Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag'];
 const NL_MONTHS = ['januari','februari','maart','april','mei','juni','juli','augustus',
@@ -128,18 +172,39 @@ function computeWatNu({ log, coach, nextSession, currentDate, hasData }) {
       context: 'Je lichaam geeft een hersteldag aan. Geen prestatiedruk.', color: 'var(--blue)' };
   }
 
-  // Eerste onafgevinkte Top 3-prioriteit
-  const top3 = getTop3(currentDate).find(i => !i.done);
-  if (top3 && hour < 20) {
-    return { emoji: '🎯', action: top3.text,
-      context: 'Je eerste openstaande prioriteit van vandaag.', color: 'var(--text)' };
-  }
+  // ── Ranking engine: kies EXACT één beste actie ──
+  // Weegt beschikbare tijd, cognitieve energie, prioriteit en herkomst.
+  if (hour < 21) {
+    const energy = log?.energy;                       // 0-3 fysiek/mentaal
+    const cognitiveOk = energy == null || energy >= 2;
+    const minutesLeftToday = Math.max(0, (21 - hour) * 60);
 
-  // Openstaande dagactie uit Capture
-  const action = getDayActions(currentDate).find(a => !a.done);
-  if (action && hour < 20) {
-    return { emoji: '✅', action: action.title,
-      context: 'Uit je Capture-inbox voor vandaag ingepland.', color: 'var(--text)' };
+    const candidates = [];
+    getTop3(currentDate).filter(i => !i.done).forEach((t, idx) => {
+      candidates.push({ title: t.text, source: 'Top 3', emoji: '🎯',
+        score: 100 - idx * 5, needsFocus: true });
+    });
+    getDayActions(currentDate).filter(a => !a.done).forEach(a => {
+      candidates.push({ title: a.title, source: 'Capture', emoji: '✅',
+        score: 60, needsFocus: false });
+    });
+
+    if (candidates.length) {
+      // Bij lage cognitieve energie eerst iets kleins, anders de zwaarste prioriteit
+      candidates.sort((a, b) => cognitiveOk
+        ? b.score - a.score
+        : (a.needsFocus === b.needsFocus ? b.score - a.score : (a.needsFocus ? 1 : -1)));
+      const pick = candidates[0];
+      const block = !cognitiveOk ? 15 : Math.min(45, Math.max(20, minutesLeftToday));
+      return {
+        emoji: pick.emoji,
+        action: pick.title,
+        context: cognitiveOk
+          ? `Uit ${pick.source}. Zet ${block} minuten opzij en doe alleen de eerste stap.`
+          : `Je energie is laag — pak dit in een blok van ${block} minuten, of verplaats het bewust.`,
+        color: 'var(--text)',
+      };
+    }
   }
 
   if (trained && hour < 14) {
@@ -630,8 +695,11 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
         <RecoveryCheck log={log} logs={logs} currentDate={currentDate} saveField={saveField} />
       )}
 
-      {/* 1. Decision Cockpit */}
+      {/* 1. Decision Cockpit + performance strip */}
       <DecisionCockpit coach={coach} nextSession={nextSession} hasData={hasData} isFuture={isFuture} />
+      {!isFuture && hasData && (
+        <PerformanceStrip log={log} logs={logs} currentDate={currentDate} />
+      )}
 
       {/* 2. Wat nu? */}
       <WatNuCard watNu={watNu} />

@@ -183,7 +183,7 @@ export default function App() {
           isFuture={isFuture}
         />
       )}
-      {tab === 3 && <LevenScreen />}
+      {tab === 3 && <LevenScreen logs={logs} />}
       {tab === 4 && <ProgressieScreen logs={logs} streak={streak} />}
       {tab === 5 && <CoachScreen logs={logs} />}
     </>

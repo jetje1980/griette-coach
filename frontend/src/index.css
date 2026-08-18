@@ -38,6 +38,9 @@ body {
   max-width: 480px;
   margin: 0 auto;
   padding-bottom: 80px;
+  /* Vangnet: brede inhoud scrollt in zijn eigen container, de pagina zelf
+     schuift nooit horizontaal weg. */
+  overflow-x: hidden;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }

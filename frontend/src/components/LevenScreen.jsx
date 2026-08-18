@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import SubTabs from './SubTabs';
 import { dreamStore, fileToDreamImage } from '../dreamStore';
 import CaptureCenter from './CaptureCenter';
+import GoalSettings from './GoalSettings';
 
 // Leven = levensorganisatie en Future Self. Taken bundelt Capture en
 // projecten zodat er geen concurrerende taakmodules meer zijn.
@@ -48,7 +49,8 @@ function loadFutureFocus() {
 }
 function saveFutureFocus(obj) { localStorage.setItem(FUTURE_FOCUS_KEY, JSON.stringify(obj)); }
 
-function TabFocus() {
+function TabFocus({ logs }) {
+  const [view, setView] = useState('focus');
   const [exec, setExec] = useState(loadExecutiveFocus);
   const [domains, setDomains] = useState(loadFutureFocus);
 
@@ -69,6 +71,18 @@ function TabFocus() {
 
   return (
     <div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+        {[{ id: 'focus', label: '🎯 Focus' }, { id: 'goals', label: '📐 Doelen' }].map(v => (
+          <button key={v.id} className={`os-scale-btn ${view === v.id ? 'active' : ''}`}
+            onClick={() => setView(v.id)} style={{ flex: 1, padding: '9px 4px', fontSize: 12 }}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'goals' && <GoalSettings logs={logs} />}
+
+      {view === 'focus' && (<>
       <div className="os-section-label" style={{ marginTop: 0 }}>Huidig seizoen</div>
       <div className="os-card">
         <input className="os-input" value={exec.seasonName || ''}
@@ -108,6 +122,7 @@ function TabFocus() {
       <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 10, lineHeight: 1.5 }}>
         {FOCUS_STATES.map(s => `${s.emoji} ${s.label}: ${s.desc}`).join(' · ')}
       </div>
+      </>)}
     </div>
   );
 }
@@ -1476,7 +1491,7 @@ function TabTaken() {
   );
 }
 
-export default function LevenScreen() {
+export default function LevenScreen({ logs = {} }) {
   const [activeTab, setActiveTab] = useState(0);
 
   return (
@@ -1484,7 +1499,7 @@ export default function LevenScreen() {
       <SubTabs tabs={SUBTABS} active={activeTab} onChange={setActiveTab} />
 
       {activeTab === 0 && <TabTaken />}
-      {activeTab === 1 && <TabFocus />}
+      {activeTab === 1 && <TabFocus logs={logs} />}
       {activeTab === 2 && <TabRoutines />}
       {activeTab === 3 && <TabGeld />}
       {activeTab === 4 && <TabToekomst />}

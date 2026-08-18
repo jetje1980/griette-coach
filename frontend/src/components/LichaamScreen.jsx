@@ -12,6 +12,7 @@ import { TRAINING_BLOCKS, getCurrentBlock, upcomingWeekFoci, blockExpectation } 
 import TrainingPlan from './TrainingPlan';
 import WorkoutForm from './WorkoutForm';
 import RecoveryCheck from './RecoveryCheck';
+import CycleHistory from './CycleHistory';
 import { workoutOn, loadWorkouts, computePace } from '../workouts';
 import { api } from '../api';
 import { store } from '../store';
@@ -139,10 +140,52 @@ function nextFirstOfMonth(fromDate) {
   return d.toISOString().slice(0, 10);
 }
 
+// Historie-items: { id, date, dose, note, sideEffect, migraineContext }
+// Ondersteunt historische backfill, wijzigen en verwijderen.
+function loadAjoviHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(AJOVI_HIST) || '[]')
+      .map((h, i) => ({ id: h.id || `aj_${h.date}_${i}`, dose: '', note: '', ...h }))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  } catch { return []; }
+}
+function saveAjoviHistory(arr) {
+  localStorage.setItem(AJOVI_HIST, JSON.stringify(
+    [...arr].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  ));
+}
+
 function AjoviTracker() {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [next, setNext] = useState(() => localStorage.getItem(AJOVI_KEY) || null);
-  const hist = (() => { try { return JSON.parse(localStorage.getItem(AJOVI_HIST) || '[]'); } catch { return []; } })();
+  const [history, setHistory] = useState(loadAjoviHistory);
+  const [form, setForm] = useState(null);   // { id?, date, dose, note, sideEffect }
+  const [msg, setMsg] = useState('');
+  const hist = history;
+
+  function persistHist(arr) { saveAjoviHistory(arr); setHistory(loadAjoviHistory()); }
+  function flash(t) { setMsg(t); setTimeout(() => setMsg(''), 2500); }
+
+  function saveEntry() {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.date || '')) return;
+    const entry = {
+      id: form.id || `aj_${Date.now()}`,
+      date: form.date,
+      dose: form.dose || '',
+      note: form.note || '',
+      sideEffect: form.sideEffect || '',
+      given: form.given || form.date,
+    };
+    persistHist([entry, ...history.filter(h => h.id !== entry.id)]);
+    setForm(null);
+    flash(form.id ? 'Injectie bijgewerkt' : 'Injectie toegevoegd');
+  }
+
+  function removeEntry(id) {
+    if (!window.confirm('Deze injectie verwijderen?')) return;
+    persistHist(history.filter(h => h.id !== id));
+    flash('Verwijderd');
+  }
 
   const daysTo = next ? Math.ceil((new Date(next) - new Date(todayStr)) / 86400000) : null;
   const isToday = daysTo === 0;
@@ -150,11 +193,11 @@ function AjoviTracker() {
 
   function markGiven() {
     const given = next || todayStr;
-    const newHist = [{ date: given, given: todayStr }, ...hist].slice(0, 12);
-    localStorage.setItem(AJOVI_HIST, JSON.stringify(newHist));
+    persistHist([{ id: `aj_${Date.now()}`, date: given, given: todayStr, dose: '', note: '' }, ...history]);
     const newNext = nextFirstOfMonth(given);
     localStorage.setItem(AJOVI_KEY, newNext);
     setNext(newNext);
+    flash('Injectie geregistreerd');
   }
 
   function setNextDate() {
@@ -185,11 +228,55 @@ function AjoviTracker() {
           </button>
         </div>
       )}
-      {hist.length > 0 && (
-        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ghost)' }}>
-          Laatste: {hist[0].date}
-        </div>
-      )}
+      {msg && <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, marginTop: 8 }}>{msg}</div>}
+
+      {/* Historie — inclusief historische injecties toevoegen */}
+      <div style={{ marginTop: 12 }}>
+        {hist.length > 0 && (
+          <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.4px', marginBottom: 4 }}>Historie ({hist.length})</div>
+        )}
+        {hist.slice(0, 24).map(h => (
+          <div key={h.id} className="os-detail-row" style={{ fontSize: 12 }}>
+            <span className="os-dk">
+              {h.date}
+              {h.dose ? <span style={{ color: 'var(--ghost)' }}> · {h.dose}</span> : null}
+              {h.note ? <span style={{ color: 'var(--ghost)' }}> · {String(h.note).slice(0, 22)}</span> : null}
+              {h.sideEffect ? <span style={{ color: 'var(--rust)' }}> · {String(h.sideEffect).slice(0, 18)}</span> : null}
+            </span>
+            <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={() => setForm({ id: h.id, date: h.date, dose: h.dose || '', note: h.note || '', sideEffect: h.sideEffect || '' })}
+                style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 13 }}>✎</button>
+              <button onClick={() => removeEntry(h.id)}
+                style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 15 }}>×</button>
+            </span>
+          </div>
+        ))}
+
+        {form ? (
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--divide)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+              <input type="date" className="os-input" value={form.date}
+                onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+              <input className="os-input" placeholder="dosis (optioneel)" value={form.dose}
+                onChange={e => setForm(f => ({ ...f, dose: e.target.value }))} />
+            </div>
+            <input className="os-input" placeholder="notitie (optioneel)" value={form.note}
+              onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ marginBottom: 6 }} />
+            <input className="os-input" placeholder="bijwerking (optioneel)" value={form.sideEffect}
+              onChange={e => setForm(f => ({ ...f, sideEffect: e.target.value }))} style={{ marginBottom: 8 }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="os-btn-save" onClick={saveEntry}>{form.id ? 'Bijwerken' : 'Toevoegen'}</button>
+              <button className="os-toggle-chip" onClick={() => setForm(null)}>Annuleer</button>
+            </div>
+          </div>
+        ) : (
+          <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 6 }}
+            onClick={() => setForm({ date: todayStr, dose: '', note: '', sideEffect: '' })}>
+            + Injectie toevoegen (ook eerdere datum)
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -630,7 +717,12 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   }, [currentDate]);
 
   useEffect(() => {
-    api.stravaStatus().then(s => setStravaStatus(s)).catch(() => {});
+    // Onderscheid tussen "niet gekoppeld" en "backend onbereikbaar": op
+    // statische hosting bestaat /api niet, en dan mag de UI niet suggereren
+    // dat koppelen mogelijk is.
+    api.stravaStatus()
+      .then(s => setStravaStatus(s || { connected: false, reachable: true }))
+      .catch(() => setStravaStatus({ connected: false, reachable: false }));
     api.stravaActivities().then(a => setStravaActivities(a)).catch(() => {});
   }, []);
 
@@ -950,10 +1042,16 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
                   </button>
                 </div>
               ) : (
-                <button className="os-btn-save" style={{ width: '100%', marginBottom: 10 }}
-                  onClick={() => setShowWorkoutForm(true)}>
-                  🏃 Training registreren — screenshot, handmatig of Strava
-                </button>
+                <>
+                  <button className="os-btn-save"
+                    style={{ width: '100%', marginBottom: 6, whiteSpace: 'normal', lineHeight: 1.35 }}
+                    onClick={() => setShowWorkoutForm(true)}>
+                    🏃 Training registreren
+                  </button>
+                  <div style={{ fontSize: 11, color: 'var(--ghost)', marginBottom: 10, textAlign: 'center' }}>
+                    screenshot · handmatig · Strava
+                  </div>
+                </>
               );
             })()}
             {log?.run_done && !workoutOn(currentDate) && (
@@ -1070,12 +1168,26 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '12px 0' }}>
-              <div style={{ fontSize: 13, color: 'var(--sub)', marginBottom: 12, lineHeight: 1.5 }}>
-                Koppel Strava om activiteiten automatisch te importeren en als sessie te registreren.
-              </div>
-              <button className="os-btn-save" style={{ background: '#FC4C02' }} onClick={connectStrava}>
-                Koppel Strava
-              </button>
+              {stravaStatus && stravaStatus.reachable === false ? (
+                <>
+                  <div style={{ fontSize: 13, color: 'var(--rust)', fontWeight: 600, marginBottom: 6 }}>
+                    Strava-backend niet bereikbaar
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5 }}>
+                    Koppelen vraagt een draaiende backend (/api). Handmatig invoeren en
+                    screenshot-import werken volledig zonder Strava.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, color: 'var(--sub)', marginBottom: 12, lineHeight: 1.5 }}>
+                    Koppel Strava om activiteiten automatisch te importeren en als sessie te registreren.
+                  </div>
+                  <button className="os-btn-save" style={{ background: '#FC4C02' }} onClick={connectStrava}>
+                    Koppel Strava
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1355,6 +1467,11 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
           const key = `hormoon_${i}`;
           return <CheckItem key={key} checked={!!log?.[key]} label={label} onClick={() => saveField(key, !log?.[key])} />;
         })}
+
+        <SectionLabel>Cyclushistorie</SectionLabel>
+        <div className="os-card">
+          <CycleHistory onChange={() => saveFields({})} />
+        </div>
 
         <SectionLabel>Ajovi</SectionLabel>
         <AjoviTracker />
