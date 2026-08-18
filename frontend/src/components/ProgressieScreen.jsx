@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { photoStore } from '../photoStore';
+import { dreamStore } from '../dreamStore';
 import { USER, PERSONAL_EVENTS } from '../config';
 import { RUNS } from '../data/runningSchema';
+import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
+import { protectedHours } from './WeekScreen';
 import { store } from '../store';
 import SubTabs from './SubTabs';
 
-const SUBTABS = ['Overzicht', 'Lichaam', 'Hardlopen', 'Energie', 'Routines', 'Tijdlijn'];
+// Zeven domeinen: Body · Run · Strength · Fresh · Money · Freedom · Routines
+const SUBTABS = ['Overzicht', 'Body', 'Run', 'Strength', 'Fresh', 'Money', 'Freedom', 'Routines', 'Tijdlijn'];
 
 const TRAIL_DATE = '2026-10-03';
 const TOTAL_RUNS = 35;
@@ -299,7 +303,7 @@ function TabOverzicht({ logs, streak, sessions, goToTab }) {
       )}
 
       <div className="os-section-label">Foto-tijdlijn</div>
-      <div className="os-card" style={{ cursor: 'pointer' }} onClick={() => goToTab(5)}>
+      <div className="os-card" style={{ cursor: 'pointer' }} onClick={() => goToTab(8)}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Progressiefoto's</div>
@@ -319,12 +323,24 @@ function TabOverzicht({ logs, streak, sessions, goToTab }) {
 // ═══════════════════════════════════════════════════════════════
 // TAB 1: LICHAAM
 // ═══════════════════════════════════════════════════════════════
-function TabLichaam({ logs }) {
+function TabLichaam({ logs, sessions }) {
   const [measurements, setMeasurements] = useState([]);
+  const [dreamImgs, setDreamImgs] = useState([]);
 
   useEffect(() => {
     store.getMeasurements().then(m => setMeasurements(Array.isArray(m) ? m : [])).catch(() => {});
+    dreamStore.getAll().then(all => setDreamImgs(all.body || [])).catch(() => {});
   }, []);
+
+  // Future → Start → Now
+  const sortedSessions = [...(sessions || [])].sort((a, b) => a.date.localeCompare(b.date));
+  const startPhoto = sortedSessions[0]?.views?.voor || Object.values(sortedSessions[0]?.views || {})[0];
+  const lastSession = sortedSessions[sortedSessions.length - 1];
+  const nowPhoto = sortedSessions.length > 1
+    ? (lastSession?.views?.voor || Object.values(lastSession?.views || {})[0])
+    : null;
+  const futureImg = dreamImgs[0];
+  const showFSN = futureImg || startPhoto;
 
   const weightEntries = Object.values(logs)
     .filter(l => l.weight)
@@ -335,16 +351,6 @@ function TabLichaam({ logs }) {
   const weightPct = latestWeight
     ? Math.min(100, Math.max(0, ((USER.startWeight - latestWeight) / (USER.startWeight - USER.goalWeight)) * 100))
     : 0;
-
-  // Buffer — gc_geld may store a plain number or an object with .buffer
-  const geldRaw = (() => { try { return localStorage.getItem('gc_geld'); } catch { return null; } })();
-  const hasGeld = geldRaw !== null && geldRaw !== '';
-  const geldAmount = hasGeld ? (() => {
-    try {
-      const parsed = JSON.parse(geldRaw);
-      return typeof parsed === 'number' ? parsed : (parsed?.buffer ?? parseFloat(geldRaw) ?? 0);
-    } catch { return parseFloat(geldRaw) || 0; }
-  })() : 0;
 
   return (
     <div>
@@ -420,19 +426,33 @@ function TabLichaam({ logs }) {
         </>
       )}
 
-      {/* Geld buffer */}
-      {hasGeld && geldAmount > 0 && (
+      {/* Future → Start → Now */}
+      {showFSN && (
         <>
-          <div className="os-section-label">Buffer</div>
+          <div className="os-section-label">Future → Start → Now</div>
           <div className="os-card">
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-              <div style={{ fontSize: 26, fontWeight: 900, fontFamily: 'var(--font-serif)',
-                color: geldAmount >= 15000 ? 'var(--green)' : 'var(--sage)' }}>
-                €{geldAmount.toLocaleString('nl-NL')}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--sub)' }}>van €15.000</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+              {[
+                { label: 'Future', img: futureImg ? `data:${futureImg.mimeType};base64,${futureImg.base64}` : null, hint: 'Dream Board' },
+                { label: 'Start', img: startPhoto ? `data:${startPhoto.mimeType};base64,${startPhoto.base64}` : null, hint: sortedSessions[0]?.date?.slice(5) },
+                { label: 'Now', img: nowPhoto ? `data:${nowPhoto.mimeType};base64,${nowPhoto.base64}` : null, hint: lastSession?.date?.slice(5) },
+              ].map(({ label, img, hint }) => (
+                <div key={label} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700,
+                    textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{label}</div>
+                  {img ? (
+                    <img src={img} alt={label} style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 8 }} />
+                  ) : (
+                    <div style={{ height: 110, background: 'var(--bg)', borderRadius: 8,
+                      border: '1px dashed var(--border)', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', fontSize: 10, color: 'var(--ghost)', padding: 4, lineHeight: 1.3 }}>
+                      {label === 'Future' ? 'Upload in Leven → Toekomst' : 'Nog geen foto'}
+                    </div>
+                  )}
+                  {hint && img && <div style={{ fontSize: 9, color: 'var(--ghost)', marginTop: 3 }}>{hint}</div>}
+                </div>
+              ))}
             </div>
-            <ProgressBar pct={Math.min(100, (geldAmount / 15000) * 100)} color="var(--green)" />
           </div>
         </>
       )}
@@ -472,8 +492,43 @@ function TabHardlopen({ logs }) {
     return Math.min(100, Math.max(0, (elapsed / totalDays) * 100));
   })();
 
-  // Core/kracht sessions
-  const coreSessions = Object.values(logs).filter(l => l.core_done).length;
+  // Langste comfortabele run (duur van gedane sessies)
+  const longestRun = Object.values(logs)
+    .filter(l => l.run_done && l.run_session)
+    .reduce((max, l) => {
+      const run = RUNS.find(r => r.nr === Number(l.run_session));
+      return run && run.duration > max ? run.duration : max;
+    }, 0);
+
+  // 5K tests (handmatig vastgelegd)
+  const [tests, setTests] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gc_5k_tests') || '[]'); } catch { return []; }
+  });
+  function addTest() {
+    const t = window.prompt('5K tijd in minuten (bijv. 42.5):');
+    const min = parseFloat((t || '').replace(',', '.'));
+    if (isNaN(min) || min <= 0) return;
+    const next = [{ date: todayStr(), minutes: min }, ...tests];
+    localStorage.setItem('gc_5k_tests', JSON.stringify(next));
+    setTests(next);
+  }
+
+  // Trainingsbelasting: runs per week, laatste 4 weken
+  const loadWeeks = (() => {
+    const runDates = Object.values(logs).filter(l => l.run_done && l.date).map(l => l.date);
+    const monday = (() => {
+      const d = new Date(tod + 'T12:00:00');
+      const dow = d.getDay();
+      d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+      return d;
+    })();
+    return Array.from({ length: 4 }, (_, i) => {
+      const mon = new Date(monday); mon.setDate(monday.getDate() - (3 - i) * 7);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      const ms = mon.toISOString().slice(0, 10), ss = sun.toISOString().slice(0, 10);
+      return { label: ms.slice(5), count: runDates.filter(d => d >= ms && d <= ss).length };
+    });
+  })();
 
   return (
     <div>
@@ -498,18 +553,52 @@ function TabHardlopen({ logs }) {
         )}
       </div>
 
-      {/* Kracht */}
-      {coreSessions > 0 && (
-        <div className="os-card" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: 'var(--font-serif)', color: 'var(--blue)' }}>
-            {coreSessions}
+      {/* Langste run + belasting */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <div className="os-card" style={{ flex: 1, textAlign: 'center', padding: '12px 8px', marginBottom: 0 }}>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: 'var(--font-serif)', color: 'var(--sage)' }}>
+            {longestRun || '—'}
           </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>Core sessies</div>
-            <div style={{ fontSize: 12, color: 'var(--sub)' }}>krachtsessies gedaan</div>
-          </div>
+          <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.3 }}>min<br />langste sessie</div>
         </div>
-      )}
+        <div className="os-card" style={{ flex: 2, padding: '12px 12px', marginBottom: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.4px', marginBottom: 6 }}>Belasting — runs/week</div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 34 }}>
+            {loadWeeks.map(w => (
+              <div key={w.label} style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ height: Math.max(3, w.count * 10), background: w.count > 3 ? 'var(--rust)' : 'var(--sage)',
+                  borderRadius: 3, marginBottom: 2 }} />
+                <div style={{ fontSize: 8, color: 'var(--ghost)' }}>{w.count}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 9, color: 'var(--ghost)', marginTop: 2, textAlign: 'center' }}>laatste 4 weken · &gt;3 = hoog</div>
+        </div>
+      </div>
+
+      {/* 5K tests */}
+      <div className="os-section-label">5K test</div>
+      <div className="os-card">
+        {tests.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 8 }}>
+            Nog geen 5K-test gelogd. Komt in het TEST-blok van de roadmap.
+          </div>
+        ) : (
+          tests.slice(0, 5).map((t, i) => (
+            <div key={i} className="os-detail-row">
+              <span className="os-dk">{t.date}</span>
+              <span className="os-dv" style={{ fontWeight: 700 }}>
+                {Math.floor(t.minutes)}:{String(Math.round((t.minutes % 1) * 60)).padStart(2, '0')} min
+                {i < tests.length - 1 && tests[i + 1] && t.minutes < tests[i + 1].minutes ? ' ▲' : ''}
+              </span>
+            </div>
+          ))
+        )}
+        <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 4 }} onClick={addTest}>
+          + 5K tijd vastleggen
+        </button>
+      </div>
 
       {/* Next run */}
       {nextRun && (
@@ -791,6 +880,250 @@ function TabTijdlijn({ sessions }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// TAB: STRENGTH
+// ═══════════════════════════════════════════════════════════════
+function TabStrength({ logs }) {
+  const sessions = loadStrengthSessions();
+  const fullSessions = sessions.filter(s => s.program !== 'snack');
+  const snacks = sessions.filter(s => s.program === 'snack');
+  const legacyCore = Object.values(logs).filter(l => l.core_done && !l.strength_done).length;
+
+  // Belangrijkste lifts: laatste + beste per hoofdoefening
+  const KEY_LIFTS = ['a_squat', 'a_hinge', 'a_glutes', 'b_lunge', 'b_push', 'a_pull'];
+  const lifts = KEY_LIFTS.map(id => {
+    const ex = findExercise(id);
+    let last = null, best = null;
+    for (const s of sessions) {
+      const e = (s.exercises || []).find(x => x.id === id && (x.done || x.weight));
+      if (!e) continue;
+      if (!last) last = { ...e, date: s.date };
+      const w = parseFloat(e.weight) || 0;
+      if (!best || w > (parseFloat(best.weight) || 0)) best = { ...e, date: s.date };
+    }
+    return last ? { ex, last, best } : null;
+  }).filter(Boolean);
+
+  // Volume per week (gewicht × sets × reps), laatste 4 weken
+  const volWeeks = (() => {
+    const tod = todayStr();
+    const monday = (() => {
+      const d = new Date(tod + 'T12:00:00');
+      const dow = d.getDay();
+      d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+      return d;
+    })();
+    return Array.from({ length: 4 }, (_, i) => {
+      const mon = new Date(monday); mon.setDate(monday.getDate() - (3 - i) * 7);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      const ms = mon.toISOString().slice(0, 10), ss = sun.toISOString().slice(0, 10);
+      const vol = sessions.filter(s => s.date >= ms && s.date <= ss)
+        .reduce((sum, s) => sum + (s.exercises || []).reduce((v, e) => {
+          const w = parseFloat(e.weight) || 0;
+          return v + w * (parseInt(e.sets, 10) || 0) * (parseInt(e.reps, 10) || 0);
+        }, 0), 0);
+      const count = sessions.filter(s => s.date >= ms && s.date <= ss && s.program !== 'snack').length;
+      return { label: ms.slice(5), vol: Math.round(vol), count };
+    });
+  })();
+  const maxVol = Math.max(...volWeeks.map(w => w.vol), 1);
+
+  if (sessions.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--sub)', fontSize: 13, lineHeight: 1.7 }}>
+        Nog geen krachtsessies gelogd.<br />
+        <span style={{ fontSize: 11, color: 'var(--ghost)' }}>
+          Start via Lichaam → Training → Kracht (programma A of B).
+        </span>
+        {legacyCore > 0 && (
+          <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 10 }}>
+            ({legacyCore} oudere core-sessies geregistreerd vóór de krachtmodule)
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="os-section-label" style={{ marginTop: 0 }}>Sessies</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <div className="os-card" style={{ flex: 1, textAlign: 'center', padding: '12px 8px', marginBottom: 0 }}>
+          <div style={{ fontSize: 24, fontWeight: 900, fontFamily: 'var(--font-serif)', color: 'var(--blue)' }}>
+            {fullSessions.length}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--ghost)' }}>volledige sessies</div>
+        </div>
+        <div className="os-card" style={{ flex: 1, textAlign: 'center', padding: '12px 8px', marginBottom: 0 }}>
+          <div style={{ fontSize: 24, fontWeight: 900, fontFamily: 'var(--font-serif)', color: 'var(--gold)' }}>
+            {snacks.length}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--ghost)' }}>⚡ snacks</div>
+        </div>
+      </div>
+
+      {lifts.length > 0 && (
+        <>
+          <div className="os-section-label">Belangrijkste lifts</div>
+          <div className="os-card">
+            {lifts.map(({ ex, last, best }) => (
+              <div key={ex.id} style={{ padding: '7px 0', borderBottom: '1px solid var(--divide)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{ex.name}</span>
+                  <span style={{ fontSize: 12, color: 'var(--sub)' }}>
+                    {last.weight ? `${last.weight} kg · ` : ''}{last.sets}×{last.reps}
+                    {last.rir != null ? ` · RIR ${last.rir}` : ''}
+                  </span>
+                </div>
+                {best && parseFloat(best.weight) > 0 && best.weight !== last.weight && (
+                  <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 1 }}>
+                    beste: {best.weight} kg ({best.date.slice(5)})
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="os-section-label">Volume/load trend</div>
+      <div className="os-card">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 56 }}>
+          {volWeeks.map(w => (
+            <div key={w.label} style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ height: Math.max(3, (w.vol / maxVol) * 44), background: 'var(--blue)',
+                borderRadius: 3, marginBottom: 2, opacity: w.vol > 0 ? 1 : 0.25 }} />
+              <div style={{ fontSize: 9, color: 'var(--ghost)' }}>{w.vol > 0 ? `${w.vol}` : '·'}</div>
+              <div style={{ fontSize: 8, color: 'var(--ghost)' }}>{w.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 6, textAlign: 'center' }}>
+          volume = kg × sets × reps per week
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAB: MONEY
+// ═══════════════════════════════════════════════════════════════
+function TabMoney() {
+  const BUFFER_DOEL = 15000;
+  const geld = (() => {
+    try {
+      const raw = localStorage.getItem('gc_geld');
+      if (!raw) return { buffer: 0, expenses: [] };
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'number') return { buffer: parsed, expenses: [] };
+      return { buffer: parsed?.buffer || 0, expenses: parsed?.expenses || [] };
+    } catch { return { buffer: 0, expenses: [] }; }
+  })();
+  const pct = Math.min(100, (geld.buffer / BUFFER_DOEL) * 100);
+  const vast = geld.expenses.filter(e => e.type === 'vast').reduce((s, e) => s + (e.amount || 0), 0);
+  const maandenBuffer = vast > 0 ? (geld.buffer / vast) : null;
+
+  return (
+    <div>
+      <div className="os-section-label" style={{ marginTop: 0 }}>Buffer → €{BUFFER_DOEL.toLocaleString('nl-NL')}</div>
+      <div className="os-card">
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+          <div style={{ fontSize: 34, fontWeight: 900, fontFamily: 'var(--font-serif)',
+            color: geld.buffer >= BUFFER_DOEL ? 'var(--green)' : 'var(--sage)' }}>
+            €{geld.buffer.toLocaleString('nl-NL')}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--sub)' }}>({Math.round(pct)}%)</div>
+        </div>
+        <ProgressBar pct={pct} color={geld.buffer >= BUFFER_DOEL ? 'var(--green)' : 'var(--sage)'} />
+        <div style={{ fontSize: 12, color: 'var(--sub)', marginTop: 8 }}>
+          {pct < 100
+            ? `Nog €${(BUFFER_DOEL - geld.buffer).toLocaleString('nl-NL')} te gaan`
+            : '🎉 Bufferdoel bereikt'}
+        </div>
+        {maandenBuffer != null && (
+          <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 4 }}>
+            ≈ {maandenBuffer.toFixed(1)} maanden vaste lasten gedekt
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--ghost)', lineHeight: 1.5 }}>
+        Buffer bijwerken doe je in Leven → Geld.
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAB: FREEDOM — beschermde vrije tijd
+// ═══════════════════════════════════════════════════════════════
+function TabFreedom() {
+  const tod = todayStr();
+  const monday = (() => {
+    const d = new Date(tod + 'T12:00:00');
+    const dow = d.getDay();
+    d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+    return d;
+  })();
+
+  const weeks = Array.from({ length: 4 }, (_, i) => {
+    const mon = new Date(monday); mon.setDate(monday.getDate() - (3 - i) * 7);
+    let hours = 0, evenings = 0;
+    for (let dd = 0; dd < 7; dd++) {
+      const d = new Date(mon); d.setDate(mon.getDate() + dd);
+      const key = `gc_day_plan_${d.toISOString().slice(0, 10)}`;
+      let plan = {};
+      try { plan = JSON.parse(localStorage.getItem(key) || '{}'); } catch { /* leeg */ }
+      const fb = plan.freeBlocks || [];
+      hours += protectedHours(fb);
+      if (fb.includes('evening') || fb.includes('fullday')) evenings++;
+    }
+    return { label: mon.toISOString().slice(5, 10), hours, evenings, isCurrent: i === 3 };
+  });
+  const cur = weeks[3];
+  const maxH = Math.max(...weeks.map(w => w.hours), 1);
+
+  return (
+    <div>
+      <div className="os-section-label" style={{ marginTop: 0 }}>Deze week</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <div className="os-card" style={{ flex: 1, textAlign: 'center', padding: '14px 8px', marginBottom: 0 }}>
+          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: 'var(--font-serif)', color: 'var(--green)' }}>
+            {cur.hours}u
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--sub)' }}>🌿 beschermde vrije tijd</div>
+        </div>
+        <div className="os-card" style={{ flex: 1, textAlign: 'center', padding: '14px 8px', marginBottom: 0 }}>
+          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: 'var(--font-serif)', color: 'var(--blue)' }}>
+            {cur.evenings}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--sub)' }}>🌙 vrije avonden</div>
+        </div>
+      </div>
+
+      <div className="os-section-label">Trend — 4 weken</div>
+      <div className="os-card">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 60 }}>
+          {weeks.map(w => (
+            <div key={w.label} style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ height: Math.max(3, (w.hours / maxH) * 46),
+                background: w.isCurrent ? 'var(--green)' : 'var(--sage)',
+                borderRadius: 3, marginBottom: 2, opacity: w.hours > 0 ? 1 : 0.25 }} />
+              <div style={{ fontSize: 9, color: 'var(--ghost)' }}>{w.hours}u</div>
+              <div style={{ fontSize: 8, color: 'var(--ghost)' }}>{w.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12, color: 'var(--ghost)', lineHeight: 1.6, marginTop: 8 }}>
+        Beschermde blokken markeer je in Week → dag → Beschermde vrije tijd.
+        Ochtend/middag/avond tellen als 3 uur, een hele dag als 9 uur.
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
 export default function ProgressieScreen({ logs, streak }) {
@@ -805,11 +1138,14 @@ export default function ProgressieScreen({ logs, streak }) {
     <div className="os-content">
       <SubTabs tabs={SUBTABS} active={activeTab} onChange={setActiveTab} />
       {activeTab === 0 && <TabOverzicht logs={logs} streak={streak} sessions={sessions} goToTab={setActiveTab} />}
-      {activeTab === 1 && <TabLichaam logs={logs} />}
+      {activeTab === 1 && <TabLichaam logs={logs} sessions={sessions} />}
       {activeTab === 2 && <TabHardlopen logs={logs} />}
-      {activeTab === 3 && <TabEnergie logs={logs} />}
-      {activeTab === 4 && <TabRoutines />}
-      {activeTab === 5 && <TabTijdlijn sessions={sessions} />}
+      {activeTab === 3 && <TabStrength logs={logs} />}
+      {activeTab === 4 && <TabEnergie logs={logs} />}
+      {activeTab === 5 && <TabMoney />}
+      {activeTab === 6 && <TabFreedom />}
+      {activeTab === 7 && <TabRoutines />}
+      {activeTab === 8 && <TabTijdlijn sessions={sessions} />}
     </div>
   );
 }

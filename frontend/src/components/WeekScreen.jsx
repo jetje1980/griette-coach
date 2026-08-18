@@ -67,6 +67,31 @@ const FREE_BLOCKS = [
   { id: 'fullday',  emoji: '📅', label: 'Hele dag' },
 ];
 
+// Uren per beschermd blok — gebruikt voor de Freedom-meting in Progressie
+export const FREE_BLOCK_HOURS = { morning: 3, midday: 3, evening: 3, fullday: 9 };
+export function protectedHours(freeBlocks) {
+  return (freeBlocks || []).reduce((s, b) => s + (FREE_BLOCK_HOURS[b] || 0), 0);
+}
+
+const KRACHT_OPTS = [
+  { id: null,    label: 'Geen' },
+  { id: 'A',     label: '🅰️ Programma A' },
+  { id: 'B',     label: '🅱️ Programma B' },
+  { id: 'snack', label: '⚡ Snack' },
+];
+
+const WORK_BLOCKS = [
+  { id: 'morning', emoji: '🌅', label: 'Ochtend' },
+  { id: 'midday',  emoji: '☀️', label: 'Middag' },
+  { id: 'evening', emoji: '🌙', label: 'Avond' },
+];
+
+const TRANSITION_OPTS = [
+  { id: 'start',    emoji: '🚿', label: 'Opstart-buffer' },
+  { id: 'switch',   emoji: '🔁', label: 'Werk → privé' },
+  { id: 'winddown', emoji: '🕯️', label: 'Avond-afbouw' },
+];
+
 // ── WIP check ───────────────────────────────────────────────────
 function computeWipWarning(priorities, days) {
   const activePlanned = days.filter(d => {
@@ -163,10 +188,11 @@ function WeekPriorities({ monday }) {
 }
 
 // ── Day planner modal ───────────────────────────────────────────
-function DayPlanEditor({ date, onClose }) {
+function DayPlanEditor({ date, weekDates, onClose }) {
   const d = new Date(date + 'T12:00:00');
   const dayLabel = `${NL_DAYS_FULL[d.getDay()]} ${d.getDate()} ${NL_MONTHS_SHORT[d.getMonth()]}`;
   const [plan, setPlan] = useState(() => getDayPlan(date));
+  const [movedMsg, setMovedMsg] = useState('');
 
   function update(key, val) {
     const updated = { ...plan, [key]: val };
@@ -178,6 +204,23 @@ function DayPlanEditor({ date, onClose }) {
     const cur = plan.freeBlocks || [];
     const next = cur.includes(blockId) ? cur.filter(x => x !== blockId) : [...cur, blockId];
     update('freeBlocks', next);
+  }
+
+  function toggleArr(key, id) {
+    const cur = plan[key] || [];
+    update(key, cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
+  }
+
+  // Training verplaatsen naar een andere dag — telt NIET als gemist
+  function moveTraining(targetDate) {
+    const target = getDayPlan(targetDate);
+    saveDayPlan(targetDate, { ...target, training: plan.training, kracht: plan.kracht });
+    const cleared = { ...plan, training: null, kracht: null };
+    saveDayPlan(date, cleared);
+    setPlan(cleared);
+    const td = new Date(targetDate + 'T12:00:00');
+    setMovedMsg(`Verplaatst naar ${NL_DAYS_FULL[td.getDay()]} ${td.getDate()} — telt niet als gemist`);
+    setTimeout(() => setMovedMsg(''), 3000);
   }
 
   return (
@@ -211,7 +254,90 @@ function DayPlanEditor({ date, onClose }) {
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
+            letterSpacing: '0.5px', fontWeight: 700, marginBottom: 8 }}>Kracht gepland</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {KRACHT_OPTS.map(k => (
+              <button key={String(k.id)}
+                className={`os-toggle-chip ${(plan.kracht ?? null) === k.id ? 'active green' : ''}`}
+                onClick={() => update('kracht', k.id)}
+                style={{ fontSize: 12 }}>
+                {k.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {(plan.training || plan.kracht) && weekDates && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
+              letterSpacing: '0.5px', fontWeight: 700, marginBottom: 8 }}>Verplaats training naar…</div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {weekDates.filter(wd => wd !== date).map(wd => {
+                const wdd = new Date(wd + 'T12:00:00');
+                return (
+                  <button key={wd} className="os-toggle-chip" style={{ fontSize: 12 }}
+                    onClick={() => moveTraining(wd)}>
+                    {NL_DAYS[wdd.getDay()]} {wdd.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 5 }}>
+              Verplaatsen telt niet als gemist — het plan schuift gewoon mee.
+            </div>
+            {movedMsg && (
+              <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, marginTop: 5 }}>✓ {movedMsg}</div>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
+            letterSpacing: '0.5px', fontWeight: 700, marginBottom: 8 }}>Werkblokken</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {WORK_BLOCKS.map(b => (
+              <button key={b.id}
+                className={`os-toggle-chip ${(plan.workBlocks || []).includes(b.id) ? 'active' : ''}`}
+                onClick={() => toggleArr('workBlocks', b.id)}
+                style={{ fontSize: 12 }}>
+                💼 {b.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
+            letterSpacing: '0.5px', fontWeight: 700, marginBottom: 8 }}>Transitions (buffermomenten)</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {TRANSITION_OPTS.map(t => (
+              <button key={t.id}
+                className={`os-toggle-chip ${(plan.transitions || []).includes(t.id) ? 'active' : ''}`}
+                onClick={() => toggleArr('transitions', t.id)}
+                style={{ fontSize: 12 }}>
+                {t.emoji} {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
+            letterSpacing: '0.5px', fontWeight: 700, marginBottom: 8 }}>Herstelmoment</div>
+          <button
+            className={`os-toggle-chip ${plan.recovery ? 'active green' : ''}`}
+            onClick={() => update('recovery', !plan.recovery)}
+            style={{ fontSize: 12 }}>
+            🌊 Bewust herstelmoment ingepland
+          </button>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
             letterSpacing: '0.5px', fontWeight: 700, marginBottom: 8 }}>Beschermde vrije tijd</div>
+          <div style={{ fontSize: 11, color: 'var(--ghost)', marginBottom: 6, lineHeight: 1.4 }}>
+            Deze blokken worden niet gevuld met werk, huishouden, training of todo's.
+          </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {FREE_BLOCKS.map(b => (
               <button key={b.id}
@@ -351,10 +477,35 @@ export default function WeekScreen({ logs }) {
       }
     }
 
+    // Plan-onderdelen samenvatten in de rij
+    const planBits = [];
+    if (dayPlan.kracht)                      planBits.push(dayPlan.kracht === 'snack' ? '⚡ Snack' : `🏋️ Kracht ${dayPlan.kracht}`);
+    if ((dayPlan.workBlocks || []).length)   planBits.push(`💼 ${(dayPlan.workBlocks || []).length} werkblok${(dayPlan.workBlocks || []).length > 1 ? 'ken' : ''}`);
+    if ((dayPlan.transitions || []).length)  planBits.push('🔁');
+    if (dayPlan.recovery)                    planBits.push('🌊');
+    const planSub = planBits.join(' · ');
+
     const freeBlocks = dayPlan.freeBlocks || [];
     const hasProtected = freeBlocks.length > 0;
 
-    return { date, d, isToday, past, future, dotClass, headline, sub, dayPlan, hasProtected };
+    return { date, d, isToday, past, future, dotClass, headline, sub, planSub, dayPlan, hasProtected };
+  });
+
+  // Beschermde vrije tijd deze week (uren + vrije avonden)
+  const protectedThisWeek = days.reduce((acc, day) => {
+    const fb = day.dayPlan.freeBlocks || [];
+    acc.hours += protectedHours(fb);
+    if (fb.includes('evening') || fb.includes('fullday')) acc.evenings += 1;
+    return acc;
+  }, { hours: 0, evenings: 0 });
+
+  // Volgende week compact vooruit
+  const nextWeekDays = Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(currentMonday, 7 + i);
+    const d = new Date(date + 'T12:00:00');
+    const plan = getDayPlan(date);
+    const t = plan.training ? TRAIN_TYPES.find(x => x.id === plan.training) : null;
+    return { date, d, emoji: t?.emoji || (plan.kracht ? '🏋️' : ''), protected: (plan.freeBlocks || []).length > 0 };
   });
 
   const priorities = getPriorities(currentMonday);
@@ -443,11 +594,18 @@ export default function WeekScreen({ logs }) {
           </div>
           <div style={{ fontSize: 11, color: 'var(--sub)' }}>prio's klaar</div>
         </div>
+        <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
+          <div style={{ fontSize: 20, fontWeight: 900, fontFamily: 'var(--font-serif)', color: 'var(--green)' }}>
+            {protectedThisWeek.hours}u
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--sub)' }}>🌿 vrij</div>
+        </div>
       </div>
 
       {/* 7-day grid */}
       <div className="os-section-label" style={{ marginTop: 0 }}>Weekoverzicht</div>
-      {days.map(({ date, d, isToday, past, future, dotClass, headline, sub, hasProtected }) => (
+      {days.map(({ date, d, isToday, past, future, dotClass, headline, sub, planSub, hasProtected }) => (
         <div key={date}
           className={`os-week-row ${isToday ? 'today' : ''}`}
           style={{ cursor: 'pointer' }}
@@ -460,6 +618,7 @@ export default function WeekScreen({ logs }) {
           <div style={{ flex: 1, paddingLeft: 2 }}>
             <div style={{ fontSize: 14, fontWeight: isToday ? 700 : 600, marginBottom: 2 }}>{headline}</div>
             {sub && <div style={{ fontSize: 12, color: 'var(--sub)' }}>{sub}</div>}
+            {planSub && <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 1 }}>{planSub}</div>}
           </div>
           {hasProtected && (
             <span style={{ fontSize: 11, color: 'var(--green)', marginRight: 6 }}>🌿</span>
@@ -468,6 +627,22 @@ export default function WeekScreen({ logs }) {
           <div style={{ fontSize: 16, color: 'var(--ghost)', marginLeft: 4 }}>›</div>
         </div>
       ))}
+
+      {/* Volgende week vooruit */}
+      <div className="os-section-label">Volgende week</div>
+      <div className="os-card" style={{ display: 'flex', gap: 4, justifyContent: 'space-between' }}>
+        {nextWeekDays.map(nd => (
+          <div key={nd.date}
+            onClick={() => { setWeekOffset(o => o + 1); setSelectedDay(nd.date); }}
+            style={{ flex: 1, textAlign: 'center', cursor: 'pointer', padding: '4px 0' }}>
+            <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700 }}>{NL_DAYS[nd.d.getDay()]}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2 }}>{nd.d.getDate()}</div>
+            <div style={{ fontSize: 13, marginTop: 2, minHeight: 18 }}>
+              {nd.emoji}{nd.protected ? '🌿' : ''}{!nd.emoji && !nd.protected ? <span style={{ color: 'var(--divide)' }}>·</span> : ''}
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Weekprioriteiten */}
       <ExpandSection label="Weekprioriteiten" initialOpen={priorities.length > 0}>
@@ -498,7 +673,7 @@ export default function WeekScreen({ logs }) {
 
       {/* Day planner modal */}
       {selectedDay && (
-        <DayPlanEditor date={selectedDay} onClose={() => setSelectedDay(null)} />
+        <DayPlanEditor date={selectedDay} weekDates={dayDates} onClose={() => setSelectedDay(null)} />
       )}
     </div>
   );

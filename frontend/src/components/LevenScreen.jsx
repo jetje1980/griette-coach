@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import SubTabs from './SubTabs';
+import { dreamStore, fileToDreamImage } from '../dreamStore';
 
 const SUBTABS = ['Glow', 'Projecten', 'Geld', 'Routines', 'Toekomst', 'Eten'];
 
@@ -257,22 +258,48 @@ function loadProjects() {
 }
 function saveProjects(arr) { localStorage.setItem(PROJECTS_KEY, JSON.stringify(arr)); }
 
+// WIP-limiet: max aantal actieve projecten (configureerbaar, standaard 3)
+const WIP_LIMIT_KEY = 'gc_wip_limit';
+export function getWipLimit() {
+  const v = parseInt(localStorage.getItem(WIP_LIMIT_KEY), 10);
+  return Number.isFinite(v) && v >= 1 ? v : 3;
+}
+
 function TabProjecten() {
   const [projects, setProjects] = useState(loadProjects);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: '', outcome: '', status: 'actief', nextAction: '' });
+  const [wipLimit, setWipLimit] = useState(getWipLimit);
+  const [wipMsg, setWipMsg] = useState('');
 
   function persist(arr) { saveProjects(arr); setProjects(arr); }
 
+  function activeCount(excludeId = null) {
+    return projects.filter(p => p.status === 'actief' && p.id !== excludeId).length;
+  }
+
+  function blockByWip() {
+    setWipMsg(`Je hebt je actieve limiet (${wipLimit}) bereikt. Parkeer of rond eerst iets af.`);
+    setTimeout(() => setWipMsg(''), 4000);
+  }
+
   function add() {
     if (!form.name.trim()) return;
+    if (form.status === 'actief' && activeCount() >= wipLimit) { blockByWip(); return; }
     persist([{ id: Date.now().toString(), ...form, createdAt: new Date().toISOString().slice(0, 10) }, ...projects]);
     setForm({ name: '', outcome: '', status: 'actief', nextAction: '' });
     setAdding(false);
   }
 
   function updateStatus(id, status) {
+    if (status === 'actief' && activeCount(id) >= wipLimit) { blockByWip(); return; }
     persist(projects.map(p => p.id === id ? { ...p, status } : p));
+  }
+
+  function changeWipLimit(v) {
+    const n = Math.max(1, Math.min(9, parseInt(v, 10) || 3));
+    localStorage.setItem(WIP_LIMIT_KEY, String(n));
+    setWipLimit(n);
   }
 
   const active   = projects.filter(p => p.status === 'actief');
@@ -323,6 +350,29 @@ function TabProjecten() {
 
   return (
     <div>
+      {wipMsg && (
+        <div style={{ background: 'rgba(179,94,69,0.08)', border: '1px solid var(--rust)',
+          borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13,
+          color: 'var(--rust)', fontWeight: 600, lineHeight: 1.4 }}>
+          ⚠️ {wipMsg}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: 'var(--sub)' }}>
+          WIP-limiet: <span style={{ fontWeight: 700, color: active.length >= wipLimit ? 'var(--rust)' : 'var(--text)' }}>
+            {active.length}/{wipLimit} actief
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <button className="os-toggle-chip" style={{ fontSize: 12, width: 28, padding: '4px 0', textAlign: 'center' }}
+            onClick={() => changeWipLimit(wipLimit - 1)}>−</button>
+          <span style={{ fontSize: 13, fontWeight: 700, minWidth: 16, textAlign: 'center' }}>{wipLimit}</span>
+          <button className="os-toggle-chip" style={{ fontSize: 12, width: 28, padding: '4px 0', textAlign: 'center' }}
+            onClick={() => changeWipLimit(wipLimit + 1)}>+</button>
+        </div>
+      </div>
+
       {!adding && (
         <button className="os-btn-save" style={{ marginBottom: 16, width: '100%' }}
           onClick={() => setAdding(true)}>
@@ -694,6 +744,167 @@ function TabRoutines() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// DREAM BOARD — rustige visuele future self, eigen afbeeldingen
+// ═══════════════════════════════════════════════════════════════
+const DREAMBOARD_KEY = 'gc_dreamboard';
+
+export const DREAM_DOMAINS = [
+  { id: 'body',    emoji: '💪', label: 'Body' },
+  { id: 'style',   emoji: '👗', label: 'Style / Model' },
+  { id: 'sport',   emoji: '🏃', label: 'Sport' },
+  { id: 'work',    emoji: '💼', label: 'Work' },
+  { id: 'money',   emoji: '💰', label: 'Money' },
+  { id: 'freedom', emoji: '🌊', label: 'Freedom / Life' },
+];
+
+function loadDreamboard() {
+  try { return JSON.parse(localStorage.getItem(DREAMBOARD_KEY) || '{}'); } catch { return {}; }
+}
+function saveDreamboard(data) { localStorage.setItem(DREAMBOARD_KEY, JSON.stringify(data)); }
+
+function DreamBoard() {
+  const [board, setBoard] = useState(loadDreamboard);
+  const [images, setImages] = useState({});
+  const [openDomain, setOpenDomain] = useState(null);
+  const fileRef = useRef(null);
+  const uploadTarget = useRef(null);
+
+  useEffect(() => {
+    dreamStore.getAll().then(setImages).catch(() => {});
+  }, []);
+
+  function updDomain(domainId, field, val) {
+    const next = { ...board, [domainId]: { ...(board[domainId] || {}), [field]: val } };
+    saveDreamboard(next);
+    setBoard(next);
+  }
+
+  function pickImage(domainId) {
+    uploadTarget.current = domainId;
+    fileRef.current?.click();
+  }
+
+  async function onFile(e) {
+    const file = e.target.files?.[0];
+    const domainId = uploadTarget.current;
+    e.target.value = '';
+    if (!file || !domainId) return;
+    try {
+      const { base64, mimeType } = await fileToDreamImage(file);
+      await dreamStore.save(domainId, base64, mimeType);
+      const all = await dreamStore.getAll();
+      setImages(all);
+    } catch { /* stil falen — geen crash op rare bestanden */ }
+  }
+
+  async function removeImage(id) {
+    await dreamStore.delete(id);
+    setImages(await dreamStore.getAll());
+  }
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div className="os-section-label" style={{ marginTop: 0 }}>Dream Board</div>
+      <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5, marginBottom: 10 }}>
+        Jouw eigen beelden van waar je naartoe leeft — per levensdomein, met een future-self zin en doelen.
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onFile} />
+
+      {DREAM_DOMAINS.map(dom => {
+        const imgs = (images[dom.id] || []).slice(0, 3);
+        const data = board[dom.id] || {};
+        const open = openDomain === dom.id;
+        const hasContent = imgs.length > 0 || data.sentence || data.goal1y;
+        return (
+          <div key={dom.id} style={{ border: '1px solid var(--border)', borderRadius: 12,
+            marginBottom: 8, overflow: 'hidden', background: 'var(--card)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', cursor: 'pointer' }}
+              onClick={() => setOpenDomain(open ? null : dom.id)}>
+              <span style={{ fontSize: 18 }}>{dom.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.3px' }}>{dom.label}</div>
+                {data.sentence && !open && (
+                  <div style={{ fontSize: 11, color: 'var(--sub)', marginTop: 1,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                    {data.sentence}
+                  </div>
+                )}
+              </div>
+              {!open && imgs.length > 0 && (
+                <div style={{ display: 'flex', gap: 3 }}>
+                  {imgs.slice(0, 3).map(img => (
+                    <img key={img.id} src={`data:${img.mimeType};base64,${img.base64}`} alt=""
+                      style={{ width: 26, height: 26, objectFit: 'cover', borderRadius: 6 }} />
+                  ))}
+                </div>
+              )}
+              {!hasContent && !open && <span style={{ fontSize: 11, color: 'var(--ghost)' }}>leeg</span>}
+              <span style={{ color: 'var(--ghost)', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
+            </div>
+
+            {open && (
+              <div style={{ padding: '0 14px 14px' }}>
+                {/* Afbeeldingen */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {imgs.map(img => (
+                    <div key={img.id} style={{ position: 'relative' }}>
+                      <img src={`data:${img.mimeType};base64,${img.base64}`} alt=""
+                        style={{ width: 88, height: 88, objectFit: 'cover', borderRadius: 10 }} />
+                      <button onClick={() => removeImage(img.id)}
+                        style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20,
+                          borderRadius: 99, border: 'none', background: 'var(--rust)', color: '#fff',
+                          fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>×</button>
+                    </div>
+                  ))}
+                  {imgs.length < 3 && (
+                    <button onClick={() => pickImage(dom.id)}
+                      style={{ width: 88, height: 88, borderRadius: 10, border: '1px dashed var(--border)',
+                        background: 'transparent', color: 'var(--ghost)', cursor: 'pointer', fontSize: 22 }}>
+                      +
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase',
+                    letterSpacing: '0.5px', marginBottom: 3 }}>Future-self zin</div>
+                  <input className="os-input" value={data.sentence || ''}
+                    onChange={e => updDomain(dom.id, 'sentence', e.target.value)}
+                    placeholder={`Ik ben iemand die… (${dom.label.toLowerCase()})`} />
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase',
+                    letterSpacing: '0.5px', marginBottom: 3 }}>Doel over 1 jaar</div>
+                  <input className="os-input" value={data.goal1y || ''}
+                    onChange={e => updDomain(dom.id, 'goal1y', e.target.value)}
+                    placeholder="Waar sta je over 1 jaar…" />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase',
+                      letterSpacing: '0.5px', marginBottom: 3 }}>6 mnd milestone</div>
+                    <input className="os-input" value={data.goal6m || ''}
+                      onChange={e => updDomain(dom.id, 'goal6m', e.target.value)}
+                      placeholder="Optioneel…" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase',
+                      letterSpacing: '0.5px', marginBottom: 3 }}>3 mnd milestone</div>
+                    <input className="os-input" value={data.goal3m || ''}
+                      onChange={e => updDomain(dom.id, 'goal3m', e.target.value)}
+                      placeholder="Optioneel…" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // TAB: TOEKOMST
 // ═══════════════════════════════════════════════════════════════
 const TOEKOMST_KEY = 'gc_future_self';
@@ -746,6 +957,8 @@ function TabToekomst() {
 
   return (
     <div>
+      <DreamBoard />
+
       <div className="os-section-label" style={{ marginTop: 0 }}>Identiteit</div>
       <div className="os-card">
         <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 8 }}>

@@ -232,6 +232,52 @@ export function computeHeadCoach(log, logs, currentDate) {
   };
 }
 
+// ─── Adaptieve sessiekeuze ──────────────────────────────────────────────────
+// De volgende sessie is NIET simpelweg N+1: de adaptieve state bepaalt wat er komt.
+// BUILD → volgende in bibliotheek · HOLD/REPEAT → laatste sessie opnieuw
+// DELOAD → 2 stappen terug · TEST → 1 stap onder laatste niveau · SWAP → geen hardlopen
+export function computeNextSession(log, logs, currentDate) {
+  const coach = computeHeadCoach(log, logs, currentDate);
+  const state = coach.adaptiveState || 'BUILD';
+
+  const lastDone = Object.values(logs || {})
+    .filter(l => l.run_done && l.run_session)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const lastNr = lastDone ? Number(lastDone.run_session) : 0;
+  const nextNr = getNextRunNr(logs);
+
+  let nr, note;
+  switch (state) {
+    case 'HOLD':
+      nr = lastNr || nextNr;
+      note = 'Zelfde niveau als je laatste sessie — bewust niet opbouwen vandaag.';
+      break;
+    case 'REPEAT':
+      nr = lastNr || nextNr;
+      note = 'Herhaal de vorige sessie — de vorige keer was (net) te zwaar.';
+      break;
+    case 'DELOAD':
+      nr = Math.max(1, (lastNr || nextNr) - 2);
+      note = 'Twee stappen terug in het schema — bewust lichter, dit is goed herstelbeleid.';
+      break;
+    case 'TEST':
+      nr = Math.max(1, (lastNr || 2) - 1);
+      note = 'Testsessie na een pauze: één stap onder je laatste niveau. Stop direct bij signalen.';
+      break;
+    case 'SWAP':
+      return {
+        state, nr: null, run: null, adaptive: coach.adaptive,
+        note: 'Vandaag geen hardlopen — wandel 20–30 min rustig of zwem als alternatief.',
+      };
+    case 'BUILD':
+    default:
+      nr = nextNr;
+      note = 'Je bent klaar voor de volgende stap in de opbouw.';
+  }
+  nr = Math.min(RUNS.length, Math.max(1, nr));
+  return { state, nr, run: RUNS[nr - 1], adaptive: coach.adaptive, note };
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function CoachAdvice({ log, logs, currentDate }) {

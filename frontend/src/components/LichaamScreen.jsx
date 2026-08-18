@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import SubTabs from './SubTabs';
-import { computeHeadCoach } from './CoachAdvice';
+import { computeHeadCoach, computeNextSession } from './CoachAdvice';
 import { USER, MEDS, SUPPLEMENTS, PRN_MEDS } from '../config';
 import { RUNS } from '../data/runningSchema';
+import {
+  PROGRAMS, PATTERN_LABELS, suggestedProgram, lastPerformance, overloadAdvice,
+  upsertStrengthSession, getSessionFor, loadStrengthSessions, exerciseHistory,
+} from '../data/strengthSchema';
+import { TRAINING_BLOCKS, getCurrentBlock, upcomingWeekFoci } from '../data/trainingBlocks';
 import { api } from '../api';
 import { store } from '../store';
 
@@ -174,6 +179,356 @@ function AjoviTracker() {
   );
 }
 
+// ── Krachtmodule ─────────────────────────────────────────────────
+// Volwaardige krachttraining: programma A/B + strength snack, per oefening
+// gewicht/sets/reps/RIR/voltooid, historie en progressive-overloadadvies.
+function KrachtModule({ currentDate, saveFields, isFuture }) {
+  const [program, setProgram] = useState(() => suggestedProgram());
+  const [entries, setEntries] = useState({});
+  const [savedMsg, setSavedMsg] = useState('');
+  const [histOpen, setHistOpen] = useState(false);
+
+  const prog = PROGRAMS[program] || PROGRAMS.A;
+  const sessionsCount = loadStrengthSessions().filter(s => s.program !== 'snack').length;
+
+  useEffect(() => {
+    const existing = getSessionFor(currentDate, program);
+    if (existing) {
+      const map = {};
+      for (const e of existing.exercises || []) map[e.id] = e;
+      setEntries(map);
+    } else {
+      setEntries({});
+    }
+  }, [currentDate, program]);
+
+  function upd(exId, field, val) {
+    setEntries(prev => ({ ...prev, [exId]: { ...(prev[exId] || { id: exId }), id: exId, [field]: val } }));
+  }
+
+  function saveSession() {
+    const exercises = prog.exercises.map(ex => {
+      const e = entries[ex.id] || {};
+      return {
+        id: ex.id,
+        weight: e.weight ?? '',
+        sets: e.sets ?? ex.defaultSets,
+        reps: e.reps ?? ex.defaultReps,
+        rir: e.rir ?? null,
+        done: !!e.done,
+      };
+    }).filter(e => e.done || e.weight || e.rir != null);
+
+    if (!exercises.length) {
+      setSavedMsg('Vink minstens één oefening af of vul iets in');
+      setTimeout(() => setSavedMsg(''), 2500);
+      return;
+    }
+    upsertStrengthSession({ id: `${currentDate}_${program}`, date: currentDate, program, exercises });
+    saveFields({ core_done: true, strength_done: true, strength_program: program });
+    setSavedMsg('Krachttraining opgeslagen ✓');
+    setTimeout(() => setSavedMsg(''), 2500);
+  }
+
+  const doneCount = prog.exercises.filter(ex => entries[ex.id]?.done).length;
+
+  return (
+    <div>
+      {/* Programma keuze */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {['A', 'B', 'snack'].map(p => (
+          <button key={p}
+            className={`os-scale-btn ${program === p ? 'active' : ''}`}
+            onClick={() => setProgram(p)}
+            style={{ flex: 1, padding: '10px 4px' }}>
+            <div style={{ fontSize: 16 }}>{PROGRAMS[p].emoji}</div>
+            <div style={{ fontSize: 10, marginTop: 2 }}>{p === 'snack' ? 'Snack' : `Programma ${p}`}</div>
+          </button>
+        ))}
+      </div>
+
+      {program === suggestedProgram() && program !== 'snack' && (
+        <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, marginBottom: 8 }}>
+          ✓ {prog.name} is aan de beurt (A en B wisselen af)
+        </div>
+      )}
+      {prog.note && (
+        <div style={{ fontSize: 12, color: 'var(--rust)', marginBottom: 10, lineHeight: 1.4 }}>
+          ⚠️ {prog.note}
+        </div>
+      )}
+
+      {/* Oefeningen */}
+      {prog.exercises.map(ex => {
+        const e = entries[ex.id] || {};
+        const last = lastPerformance(ex.id, currentDate);
+        return (
+          <div key={ex.id} style={{ border: '1px solid var(--border)', borderRadius: 10,
+            padding: '12px 14px', marginBottom: 8,
+            background: e.done ? 'var(--green-bg, rgba(42,122,79,0.06))' : 'var(--card)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <div className={`os-check-box ${e.done ? 'checked' : ''}`} style={{ flexShrink: 0, marginTop: 2 }}
+                onClick={() => !isFuture && upd(ex.id, 'done', !e.done)}>
+                {e.done ? '✓' : ''}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{ex.name}</span>
+                  <span style={{ fontSize: 10, background: 'var(--border)', color: 'var(--sub)',
+                    borderRadius: 4, padding: '1px 6px', fontWeight: 600 }}>
+                    {PATTERN_LABELS[ex.pattern]}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 2 }}>{ex.cue}</div>
+                <div style={{ fontSize: 12, color: 'var(--sage)', marginTop: 5, lineHeight: 1.45, fontWeight: 500 }}>
+                  💡 {overloadAdvice(ex, last)}
+                </div>
+
+                {!isFuture && (
+                  <>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                      {!ex.bodyweight && (
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--ghost)', marginBottom: 2 }}>kg</div>
+                          <input className="os-input-num" type="number" step="0.5" inputMode="decimal"
+                            style={{ width: 58 }}
+                            value={e.weight ?? ''}
+                            placeholder={last?.weight ? String(last.weight) : '–'}
+                            onChange={ev => upd(ex.id, 'weight', ev.target.value)} />
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--ghost)', marginBottom: 2 }}>sets</div>
+                        <input className="os-input-num" type="number" inputMode="numeric"
+                          style={{ width: 48 }}
+                          value={e.sets ?? ''}
+                          placeholder={String(ex.defaultSets)}
+                          onChange={ev => upd(ex.id, 'sets', ev.target.value)} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--ghost)', marginBottom: 2 }}>{ex.repsLabel || 'reps'}</div>
+                        <input className="os-input-num" type="number" inputMode="numeric"
+                          style={{ width: 48 }}
+                          value={e.reps ?? ''}
+                          placeholder={String(ex.defaultReps)}
+                          onChange={ev => upd(ex.id, 'reps', ev.target.value)} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, marginTop: 8, alignItems: 'center' }}>
+                      <span style={{ fontSize: 10, color: 'var(--ghost)', marginRight: 4 }}>RIR</span>
+                      {[0, 1, 2, 3, 4].map(n => (
+                        <button key={n}
+                          className={`os-toggle-chip ${e.rir === n ? 'active green' : ''}`}
+                          onClick={() => upd(ex.id, 'rir', e.rir === n ? null : n)}
+                          style={{ width: 32, padding: '4px 0', textAlign: 'center', fontSize: 12 }}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {!isFuture && (
+        <button className="os-btn-save" style={{ width: '100%', marginTop: 4 }} onClick={saveSession}>
+          {doneCount > 0 ? `Sla sessie op (${doneCount}/${prog.exercises.length} oefeningen)` : 'Sla sessie op'}
+        </button>
+      )}
+      {savedMsg && (
+        <div style={{ fontSize: 13, color: savedMsg.includes('✓') ? 'var(--green)' : 'var(--rust)',
+          fontWeight: 600, textAlign: 'center', marginTop: 8 }}>
+          {savedMsg}
+        </div>
+      )}
+
+      {/* Historie per oefening */}
+      <button className={`os-expand-btn ${histOpen ? 'open' : ''}`} style={{ marginTop: 12 }}
+        onClick={() => setHistOpen(o => !o)}>
+        Historie per oefening {sessionsCount > 0 ? `(${sessionsCount} sessies)` : ''}
+        <span className="os-expand-arrow">↓</span>
+      </button>
+      {histOpen && (
+        <div className="os-card" style={{ marginBottom: 8 }}>
+          {[...PROGRAMS.A.exercises, ...PROGRAMS.B.exercises].map(ex => {
+            const hist = exerciseHistory(ex.id, 5);
+            if (!hist.length) return null;
+            return (
+              <div key={ex.id} style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{ex.name}</div>
+                {hist.map((h, i) => (
+                  <div key={i} className="os-detail-row" style={{ fontSize: 12 }}>
+                    <span className="os-dk">{h.date?.slice(5)}</span>
+                    <span className="os-dv">
+                      {h.weight ? `${h.weight} kg · ` : ''}{h.sets || '?'}×{h.reps || '?'}
+                      {h.rir != null ? ` · RIR ${h.rir}` : ''}{h.done ? ' ✓' : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+          {loadStrengthSessions().length === 0 && (
+            <div style={{ fontSize: 13, color: 'var(--sub)', textAlign: 'center', padding: '8px 0' }}>
+              Nog geen krachtsessies gelogd.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Hardlooproadmap ──────────────────────────────────────────────
+// A: huidig trainingsblok · B: deze week · C: komende 4 weken · D: 3–6 maanden.
+// De roadmap toont richting; exacte sessies blijven adaptief.
+function RunRoadmap({ logs, currentDate, nextSession }) {
+  const NL_DAYS = ['Zo', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za'];
+  const block = getCurrentBlock(currentDate);
+  const foci = upcomingWeekFoci(currentDate, 4);
+
+  const monday = (() => {
+    const d = new Date(currentDate + 'T12:00:00');
+    const dow = d.getDay();
+    d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+    return d.toISOString().slice(0, 10);
+  })();
+  const addD = (ds, n) => {
+    const d = new Date(ds + 'T12:00:00');
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  // Deze week: geplande + gedane looptrainingen
+  const weekRuns = Array.from({ length: 7 }, (_, i) => {
+    const date = addD(monday, i);
+    const plan = (() => { try { return JSON.parse(localStorage.getItem(`gc_day_plan_${date}`) || '{}'); } catch { return {}; } })();
+    const log = logs?.[date];
+    const done = !!log?.run_done;
+    const planned = plan.training === 'run';
+    if (!done && !planned) return null;
+    const d = new Date(date + 'T12:00:00');
+    const isToday = date === currentDate;
+    const doneRun = done && log.run_session ? RUNS[Number(log.run_session) - 1] : null;
+    return { date, dayLabel: `${NL_DAYS[d.getDay()]} ${d.getDate()}`, done, planned, isToday, doneRun, isFuture: date > currentDate };
+  }).filter(Boolean);
+
+  const firstUpcoming = weekRuns.find(r => !r.done && (r.isToday || r.isFuture));
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      {/* A: Huidig trainingsblok */}
+      <SectionLabel style={{ marginTop: 0 }}>Roadmap — huidig blok</SectionLabel>
+      <div className="os-card" style={{ borderLeft: '4px solid var(--sage)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 20 }}>{block.emoji}</span>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: '0.5px' }}>{block.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--ghost)' }}>{block.start} → {block.end}</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.5, marginBottom: 6 }}>
+          <span style={{ fontWeight: 700, color: 'var(--text)' }}>Adaptatie: </span>{block.adaptation}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--rust)', lineHeight: 1.5 }}>
+          <span style={{ fontWeight: 700 }}>Bewust niet: </span>{block.not}
+        </div>
+      </div>
+
+      {/* B: Deze week */}
+      <SectionLabel>Deze week</SectionLabel>
+      <div className="os-card">
+        {weekRuns.length === 0 && (
+          <div style={{ fontSize: 13, color: 'var(--sub)', textAlign: 'center', padding: '6px 0' }}>
+            Nog geen looptrainingen gepland deze week — plan ze in het Week-tabblad.
+          </div>
+        )}
+        {weekRuns.map(r => (
+          <div key={r.date} style={{ padding: '8px 0', borderBottom: '1px solid var(--divide)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, minWidth: 44,
+                color: r.isToday ? 'var(--rust)' : 'var(--text)' }}>{r.dayLabel}</span>
+              <span style={{ fontSize: 12, fontWeight: 600,
+                color: r.done ? 'var(--green)' : r.isToday ? 'var(--rust)' : 'var(--sub)' }}>
+                {r.done ? '✓ Gedaan' : r.isToday ? 'Vandaag' : 'Gepland'}
+              </span>
+            </div>
+            {r.done && r.doneRun && (
+              <div style={{ fontSize: 12, color: 'var(--sub)', marginTop: 3, paddingLeft: 52 }}>
+                T{r.doneRun.nr}: {r.doneRun.description} · {r.doneRun.duration} min
+              </div>
+            )}
+            {!r.done && firstUpcoming?.date === r.date && nextSession?.run && (
+              <div style={{ fontSize: 12, color: 'var(--sub)', marginTop: 3, paddingLeft: 52, lineHeight: 1.5 }}>
+                <div><span style={{ fontWeight: 700 }}>Sessie:</span> T{nextSession.nr} — {nextSession.run.description}</div>
+                <div><span style={{ fontWeight: 700 }}>Doel:</span> {nextSession.run.goal}</div>
+                <div>{nextSession.run.duration} min · run/walk · {nextSession.run.hrZone}</div>
+              </div>
+            )}
+            {!r.done && firstUpcoming?.date === r.date && nextSession && !nextSession.run && (
+              <div style={{ fontSize: 12, color: 'var(--blue)', marginTop: 3, paddingLeft: 52 }}>
+                {nextSession.note}
+              </div>
+            )}
+            {!r.done && firstUpcoming?.date !== r.date && (
+              <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 2, paddingLeft: 52 }}>
+                Adaptief — wordt op de dag zelf bepaald op basis van herstel
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* C: Komende 4 weken */}
+      <SectionLabel>Komende 4 weken</SectionLabel>
+      <div className="os-card">
+        {foci.map((f, i) => (
+          <div key={f.monday} style={{ display: 'flex', alignItems: 'center', gap: 10,
+            padding: '7px 0', borderBottom: i < foci.length - 1 ? '1px solid var(--divide)' : 'none' }}>
+            <div style={{ fontSize: 11, color: 'var(--ghost)', minWidth: 78 }}>
+              {f.monday.slice(5)} – {f.sunday.slice(5)}
+            </div>
+            <span style={{ fontSize: 15 }}>{f.block?.emoji}</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>{f.block?.name}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* D: 3–6 maanden */}
+      <SectionLabel>Blokken — komende maanden</SectionLabel>
+      <div className="os-card">
+        {TRAINING_BLOCKS.map((b, i) => {
+          const isPast = b.end < currentDate;
+          const isCurrent = currentDate >= b.start && currentDate <= b.end;
+          return (
+            <div key={b.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start',
+              padding: '7px 0', opacity: isPast ? 0.45 : 1,
+              borderBottom: i < TRAINING_BLOCKS.length - 1 ? '1px solid var(--divide)' : 'none' }}>
+              <span style={{ fontSize: 15 }}>{b.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700,
+                  color: isCurrent ? 'var(--sage)' : 'var(--text)' }}>
+                  {b.name} {isCurrent ? '← nu' : ''}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ghost)' }}>{b.start} → {b.end}</div>
+              </div>
+              {i < TRAINING_BLOCKS.length - 1 && <span style={{ color: 'var(--ghost)', fontSize: 12, alignSelf: 'center' }}>→</span>}
+            </div>
+          );
+        })}
+        <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 8, lineHeight: 1.5 }}>
+          De roadmap toont richting — de exacte sessies blijven adaptief op basis van je herstel.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────
 export default function LichaamScreen({ log, logs, currentDate, saveField, saveFields, showFlash, isFuture }) {
   const [subTab, setSubTab] = useState(0);
@@ -207,10 +562,14 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     api.stravaActivities().then(a => setStravaActivities(a)).catch(() => {});
   }, []);
 
+  const [trainMode, setTrainMode] = useState('run');
+
   const coach = computeHeadCoach(log, logs, currentDate);
   const r = READINESS_MAP[coach.decision] || READINESS_MAP.AMBER;
-  const nextRunNr = getNextRunNr(logs);
-  const nextRun = RUNS[nextRunNr - 1];
+  // Adaptieve sessiekeuze — niet simpelweg "eerste niet-gedane sessie"
+  const nextSession = computeNextSession(log, logs, currentDate);
+  const nextRunNr = nextSession.nr ?? getNextRunNr(logs);
+  const nextRun = nextSession.run || RUNS[getNextRunNr(logs) - 1];
 
   const yestDate = (() => { const d = new Date(currentDate); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
   const yestTrained = logs?.[yestDate]?.run_done || logs?.[yestDate]?.core_done;
@@ -390,9 +749,26 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
 
   // ── SUBTAB: TRAINING ─────────────────────────────────────────
   function TabTraining() {
-    const runInfo = nextRun;
     return (
       <div>
+        {/* Hardlopen | Kracht */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          {[{ id: 'run', emoji: '🏃', label: 'Hardlopen' }, { id: 'kracht', emoji: '🏋️', label: 'Kracht' }].map(m => (
+            <button key={m.id}
+              className={`os-scale-btn ${trainMode === m.id ? 'active' : ''}`}
+              onClick={() => setTrainMode(m.id)}
+              style={{ flex: 1, padding: '10px 4px' }}>
+              <div style={{ fontSize: 18 }}>{m.emoji}</div>
+              <div style={{ fontSize: 11, marginTop: 2 }}>{m.label}</div>
+            </button>
+          ))}
+        </div>
+
+        {trainMode === 'kracht' && (
+          <KrachtModule currentDate={currentDate} saveFields={saveFields} isFuture={isFuture} />
+        )}
+
+        {trainMode === 'run' && (<>
         {/* Adaptive training state */}
         {coach.adaptive && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10,
@@ -410,25 +786,34 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
           </div>
         )}
 
-        {/* Next run info */}
+        {/* Volgende sessie — adaptief bepaald, niet simpelweg N+1 */}
         <div className="os-card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <div style={{ fontSize: 26 }}>🏃</div>
+            <div style={{ fontSize: 26 }}>{nextSession.state === 'SWAP' ? '🔀' : '🏃'}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
-                Volgende sessie — T{nextRunNr}/35
+                {nextSession.state === 'SWAP' ? 'Vandaag — wissel sport' : `Volgende sessie — T${nextRunNr}/35`}
               </div>
-              <div style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
-                {runInfo?.title || `Training ${nextRunNr}`}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.4 }}>
-                {runInfo?.description || `Zone B · ${USER.hrZone.low}–${USER.hrZone.high} bpm`}
-              </div>
-              {runInfo?.duration && (
-                <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 4 }}>
-                  {runInfo.duration} min · {runInfo.hrZone}
+              {nextSession.run ? (
+                <>
+                  <div style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
+                    {nextSession.run.description}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.4 }}>
+                    {nextSession.run.goal}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 4 }}>
+                    {nextSession.run.duration} min · {nextSession.run.hrZone}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.5 }}>
+                  Wandel 20–30 min rustig of zwem — geen hardlopen vandaag.
                 </div>
               )}
+              <div style={{ fontSize: 12, color: 'var(--sage)', marginTop: 6, fontWeight: 600, lineHeight: 1.4 }}>
+                {nextSession.note}
+              </div>
             </div>
           </div>
         </div>
@@ -442,11 +827,6 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
               label="Hardlopen gedaan"
               sub={log?.run_session ? `T${log.run_session}/35 opgeslagen` : `Slaat op als T${nextRunNr}/35`}
               onClick={() => saveRunDone(!log?.run_done)}
-            />
-            <CheckItem
-              checked={!!log?.core_done}
-              label="Core programma gedaan"
-              onClick={() => saveField('core_done', !log?.core_done)}
             />
 
             <SectionLabel>Trainingszone</SectionLabel>
@@ -510,6 +890,9 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
           </>
         )}
 
+        {/* Roadmap */}
+        <RunRoadmap logs={logs} currentDate={currentDate} nextSession={nextSession} />
+
         {/* Strava */}
         <SectionLabel>Strava</SectionLabel>
         <div className="os-card">
@@ -558,6 +941,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
             </div>
           )}
         </div>
+        </>)}
       </div>
     );
   }
@@ -843,15 +1227,17 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
       {/* Subtabs */}
       <SubTabs tabs={SUBTABS} active={subTab} onChange={setSubTab} />
 
-      {/* Tab content */}
+      {/* Tab content — als functie-aanroep, niet als <Component/>: de nested
+          functies krijgen elke render een nieuwe identiteit en zouden anders
+          hun hele subtree (incl. KrachtModule-state) remounten. */}
       <div className="os-content" style={{ paddingTop: 16 }}>
-        {subTab === 0 && <TabVandaag />}
-        {subTab === 1 && <TabTraining />}
-        {subTab === 2 && <TabHerstel />}
-        {subTab === 3 && <TabVoeding />}
-        {subTab === 4 && <TabCyclus />}
-        {subTab === 5 && <TabMaten />}
-        {subTab === 6 && <TabMedicatie />}
+        {subTab === 0 && TabVandaag()}
+        {subTab === 1 && TabTraining()}
+        {subTab === 2 && TabHerstel()}
+        {subTab === 3 && TabVoeding()}
+        {subTab === 4 && TabCyclus()}
+        {subTab === 5 && TabMaten()}
+        {subTab === 6 && TabMedicatie()}
       </div>
     </div>
   );

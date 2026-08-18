@@ -208,17 +208,28 @@ function FoodPrefs() {
 
 export default function Settings({ onClose }) {
   const [apiKey, setApiKey] = useState('');
+  const [aiEndpoint, setAiEndpointState] = useState('');
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [backupResult, setBackupResult] = useState(null);
 
   useEffect(() => {
-    setApiKey(localStorage.getItem('gc_api_key') || '');
+    try { setApiKey(sessionStorage.getItem('gc_api_key_session') || ''); } catch { /* geen storage */ }
+    try { setAiEndpointState(localStorage.getItem('gc_ai_endpoint') || ''); } catch { /* geen storage */ }
   }, []);
 
   function saveKey() {
-    localStorage.setItem('gc_api_key', apiKey.trim());
+    // Sessie-sleutel: alleen sessionStorage — verdwijnt bij sluiten browser.
+    // Er wordt bewust NIETS persistent (localStorage) opgeslagen.
+    try {
+      if (apiKey.trim()) sessionStorage.setItem('gc_api_key_session', apiKey.trim());
+      else sessionStorage.removeItem('gc_api_key_session');
+    } catch { /* geen storage */ }
+    try {
+      if (aiEndpoint.trim()) localStorage.setItem('gc_ai_endpoint', aiEndpoint.trim().replace(/\/$/, ''));
+      else localStorage.removeItem('gc_ai_endpoint');
+    } catch { /* geen storage */ }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -227,14 +238,11 @@ export default function Settings({ onClose }) {
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
+      // Test eerst de server-proxy (voorkeursroute — sleutel blijft server-side)
+      const base = aiEndpoint.trim().replace(/\/$/, '');
+      const r = await fetch(`${base}/api/ai/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey.trim(),
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 20,
@@ -242,14 +250,14 @@ export default function Settings({ onClose }) {
         }),
       });
       if (r.ok) {
-        setTestResult({ ok: true, msg: 'Sleutel werkt ✓' });
-        localStorage.setItem('gc_api_key', apiKey.trim());
+        setTestResult({ ok: true, msg: 'AI-server werkt ✓ (sleutel blijft server-side)' });
+      } else if (r.status === 503) {
+        setTestResult({ ok: false, msg: 'Server bereikbaar maar ANTHROPIC_API_KEY ontbreekt in backend .env' });
       } else {
-        const e = await r.json().catch(() => ({}));
-        setTestResult({ ok: false, msg: e?.error?.message || `Fout ${r.status}` });
+        setTestResult({ ok: false, msg: `Server niet beschikbaar (${r.status}) — sessie-sleutel wordt als fallback gebruikt` });
       }
     } catch (err) {
-      setTestResult({ ok: false, msg: err.message });
+      setTestResult({ ok: false, msg: `Server niet bereikbaar — sessie-sleutel wordt als fallback gebruikt` });
     } finally {
       setTesting(false);
     }
@@ -289,12 +297,25 @@ export default function Settings({ onClose }) {
           </div>
           <div className="card-body">
             <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.6 }}>
-              Nodig voor AI-coach analyse en foto-analyse.
-              Aanmaken op <strong>console.anthropic.com</strong>
+              De AI-coach draait bij voorkeur via de <strong>server-proxy</strong>: zet
+              ANTHROPIC_API_KEY in de backend .env — dan hoeft er géén sleutel in de browser.
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              Backend-URL (optioneel, geen geheim)
+            </div>
+            <input
+              type="text"
+              placeholder="bijv. https://coach-api.example.com (leeg = zelfde server)"
+              value={aiEndpoint}
+              onChange={e => setAiEndpointState(e.target.value)}
+              style={{ marginBottom: 10, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+            />
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              Sessie-sleutel (fallback — wordt niet bewaard na sluiten browser)
             </div>
             <input
               type="password"
-              placeholder="sk-ant-..."
+              placeholder="sk-ant-... (alleen deze browsersessie)"
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
               style={{ marginBottom: 8, fontFamily: 'var(--font-mono)', fontSize: 12 }}

@@ -1,21 +1,55 @@
-// AI calls: tries server-side proxy first, falls back to direct browser access.
-// Server proxy requires ANTHROPIC_API_KEY in backend .env (preferred — keeps key off client).
-// Direct browser fallback uses gc_api_key from localStorage + dangerous-direct-browser-access header.
+// AI calls lopen primair via de server-side proxy (/api/ai/messages) —
+// de ANTHROPIC_API_KEY staat dan alleen in de backend .env, nooit in de browser.
+// Fallback: een sessie-sleutel in sessionStorage (verdwijnt bij sluiten browser).
+// Er wordt GEEN API-sleutel meer persistent client-side (localStorage) bewaard.
 
 const MODEL = 'claude-sonnet-4-6';
-const SERVER_ENDPOINT = '/api/ai/messages';
+const SESSION_KEY = 'gc_api_key_session';
+const LEGACY_KEY = 'gc_api_key';
+
+// Migratie: verwijder oude persistente sleutel uit localStorage.
+// Eén keer naar sessionStorage zodat de huidige browsersessie blijft werken.
+(() => {
+  try {
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy) {
+      if (!sessionStorage.getItem(SESSION_KEY)) sessionStorage.setItem(SESSION_KEY, legacy);
+      localStorage.removeItem(LEGACY_KEY);
+    }
+  } catch { /* storage niet beschikbaar */ }
+})();
 
 function getKey() {
-  return localStorage.getItem('gc_api_key') || '';
+  try { return sessionStorage.getItem(SESSION_KEY) || ''; } catch { return ''; }
+}
+
+export function setSessionKey(key) {
+  try {
+    if (key) sessionStorage.setItem(SESSION_KEY, key.trim());
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch { /* storage niet beschikbaar */ }
+}
+
+// Optionele backend-URL (geen geheim) voor als de app statisch gehost wordt
+// en de backend elders draait, bijv. https://coach-api.example.com
+export function getAiEndpoint() {
+  try { return (localStorage.getItem('gc_ai_endpoint') || '').replace(/\/$/, ''); } catch { return ''; }
+}
+export function setAiEndpoint(url) {
+  try {
+    if (url && url.trim()) localStorage.setItem('gc_ai_endpoint', url.trim());
+    else localStorage.removeItem('gc_ai_endpoint');
+  } catch { /* storage niet beschikbaar */ }
 }
 
 async function callClaudeViaServer(messages, maxTokens) {
-  const r = await fetch(SERVER_ENDPOINT, {
+  const endpoint = `${getAiEndpoint()}/api/ai/messages`;
+  const r = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages }),
   });
-  if (r.status === 503) return null; // server key not configured
+  if (r.status === 503 || r.status === 404) return null; // server niet geconfigureerd
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     throw new Error(err?.error?.message || `Server API fout ${r.status}`);
@@ -26,7 +60,7 @@ async function callClaudeViaServer(messages, maxTokens) {
 
 async function callClaudeDirect(messages, maxTokens) {
   const key = getKey();
-  if (!key) throw new Error('Geen API-sleutel ingesteld — ga naar Instellingen');
+  if (!key) throw new Error('AI-server niet bereikbaar en geen sessie-sleutel ingesteld — ga naar Instellingen');
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
