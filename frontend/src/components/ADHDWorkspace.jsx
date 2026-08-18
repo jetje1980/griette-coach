@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import CaptureCenter from './CaptureCenter';
+import './ADHDWorkspace.css';
 
 function read(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || '') || fallback; } catch { return fallback; }
