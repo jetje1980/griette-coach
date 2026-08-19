@@ -16,6 +16,7 @@
 
 import { RUNS } from './data/runningSchema';
 import { loadWorkouts, toleranceFor, workoutWasHeavy } from './workouts';
+import { exertionalResponse } from './symptoms';
 import { loadStrengthSessions } from './data/strengthSchema';
 import { goalTarget } from './goals';
 
@@ -242,14 +243,28 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
 
   const decision = coach.decision;
   const lastRun = load.lastRun;
-  const lastTol = lastRun ? toleranceFor(lastRun, logs) : null;
+  // De exertionele respons is preciezer dan de oude tolerantie: hij
+  // onderscheidt hoofdpijn, diffuse spierpijn en rode vlaggen van gewone
+  // spierpijn, en weet dat migraine geen PEM is.
+  const lastResponse = lastRun
+    ? exertionalResponse({ workoutDate: lastRun.date, logs, currentDate }) : null;
+  const lastTol = lastResponse
+    ? (lastResponse.status === 'good' ? 'good'
+      : ['poor', 'red'].includes(lastResponse.status) ? 'poor' : 'pending')
+    : (lastRun ? toleranceFor(lastRun, logs) : null);
   const lastHeavy = lastRun ? workoutWasHeavy(lastRun) : false;
 
   const symptomCount = [log.symptom_pem, log.symptom_exhaustion, log.symptom_breathless,
     log.symptom_brainfog, log.symptom_pain].filter(Boolean).length;
 
   // ── 1. Systemische stops ──────────────────────────────────────
-  if (decision === 'RED' || log.symptom_pem || log.training_recovery === 2) {
+  // Een rode exertionele respons is hetzelfde patroon als 12 januari 2025.
+  // Daar volgt geen training op, in welke vorm dan ook.
+  if (lastResponse?.status === 'red') {
+    action = 'FULL_REST';
+    blockers.push(`Abnormale respons na je sessie van ${lastRun.date.slice(5)}: ${lastResponse.reason.toLowerCase()}`);
+    earliestRunDate = addDays(currentDate, 3);
+  } else if (decision === 'RED' || log.symptom_pem || log.training_recovery === 2) {
     action = 'FULL_REST';
     blockers.push(log.symptom_pem || log.training_recovery === 2
       ? 'PEM-signaal vandaag — trainen verlengt de terugslag'
@@ -280,7 +295,9 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
       earliestRunDate = addDays(currentDate, MIN_REST_DAYS_BETWEEN_RUNS + 1);
     } else if (lastTol === 'poor') {
       action = 'ACTIVE_RECOVERY';
-      blockers.push(`De run van ${lastRun.date.slice(5)} werd slecht verdragen — die telt als te zwaar`);
+      blockers.push(lastResponse?.reason
+        ? `De run van ${lastRun.date.slice(5)} werd slecht verdragen. ${lastResponse.reason}`
+        : `De run van ${lastRun.date.slice(5)} werd slecht verdragen — die telt als te zwaar`);
       earliestRunDate = addDays(currentDate, 2);
     } else if (load.daysSinceLastRun < 2 && !answered) {
       action = 'WAIT_FOR_RESPONSE';

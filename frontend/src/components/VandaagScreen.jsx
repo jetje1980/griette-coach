@@ -3,6 +3,7 @@ import { computeHeadCoach, computeNextSession } from './CoachAdvice';
 import { nextSessionForecast } from '../forecast';
 import StrengthToday from './StrengthToday';
 import LeverageCard from './LeverageCard';
+import CockpitCard from './CockpitCard';
 import AlivenessCard from './AlivenessCard';
 import { strengthDecision } from '../strengthGate';
 import { photoStore } from '../photoStore';
@@ -836,59 +837,55 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
         <RecoveryCheck log={log} logs={logs} currentDate={currentDate} saveField={saveField} />
       )}
 
-      {/* 1. Decision Cockpit + performance strip */}
-      <DecisionCockpit coach={coach} nextSession={nextSession} hasData={hasData} isFuture={isFuture} />
-      {!isFuture && hasData && (
-        <ForecastMini log={log} logs={logs} currentDate={currentDate}
-          coach={coach} nextSession={nextSession} />
-      )}
-      {/* Kracht is de tweede pijler en verschijnt hier alleen als hij
-          vandaag daadwerkelijk aan de beurt is — één les, één knop. */}
-      {!isFuture && <PhotoCheckpointCard currentDate={currentDate} goToTab={goToTab} />}
+      {/* Eén besluit. Alles wat de losse coaches vinden is hierboven al
+          tegen elkaar afgewogen; de gebruiker krijgt niet zeven meningen. */}
+      <CockpitCard log={log} logs={logs} currentDate={currentDate}
+        hasData={hasData} isFuture={isFuture}
+        saveFields={saveFields} goToTab={goToTab} />
 
+      {/* Alles hieronder zit achter progressive disclosure. Het bestaat, het
+          is compleet, maar het hoort niet op het eerste scherm van iemand
+          die haar dag nog moet beginnen. */}
       {!isFuture && hasData && (
-        <StrengthToday log={log} logs={logs} currentDate={currentDate}
-          runGate={coach?.gate} coach={coach}
-          onSaved={() => saveFields?.({ strength_done: true })} />
-      )}
-      {!isFuture && hasData && (
-        <PerformanceStrip log={log} logs={logs} currentDate={currentDate} />
-      )}
-
-      {/* 2. Wat nu? */}
-      <WatNuCard watNu={watNu} />
-
-      {/* 2b. De grootste hefboom van vandaag — waarom juist dit.
-             Bewust ná Wat Nu: dat blijft de enige echte volgende actie. */}
-      {!isFuture && hasData && (
-        <LeverageCard log={log} logs={logs} currentDate={currentDate}
-          coach={coach} runGate={coach?.gate}
-          strengthGate={strengthDecision({ log: log || {}, logs, currentDate,
-            runGate: coach?.gate, coach })} />
+        <ExpandSection label="Training in detail">
+          <ForecastMini log={log} logs={logs} currentDate={currentDate}
+            coach={coach} nextSession={nextSession} />
+          <StrengthToday log={log} logs={logs} currentDate={currentDate}
+            runGate={coach?.gate} coach={coach}
+            onSaved={() => saveFields?.({ strength_done: true })} />
+        </ExpandSection>
       )}
 
-      {/* 2c. Eén klein stukje van het leven dat je wilt, vandaag al. */}
       {!isFuture && hasData && (
-        <AlivenessCard log={log} logs={logs} currentDate={currentDate}
-          coach={coach} state={log?.adhd_state} />
+        <ExpandSection label="Cijfers en hefbomen">
+          <PerformanceStrip log={log} logs={logs} currentDate={currentDate} />
+          <LeverageCard log={log} logs={logs} currentDate={currentDate}
+            coach={coach} runGate={coach?.gate}
+            strengthGate={strengthDecision({ log: log || {}, logs, currentDate,
+              runGate: coach?.gate, coach })} />
+        </ExpandSection>
       )}
 
-      {/* 3. Top 3 */}
       {!isFuture && (
-        <>
-          <div className="os-section-label">Top 3 van vandaag</div>
-          <div className="os-card"><Top3 currentDate={currentDate} /></div>
-        </>
+        <ExpandSection label="Meer van je droomleven">
+          <PhotoCheckpointCard currentDate={currentDate} goToTab={goToTab} />
+          <AlivenessCard log={log} logs={logs} currentDate={currentDate}
+            coach={coach} state={log?.adhd_state} />
+        </ExpandSection>
       )}
 
-      {/* 4. Dagplanning */}
+      {/* De drie prioriteiten staan al in de cockpit; hier alleen het
+          bewerken ervan. */}
       {!isFuture && (
-        <>
-          <div className="os-section-label">Vandaag gepland</div>
-          <div className="os-card">
-            <DagPlanning currentDate={currentDate} log={log} nextSession={nextSession} goToTab={goToTab} />
-          </div>
-        </>
+        <ExpandSection label="Top 3 bewerken">
+          <Top3 currentDate={currentDate} />
+        </ExpandSection>
+      )}
+
+      {!isFuture && (
+        <ExpandSection label="Vandaag gepland">
+          <DagPlanning currentDate={currentDate} log={log} nextSession={nextSession} goToTab={goToTab} />
+        </ExpandSection>
       )}
 
       {/* 5. Transition coach — alleen als relevant */}
@@ -898,15 +895,20 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
         </ExpandSection>
       )}
 
-      {/* 6. Compacte check-in */}
-      {!isFuture && (
+      {/* Zonder check-in is er geen advies, dus die staat open zolang
+          er nog niets is ingevuld. */}
+      {!isFuture && (hasData ? (
+        <ExpandSection label="Check-in bijwerken">
+          <CompactCheckIn log={log} saveField={saveField} goToTab={goToTab} />
+        </ExpandSection>
+      ) : (
         <>
           <div className="os-section-label">Check-in</div>
           <div className="os-card">
             <CompactCheckIn log={log} saveField={saveField} goToTab={goToTab} />
           </div>
         </>
-      )}
+      ))}
 
       {/* Achter progressive disclosure */}
       <ExpandSection label="Capture — inbox" badge={inboxCount}>

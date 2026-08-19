@@ -7,6 +7,7 @@ import { strava, trello, getTrelloConfig, saveTrelloConfig, STRAVA_REQUIRED_SCOP
 function StatusPill({ state }) {
   const map = {
     connected:    { label: 'Gekoppeld',        color: 'var(--green)' },
+    readonly:     { label: 'Alleen lezen',     color: 'var(--gold)' },
     configured:   { label: 'Nog niet gekoppeld', color: 'var(--gold)' },
     unconfigured: { label: 'Sleutels ontbreken', color: 'var(--gold)' },
     unreachable:  { label: 'Niet bereikbaar',  color: 'var(--rust)' },
@@ -25,14 +26,20 @@ function stateOf(status) {
   if (!status) return 'checking';
   if (status.reachable === false) return 'unreachable';
   if (status.configured === false) return 'unconfigured';
+  // "Gekoppeld" claimen we alleen als schrijven ook werkt. Credentials
+  // die alleen mogen lezen zijn geen werkende koppeling voor Capture.
+  if (status.readOnly) return 'readonly';
   return status.connected ? 'connected' : 'configured';
 }
 
 export default function Integrations() {
   const [stravaStatus, setStravaStatus] = useState(null);
   const [trelloStatus, setTrelloStatus] = useState(null);
-  const [boards, setBoards] = useState([]);
-  const [lists, setLists] = useState([]);
+  const [boards, setBoards] = useState(null);      // null = nog niet geladen
+  const [boardsError, setBoardsError] = useState('');
+  const [lists, setLists] = useState(null);
+  const [writeTest, setWriteTest] = useState(null);
+  const [testingWrite, setTestingWrite] = useState(false);
   const [cfg, setCfg] = useState(getTrelloConfig);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -58,13 +65,36 @@ export default function Integrations() {
     trello.status().then(setTrelloStatus).catch(() => setTrelloStatus({ reachable: false }));
   }, []);
 
+  // Boards laden zodra er leesrecht is. Mislukt het, dan zeggen we dat —
+  // eerder bleef er eindeloos "Boards laden…" staan.
   useEffect(() => {
-    if (trelloStatus?.connected) trello.boards().then(setBoards).catch(() => {});
-  }, [trelloStatus?.connected]);
+    if (!(trelloStatus?.canRead || trelloStatus?.connected)) return;
+    let alive = true;
+    setBoardsError('');
+    trello.boards()
+      .then(b => { if (alive) setBoards(Array.isArray(b) ? b : []); })
+      .catch(e => { if (alive) { setBoards([]); setBoardsError(e.message || 'ophalen mislukt'); } });
+    return () => { alive = false; };
+  }, [trelloStatus?.canRead, trelloStatus?.connected]);
 
   useEffect(() => {
-    if (cfg.boardId) trello.lists(cfg.boardId).then(setLists).catch(() => {});
+    if (!cfg.boardId) { setLists(null); return; }
+    let alive = true;
+    trello.lists(cfg.boardId)
+      .then(l => { if (alive) setLists(Array.isArray(l) ? l : []); })
+      .catch(() => { if (alive) setLists([]); });
+    return () => { alive = false; };
   }, [cfg.boardId]);
+
+  async function runWriteTest() {
+    if (!cfg.backlogListId) return;
+    setTestingWrite(true); setWriteTest(null);
+    try {
+      setWriteTest(await trello.verifyWrite(cfg.backlogListId));
+    } catch (e) {
+      setWriteTest({ ok: false, message: e.message });
+    } finally { setTestingWrite(false); }
+  }
 
   function pickBoard(b) {
     const next = { boardId: b.id, boardName: b.name, backlogListId: null, backlogListName: null };
@@ -318,24 +348,36 @@ export default function Integrations() {
             </div>
           )}
 
-          {tState === 'connected' && (
+          {(tState === 'connected' || tState === 'readonly') && (
             <>
               <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
                 Verbonden als {trelloStatus.member}. Kies waar Capture-items terechtkomen.
               </div>
+              {tState === 'readonly' && (
+                <div style={{ fontSize: 11.5, color: 'var(--rust)', lineHeight: 1.5, marginBottom: 8 }}>
+                  {trelloStatus.reason} Capture → Trello werkt hierdoor niet.
+                </div>
+              )}
 
               <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 700,
                 textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>Board</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
-                {boards.map(b => (
+                {(boards || []).map(b => (
                   <button key={b.id}
                     className={`os-toggle-chip ${cfg.boardId === b.id ? 'active green' : ''}`}
                     onClick={() => pickBoard(b)} style={{ fontSize: 11.5 }}>
                     {b.name}
                   </button>
                 ))}
-                {boards.length === 0 && (
+                {boards === null && (
                   <span style={{ fontSize: 11, color: 'var(--ghost)' }}>Boards laden…</span>
+                )}
+                {boards?.length === 0 && (
+                  <span style={{ fontSize: 11, color: boardsError ? 'var(--rust)' : 'var(--ghost)' }}>
+                    {boardsError
+                      ? `Boards ophalen mislukt: ${boardsError}`
+                      : 'Geen open boards gevonden in dit account.'}
+                  </span>
                 )}
               </div>
 
@@ -346,7 +388,7 @@ export default function Integrations() {
                     Backlog-lijst
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {lists.map(l => (
+                    {(lists || []).map(l => (
                       <button key={l.id}
                         className={`os-toggle-chip ${cfg.backlogListId === l.id ? 'active green' : ''}`}
                         onClick={() => pickList(l)} style={{ fontSize: 11.5 }}>
@@ -358,9 +400,23 @@ export default function Integrations() {
               )}
 
               {cfg.backlogListId && (
-                <div style={{ fontSize: 11, color: 'var(--sage)', fontWeight: 600, marginTop: 8 }}>
-                  ✓ Capture → Trello gaat naar “{cfg.backlogListName}” op “{cfg.boardName}”
-                </div>
+                <>
+                  <div style={{ fontSize: 11, color: 'var(--sage)', fontWeight: 600, marginTop: 8 }}>
+                    ✓ Capture → Trello gaat naar “{cfg.backlogListName}” op “{cfg.boardName}”
+                  </div>
+                  {/* Het enige echte bewijs: een kaart aanmaken en weer
+                      weghalen. Credentials zeggen niets over of het werkt. */}
+                  <button className="btn-secondary" onClick={runWriteTest} disabled={testingWrite}
+                    style={{ fontSize: 11.5, marginTop: 8, whiteSpace: 'normal' }}>
+                    {testingWrite ? 'Testen…' : 'Test: kaart aanmaken en verwijderen'}
+                  </button>
+                  {writeTest && (
+                    <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.5,
+                      color: writeTest.ok ? 'var(--sage)' : 'var(--rust)' }}>
+                      {writeTest.ok ? '✓ ' : '✕ '}{writeTest.message || writeTest.error}
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}

@@ -9,6 +9,7 @@ import { protectedHours } from './WeekScreen';
 import { store } from '../store';
 import SubTabs from './SubTabs';
 import RunForecastPanel from './RunForecastPanel';
+import RunDashboard from './RunDashboard';
 import StrengthPanel from './StrengthPanel';
 import MyChangePanel from './MyChangePanel';
 import { todayLocal } from '../datetime';
@@ -569,6 +570,7 @@ function TabLichaam({ logs, sessions }) {
 // TAB 2: HARDLOPEN
 // ═══════════════════════════════════════════════════════════════
 function TabHardlopen({ logs }) {
+  const [showDetails, setShowDetails] = useState(false);
   const tod = todayStr();
   const completedRuns = Object.values(logs).filter(l => l.run_done).length;
   const runPct = Math.min(100, (completedRuns / TOTAL_RUNS) * 100);
@@ -644,6 +646,19 @@ function TabHardlopen({ logs }) {
 
   return (
     <div>
+      {/* NU · TREND · VOLGENDE MIJLPAAL · RACES — de vier vragen die tellen */}
+      <RunDashboard logs={logs} currentDate={tod} />
+
+      {/* Alles hieronder is onderbouwing. Het dashboard geeft het antwoord;
+          wie wil zien waaróp dat antwoord rust, klapt dit open. */}
+      <div onClick={() => setShowDetails(v => !v)}
+        style={{ fontSize: 11, color: 'var(--muted)', cursor: 'pointer', padding: '10px 0',
+          display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)' }}>
+        <span>Coachbesluit, schema en alle grafieken</span>
+        <span>{showDetails ? '▲' : '▼'}</span>
+      </div>
+      {showDetails && (
+      <>
       {/* Coachbesluit, forecast en de grafieken die het onderbouwen */}
       <RunForecastPanel log={logs[tod]} logs={logs} currentDate={tod} />
 
@@ -849,6 +864,8 @@ function TabHardlopen({ logs }) {
             })}
           </div>
         </>
+      )}
+      </>
       )}
     </div>
   );

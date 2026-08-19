@@ -54,8 +54,76 @@ export function classifySegment(segment, { hrSettings = null } = {}) {
     reason: `${fmtPace(pace)}/km, geen hartslag en geen vergelijking binnen de sessie` };
 }
 
-// Classificatie van alle segmenten samen — dit is de route die er in de
-// praktijk toe doet.
+// ── De classificatievolgorde ────────────────────────────────────
+// In deze volgorde, want elke stap is betrouwbaarder dan de volgende:
+//
+//   1. de geplande intervalstructuur  — je wéét wat je zou doen
+//   2. jouw correctie                 — jij hebt het laatste woord
+//   3. cadans, tempo en hartslag      — meetbaar bewijs
+//   4. relatief binnen de sessie      — alleen als terugval
+//
+// De relatieve methode is robuust maar blind: hij weet alleen dat het ene
+// blok sneller was dan het andere, niet wat de bedoeling was.
+
+// Stap 1: past het aantal segmenten op de geplande structuur? Bij
+// "2 min lopen / 1,5 min wandelen × 6" verwachten we twaalf blokken die
+// om en om lopen en wandelen, met herkenbare duren.
+function classifyByPlan(segments, run) {
+  const structure = runWalkStructure(run);
+  if (!structure?.reps || structure.runMin == null || structure.walkMin == null) return null;
+  const expected = structure.reps * 2;
+  // Eén blok speling voor een warmlopen of uitlopen aan het begin of eind.
+  if (segments.length < expected - 1 || segments.length > expected + 2) return null;
+
+  // Controleren of de duren kloppen: loopblokken rond runMin, wandelblokken
+  // rond walkMin. Wijkt meer dan een kwart af, dan klopt de aanname niet.
+  const tol = 0.35;
+  const fits = (mins, target) => target > 0 && Math.abs(mins - target) / target <= tol;
+
+  // Twee mogelijke fasen: begint de reeks met lopen of met wandelen?
+  for (const offset of [0, 1]) {
+    let ok = 0, total = 0;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (!seg.minutes) continue;
+      total++;
+      const isRunSlot = (i + offset) % 2 === 0;
+      if (fits(seg.minutes, isRunSlot ? structure.runMin : structure.walkMin)) ok++;
+    }
+    if (total >= 4 && ok / total >= 0.7) {
+      return segments.map((seg, i) => ({
+        ...seg,
+        kind: (i + offset) % 2 === 0 ? SEGMENT.RUN : SEGMENT.WALK,
+        auto: true, confidence: 'high', source: 'plan',
+        reason: `past op de geplande structuur ${structure.label}`,
+      }));
+    }
+  }
+  return null;
+}
+
+// Stap 3: bewijs per segment. Cadans is het sterkste signaal dat er is —
+// hardlopen ligt rond 150–180 stappen per minuut, wandelen rond 100–120.
+function classifyByEvidence(segments, hr) {
+  const withCadence = segments.filter(s => s.cadence != null);
+  if (withCadence.length < segments.length * 0.6) return null;
+
+  return segments.map(seg => {
+    if (seg.cadence == null) {
+      return { ...seg, kind: SEGMENT.UNKNOWN, auto: true, confidence: 'low',
+        source: 'evidence', reason: 'geen cadans voor dit blok' };
+    }
+    // Strava geeft cadans per been; verdubbelen als het getal laag uitvalt.
+    const spm = seg.cadence < 110 ? seg.cadence * 2 : seg.cadence;
+    const kind = spm >= 140 ? SEGMENT.RUN : spm <= 125 ? SEGMENT.WALK : SEGMENT.UNKNOWN;
+    return { ...seg, kind, auto: true,
+      confidence: kind === SEGMENT.UNKNOWN ? 'low' : 'high', source: 'evidence',
+      reason: `${Math.round(spm)} stappen per minuut — ${kind === SEGMENT.RUN ? 'hardlooptempo' : kind === SEGMENT.WALK ? 'wandeltempo' : 'grensgebied'}` };
+  });
+}
+
+// Stap 4: relatief binnen de sessie. Alleen als de stappen hierboven niets
+// opleverden.
 function classifyWithin(segments, hr) {
   const usable = segments.filter(s => s.pace != null);
   if (usable.length < 2) {
@@ -103,11 +171,39 @@ function classifyWithin(segments, hr) {
   });
 }
 
+// Ronden komen ruw uit Strava (snake_case) of uit handmatige invoer
+// (camelCase). Beide moeten hier hetzelfde uitkomen, anders levert een echte
+// Strava-sessie stilzwijgend nul segmenten op en verdwijnt het looptempo.
+const firstNumber = (...vals) => {
+  for (const v of vals) {
+    if (v == null) continue;
+    const n = Number(v);
+    if (!isNaN(n)) return n;
+  }
+  return null;
+};
+
+export function normalizeSegment(seg) {
+  if (!seg) return null;
+  return {
+    distance: firstNumber(seg.distance, seg.distanceMeters),          // meters
+    movingTime: firstNumber(seg.movingTime, seg.moving_time,
+      seg.elapsedTime, seg.elapsed_time),                             // seconden
+    avgHr: firstNumber(seg.avgHr, seg.average_heartrate,
+      seg.averageHeartrate, seg.hr),
+    cadence: firstNumber(seg.cadence, seg.average_cadence,
+      seg.averageCadence),
+    pace: seg.pace ?? null,
+  };
+}
+
 function segmentPace(seg) {
   if (!seg) return null;
-  if (seg.pace != null) return paceToMin(seg.pace);
-  const dist = Number(seg.distance) || 0;          // meters
-  const time = Number(seg.movingTime) || 0;        // seconden
+  const n = seg.distance !== undefined && seg.movingTime !== undefined
+    ? seg : normalizeSegment(seg);
+  if (n.pace != null) return paceToMin(n.pace);
+  const dist = Number(n.distance) || 0;            // meters
+  const time = Number(n.movingTime) || 0;          // seconden
   if (!dist || !time) return null;
   return (time / 60) / (dist / 1000);
 }
@@ -127,7 +223,7 @@ export function correctSegment(workoutId, index, kind) {
 }
 
 // ── De drie tempo's van één workout ─────────────────────────────
-export function paceBreakdown(workout, { hrSettings = null } = {}) {
+export function paceBreakdown(workout, { hrSettings = null, plannedRun = null } = {}) {
   if (!workout) return { available: false, reason: 'geen sessie' };
 
   const totalDist = Number(workout.distance) || null;      // km
@@ -140,7 +236,8 @@ export function paceBreakdown(workout, { hrSettings = null } = {}) {
   const corrections = loadCorrections();
 
   const hr = hrSettings || loadHrSettings();
-  const base = raw.map((seg, i) => {
+  const base = raw.map((rawSeg, i) => {
+    const seg = normalizeSegment(rawSeg);
     const pace = segmentPace(seg);
     return {
       index: i,
@@ -148,13 +245,22 @@ export function paceBreakdown(workout, { hrSettings = null } = {}) {
       minutes: (Number(seg.movingTime) || 0) / 60,
       pace,
       paceLabel: pace ? fmtPace(pace) : null,
-      avgHr: seg.avgHr ?? seg.hr ?? null,
+      avgHr: seg.avgHr,
+      cadence: seg.cadence,
     };
   });
-  const classified = classifyWithin(base, hr);
+  // De volgorde: plan → correctie → bewijs → relatief. Correcties komen
+  // hieronder, zodat ze elke automatische uitkomst overrulen.
+  const planned = plannedRun || (workout.plannedSessionId
+    ? RUNS.find(r => r.nr === Number(workout.plannedSessionId)) : null);
+  const classified = classifyByPlan(base, planned)
+    || classifyByEvidence(base, hr)
+    || classifyWithin(base, hr);
+
   const segments = classified.map((s, i) => {
     const corrected = corrections[`${workout.id}:${i}`];
-    return { ...s, kind: corrected || s.kind, auto: !corrected, corrected: !!corrected };
+    return { ...s, kind: corrected || s.kind, auto: !corrected, corrected: !!corrected,
+      source: corrected ? 'correction' : (s.source || 'relative') };
   });
 
   const usable = segments.filter(s => s.pace && s.distanceKm > 0);
@@ -182,6 +288,13 @@ export function paceBreakdown(workout, { hrSettings = null } = {}) {
     segments,
     segmentCount: segments.length,
     correctedCount: segments.filter(s => s.corrected).length,
+    method: segments[0]?.source || null,
+    methodLabel: {
+      plan: 'uit de geplande structuur',
+      correction: 'door jou gecorrigeerd',
+      evidence: 'uit cadans',
+      relative: 'afgeleid uit de sessie zelf',
+    }[segments[0]?.source] || null,
     unknownCount: segments.filter(s => s.kind === SEGMENT.UNKNOWN).length,
 
     runPace, walkPace, sessionPace,

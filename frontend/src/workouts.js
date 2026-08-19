@@ -14,6 +14,7 @@
 // }
 
 import { RUNS } from './data/runningSchema';
+import { addDays } from './datetime';
 
 const KEY = 'gc_workouts';
 const ADAPTIVE_LOG_KEY = 'gc_adaptive_log';
@@ -97,17 +98,7 @@ export function fmtPace(minPerKm) {
 // 'good' | 'poor' | 'pending' (nog geen dag-erna data)
 export function toleranceFor(workout, logs) {
   if (!workout?.date) return 'pending';
-  const next = (() => {
-    const d = new Date(workout.date + 'T12:00:00');
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
-  })();
-  const d2 = (() => {
-    const d = new Date(workout.date + 'T12:00:00');
-    d.setDate(d.getDate() + 2);
-    return d.toISOString().slice(0, 10);
-  })();
-  const l1 = logs?.[next], l2 = logs?.[d2];
+  const l1 = logs?.[addDays(workout.date, 1)], l2 = logs?.[addDays(workout.date, 2)];
   const bad = (l) => l && (l.delayed_fatigue || l.delayed_brainfog || l.delayed_breathless ||
     l.symptom_pem || l.recovery_check === 'bad' || l.training_recovery === 2);
   if (bad(l1) || bad(l2)) return 'poor';

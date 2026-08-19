@@ -91,6 +91,11 @@ export const trello = {
     const r = await call('coach-trello', `/lists?boardId=${encodeURIComponent(boardId)}`);
     return Array.isArray(r) ? r : [];
   },
+  // Echte schrijftest: kaart aanmaken en meteen verwijderen. Alleen dit
+  // bewijst dat de koppeling bruikbaar is; geldige credentials niet.
+  async verifyWrite(listId) {
+    return call('coach-trello', '/verify-write', { method: 'POST', body: { listId } });
+  },
   async cards(listId) {
     const r = await call('coach-trello', `/cards?listId=${encodeURIComponent(listId)}`);
     return Array.isArray(r) ? r : [];
