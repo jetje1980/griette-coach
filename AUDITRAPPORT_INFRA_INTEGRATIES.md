@@ -197,25 +197,46 @@ Apps die dit Supabase-project delen (op basis van tabelnamen): de Coach-app, een
 
 ## 13. STRAVA STATUS
 
-**AWAITING USER ACTION**
+**WORKING** — end-to-end geverifieerd op 19 augustus 2026 tegen het echte account.
 
-Volledig gebouwd en gedeployed als Edge Function `coach-strava`:
+### Wat er mis was
+De authorization-URL vroeg `scope=activity:read_all` met `approval_prompt=auto`.
+Twee problemen: `read` ontbrak, en met `auto` hergebruikt Strava een eerdere,
+smallere toestemming zonder opnieuw te vragen — waardoor een token met alleen
+`read` bleef staan. Gefixt naar `scope=read,activity:read_all` en
+`approval_prompt=force`.
 
-| Onderdeel | Status |
+### Bewijs uit de database (niet uit code-inspectie)
+
+| Test | Resultaat |
 |---|---|
-| `/status` — koppelingsstatus per gebruiker | gebouwd |
-| `/auth` — OAuth-URL met `state = user_id` | gebouwd |
-| `/callback` — code-uitwisseling, tokens opslaan | gebouwd |
-| Token-refresh bij verlopen access token | gebouwd |
-| `/activities` — activiteiten lezen | gebouwd |
-| `/sync` — importeren met duplicaatpreventie | gebouwd (unique `(user_id, provider, external_id)`) |
-| `/disconnect` | gebouwd |
-| Tokens server-side, niet in localStorage | ✅ |
-| End-to-end getest met echte Strava-account | **NOT VERIFIED** |
+| OAuth voltooid | **PASS** — `strava_connections` bevat athlete `16399113` (Griette Vonck) |
+| Verleende scopes | **PASS** — `read,activity:read_all` (exact wat vereist is) |
+| `activity:write` aangevraagd | **NEE** — bewust niet; 0 hits in de bundle |
+| Access + refresh token aanwezig | **PASS** — beide gezet, server-side in `strava_connections` |
+| Token-refresh server-side | **PASS** — `created_at` 18 aug 22:03, `updated_at` 19 aug 05:45; alleen `freshToken()` schrijft die velden. `expires_at` 11:45 = precies 6 uur na de refresh |
+| Activiteiten opgehaald | **PASS** — 30 activiteiten geïmporteerd, 3 apr t/m 18 aug |
+| Hartslagdata beschikbaar | **PASS** — 30 van 30 met `has_heartrate = true` |
+| Duplicaatpreventie | **PASS** — herhaalde insert van dezelfde `external_id` geweigerd door de unique constraint; 1 rij blijft 1 rij |
+| Tokens in browser/localStorage | **NEE** — geverifieerd: 0 Strava-tokens in de bundle |
 
-**Waarom niet getest:** de Edge Function heeft `STRAVA_CLIENT_ID` en `STRAVA_CLIENT_SECRET` nodig. Die kan ik niet zetten (geen secret-tool) en horen ook niet in een chat. Zonder secrets antwoordt `/status` met `configured: false`, en de UI zegt letterlijk "Strava nog niet ingesteld" met uitleg. De app claimt nergens een werkende koppeling.
+### Meest recente activiteit, opgehaald via de app zelf
 
----
+| Veld | Waarde |
+|---|---|
+| Naam / type | Nachtloop — Run |
+| Datum | 18 augustus 2026, 21:09 |
+| Afstand | 2,16 km |
+| Duur (bewegend) | 21:48 (1308 s) |
+| Pace | 10:07 /km |
+| Hartslag | gemiddeld **140** · max **177** bpm |
+| Laps | 3 (avg HR 133 / 149 / 134) |
+| Streams | time, heart_rate, distance, velocity_smooth, cadence, altitude |
+| Strava-id | 19799144166 |
+
+Deze waarden komen uit `workout_imports` — dus via de eigen OAuth-keten van de
+app, niet via een externe connector. Ze komen exact overeen met wat Strava zelf
+voor deze activiteit toont.
 
 ## 14. TRELLO STATUS
 
@@ -333,7 +354,6 @@ Uitgevoerd achter de AuthGate met een gesimuleerde sessie (netwerk geblokkeerd i
 
 | Item | Severity | Impact | Volgende stap |
 |---|---|---|---|
-| Strava-secrets niet gezet | P1 | Automatische import werkt niet | §22, stap 2 |
 | Trello-secrets niet gezet | P2 | Capture → Trello niet bruikbaar | §22, stap 3 |
 | Cross-device niet echt getest | P2 | Onbekend of hydratatie in de praktijk vlekkeloos gaat | Zelf twee toestellen testen |
 | 6 oude foto's op legacy pad | P3 | Geen (blijven leesbaar en privé) | Optioneel migreren met copy→verify→delete |
@@ -375,7 +395,7 @@ Drie stappen. **Plak geen sleutels in de chat** — zet ze direct in Supabase.
 ### Stap 1 — Eén keer inloggen in Coach (1 minuut)
 Open https://jetje1980.github.io/griette-coach/ en log in met `griette@yahoo.com` en je wachtwoord. Coach heeft nu een eigen sessie en erft er geen meer van een andere app. Weet je het wachtwoord niet: klik "Stuur me een inloglink".
 
-### Stap 2 — Strava aanzetten
+### Stap 2 — Strava aanzetten (VOLTOOID op 19 aug 2026)
 1. Ga naar **https://www.strava.com/settings/api** en open je API-applicatie (of maak er een aan).
 2. Zet bij **Authorization Callback Domain** exact: `osuqtfsxmquwqsbgzlqn.supabase.co`
 3. Noteer **Client ID** en **Client Secret**.
@@ -431,8 +451,9 @@ PARTIAL / NOT VERIFIED
 (architectuur is er; echte twee-device-test niet mogelijk in de sandbox)
 
 STRAVA:
-AWAITING USER OAUTH
-(volledig gebouwd, wacht op CLIENT_ID/SECRET)
+WORKING
+(OAuth voltooid met read+activity:read_all, 30 activiteiten geimporteerd,
+ token-refresh en duplicaatpreventie geverifieerd)
 
 TRELLO:
 AWAITING USER OAUTH
@@ -451,10 +472,10 @@ PASS
 
 TOP 5 REMAINING ACTIONS:
 1. Eenmalig inloggen in Coach (stap 1 hierboven).
-2. Strava-secrets zetten en koppelen (stap 2).
-3. Trello-secrets zetten en board kiezen (stap 3).
-4. Cross-device zelf bevestigen met twee toestellen.
-5. Op termijn een apart Supabase-project voor Coach, los van de andere apps.
+2. Trello-secrets zetten en board kiezen (stap 3).
+3. Cross-device zelf bevestigen met twee toestellen.
+4. Op termijn een apart Supabase-project voor Coach, los van de andere apps.
+5. Strava-sync periodiek laten lopen zodat nieuwe runs vanzelf binnenkomen.
 ```
 
 ---
