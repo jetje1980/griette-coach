@@ -68,6 +68,18 @@ export const trello = {
     if (r.unreachable) return { connected: false, configured: false, reachable: false };
     return { ...r, reachable: true };
   },
+  // De autorisatielink wordt server-side gebouwd; de API-key komt nooit
+  // in de frontend-bundel terecht.
+  async authUrl() {
+    const r = await call('coach-trello', '/auth-url');
+    return r.url || null;
+  },
+  // Het token dat Trello na autorisatie toont, gaat rechtstreeks door naar
+  // de server. Het wordt daar getoetst en opgeslagen — nooit in
+  // localStorage, nooit in de bundel.
+  async saveToken(token) {
+    return call('coach-trello', '/save-token', { method: 'POST', body: { token } });
+  },
   async boards() {
     const r = await call('coach-trello', '/boards');
     return Array.isArray(r) ? r : [];

@@ -38,6 +38,8 @@ export default function Integrations() {
   const [testing, setTesting] = useState(false);
   const [latest, setLatest] = useState(null);
   const [testError, setTestError] = useState('');
+  const [tokenInput, setTokenInput] = useState('');
+  const [tokenMsg, setTokenMsg] = useState(null);
 
   // Echte test: haalt de meest recente activiteit op met details en streams.
   async function testLatest() {
@@ -79,6 +81,31 @@ export default function Integrations() {
     try {
       const url = await strava.authUrl();
       if (url) window.location.href = url;
+    } finally { setBusy(false); }
+  }
+
+  async function openTrelloAuth() {
+    setBusy(true); setTokenMsg(null);
+    try {
+      const url = await trello.authUrl();
+      if (url) window.open(url, '_blank', 'noopener');
+      else setTokenMsg({ ok: false, text: 'Server kan de autorisatielink niet bouwen.' });
+    } finally { setBusy(false); }
+  }
+
+  async function saveTrelloToken() {
+    setBusy(true); setTokenMsg(null);
+    try {
+      const r = await trello.saveToken(tokenInput);
+      if (r?.ok) {
+        setTokenMsg({ ok: true, text: `Gekoppeld als ${r.member}.` });
+        setTokenInput('');
+        setTrelloStatus(await trello.status());
+      } else {
+        setTokenMsg({ ok: false, text: r?.error || 'Opslaan mislukt.' });
+      }
+    } catch (e) {
+      setTokenMsg({ ok: false, text: e.message });
     } finally { setBusy(false); }
   }
 
@@ -239,16 +266,55 @@ export default function Integrations() {
             <StatusPill state={tState} />
           </div>
 
-          {tState === 'unconfigured' && (
+          {tState === 'unconfigured' && !trelloStatus?.keyPresent && (
             <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.6 }}>
-              De serverfunctie draait, maar de Trello-sleutels ontbreken nog. Zet
-              <strong> TRELLO_API_KEY</strong> en <strong>TRELLO_TOKEN</strong> in
-              Supabase → Edge Functions → Secrets.
+              De serverfunctie draait, maar de Trello API-key ontbreekt nog. Zet
+              <strong> TRELLO_API_KEY</strong> in Supabase → Edge Functions → Secrets.
             </div>
           )}
           {tState === 'unreachable' && (
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>
               De Trello-service is nu niet bereikbaar.
+            </div>
+          )}
+
+          {/* Koppelen in twee stappen: autoriseren, dan het token terugplakken.
+              Trello geeft geen redirect terug, dus overtypen is de enige weg. */}
+          {tState !== 'connected' && trelloStatus && trelloStatus.reachable !== false
+            && (trelloStatus.keyPresent !== false) && (
+            <div style={{ marginTop: 8 }}>
+              {trelloStatus.error && (
+                <div style={{ fontSize: 11, color: 'var(--rust)', marginBottom: 8 }}>
+                  Trello weigert de huidige koppeling. Koppel opnieuw.
+                </div>
+              )}
+              <button className="btn-secondary"
+                onClick={openTrelloAuth} disabled={busy}
+                style={{ fontSize: 12, whiteSpace: 'normal', marginBottom: 8 }}>
+                Stap 1 — Trello autoriseren
+              </button>
+              <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 6 }}>
+                Trello toont daarna een lange code. Plak die hier.
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <input value={tokenInput} onChange={e => setTokenInput(e.target.value.trim())}
+                  placeholder="Plak de code van Trello"
+                  autoComplete="off" spellCheck={false}
+                  style={{ flex: '1 1 180px', minWidth: 0, fontSize: 12, padding: '7px 9px',
+                    borderRadius: 8, border: '1px solid var(--border)',
+                    background: 'var(--surface)', color: 'var(--text)' }} />
+                <button className="btn-primary" onClick={saveTrelloToken}
+                  disabled={busy || !tokenInput}
+                  style={{ fontSize: 12, whiteSpace: 'normal' }}>
+                  Stap 2 — Opslaan
+                </button>
+              </div>
+              {tokenMsg && (
+                <div style={{ fontSize: 11, marginTop: 6,
+                  color: tokenMsg.ok ? 'var(--sage)' : 'var(--rust)' }}>
+                  {tokenMsg.text}
+                </div>
+              )}
             </div>
           )}
 
