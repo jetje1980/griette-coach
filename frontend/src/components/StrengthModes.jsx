@@ -7,6 +7,7 @@ import {
 import { saveSession, loadSessions, sessionScore, deleteSession } from '../strength';
 import { ClassPlayer, StrengthFeedback } from './StrengthToday';
 import { todayLocal } from '../datetime';
+import ExerciseTechnique from './ExerciseTechnique';
 
 // Drie trainingsvormen naast elkaar, geen van drieën de mindere:
 //   Gewichten     — het bestaande A/B-programma met kg × sets × reps × RIR
@@ -108,6 +109,7 @@ function BandsMat({ currentDate, onSaved }) {
           <div key={ex.id} style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>{ex.name}</div>
             <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginBottom: 6 }}>{ex.cue}</div>
+            <ExerciseTechnique exercise={ex} />
 
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
               {ex.variants.map((v, i) =>

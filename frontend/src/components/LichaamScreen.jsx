@@ -20,6 +20,7 @@ import { store } from '../store';
 import { todayLocal, startOfWeek } from '../datetime';
 import { weekTrainingRows, nextOfferDate, STATUS_META } from '../trainingDay';
 import { ingestStravaWorkouts } from '../stravaIngest';
+import ExerciseTechnique from './ExerciseTechnique';
 
 // ── Constants ────────────────────────────────────────────────────
 const SYMPTOMS_LIST = [
@@ -412,6 +413,7 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
                   </span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 2 }}>{ex.cue}</div>
+                <ExerciseTechnique exercise={ex} />
                 <div style={{ fontSize: 12, color: 'var(--sage)', marginTop: 5, lineHeight: 1.45, fontWeight: 500 }}>
                   💡 {overloadAdvice(ex, last)}
                 </div>
