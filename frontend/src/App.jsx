@@ -16,7 +16,7 @@ import Settings        from './components/Settings';
 import Onboarding      from './components/Onboarding';
 import StravaCallback  from './components/StravaCallback';
 import { todayLocal, addDays } from './datetime';
-import { ingestStravaWorkouts } from './stravaIngest';
+import { ingestStravaWorkouts, enrichRecentSegments } from './stravaIngest';
 
 const TABS = ['Vandaag', 'Week', 'Lichaam', 'Leven', 'Progressie', 'Coach'];
 const MAX_FUTURE_DAYS = 90;
@@ -96,6 +96,9 @@ export default function App() {
           await loadLogs();
           if (res.added) showFlash?.('🏃', `${res.added} training${res.added > 1 ? 'en' : ''} uit Strava toegevoegd`);
         }
+        // Ronden nahalen voor recente runs: zonder die blokken is er geen
+        // looptempo, alleen een sessietempo — en dat is iets anders.
+        await enrichRecentSegments({ limit: 3 }).catch(() => {});
       } catch { /* zonder koppeling gebeurt er simpelweg niets */ }
     })();
 

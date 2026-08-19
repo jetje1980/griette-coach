@@ -22,6 +22,7 @@ import { loadWorkouts, saveWorkout, computePace } from './workouts';
 import { store } from './store';
 import { RUNS } from './data/runningSchema';
 import { todayLocal, addDays, localDayOf } from './datetime';
+import { strava } from './integrations';
 
 const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
 const WALK_TYPES = new Set(['Walk', 'Hike']);
@@ -61,6 +62,10 @@ export function normalizeActivity(row) {
     maxHR: a.max_heartrate != null ? Math.round(Number(a.max_heartrate)) : null,
     elevation: a.total_elevation_gain != null ? Number(a.total_elevation_gain) : null,
     cadence: a.average_cadence != null ? Number(a.average_cadence) : null,
+    // Ronden en splits komen pas mee na een detail-aanroep; zonder die
+    // twee zijn loop- en wandelblokken niet van elkaar te scheiden.
+    laps: Array.isArray(a.__laps) ? a.__laps : null,
+    splits: Array.isArray(a.__splits) ? a.__splits : null,
   };
 }
 
@@ -122,7 +127,7 @@ function fillGaps(existing, incoming, fields) {
 }
 
 const ENRICH_FIELDS = ['distance', 'duration', 'averagePace', 'averageHR',
-  'maxHR', 'elevation', 'cadence', 'startedAt'];
+  'maxHR', 'elevation', 'cadence', 'startedAt', 'laps', 'splits'];
 
 // De hoofdroutine. Levert een verslag terug in plaats van stil te falen,
 // zodat de UI kan tonen wat er precies gebeurd is.
@@ -237,4 +242,40 @@ export async function ingestStravaWorkouts({ logs = {}, sinceDays = 180 } = {}) 
     dates: [...new Set(touched)].sort(),
     total: res.activities.length,
   };
+}
+
+// ── Ronden en splits lui aanvullen ──────────────────────────────
+// De lijst-endpoint van Strava levert geen ronden. Zonder die ronden zijn
+// loop- en wandelblokken niet te scheiden, en dan is er geen looptempo —
+// alleen een sessietempo dat níet je hardloopsnelheid is.
+//
+// Daarom halen we ze na: alleen voor recente runs die ze nog missen, en
+// hooguit een paar per keer, zodat de Strava-limieten ruim blijven.
+export async function enrichRecentSegments({ limit = 3, sinceDays = 21 } = {}) {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, reason: 'niet ingelogd', enriched: 0 };
+
+  const since = addDays(todayLocal(), -sinceDays);
+  const candidates = loadWorkouts().filter(w =>
+    w.externalId && w.date >= since &&
+    (w.activityType === 'run' || w.activityType == null) &&
+    !(w.laps?.length) && !(w.splits?.length));
+
+  if (!candidates.length) return { ok: true, enriched: 0, checked: 0 };
+
+  let enriched = 0;
+  const errors = [];
+  for (const w of candidates.slice(0, limit)) {
+    try {
+      const d = await strava.detail(w.externalId);
+      if (d?.error) { errors.push(d.error); continue; }
+      const laps = Array.isArray(d.laps) ? d.laps : [];
+      const splits = Array.isArray(d.splits) ? d.splits : [];
+      if (!laps.length && !splits.length) continue;
+      saveWorkout({ ...w, laps: laps.length ? laps : null, splits: splits.length ? splits : null });
+      enriched++;
+    } catch (e) { errors.push(e.message); }
+  }
+  return { ok: true, enriched, checked: Math.min(limit, candidates.length),
+    remaining: Math.max(0, candidates.length - limit), errors };
 }

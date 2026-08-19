@@ -4,6 +4,7 @@ import { dreamStore, fileToDreamImage } from '../dreamStore';
 import CaptureCenter from './CaptureCenter';
 import GoalSettings from './GoalSettings';
 import { todayLocal } from '../datetime';
+import { AlivenessLibrary } from './AlivenessCard';
 
 // Leven = levensorganisatie en Future Self. Taken bundelt Capture en
 // projecten zodat er geen concurrerende taakmodules meer zijn.
@@ -1503,7 +1504,14 @@ export default function LevenScreen({ logs = {} }) {
       {activeTab === 1 && <TabFocus logs={logs} />}
       {activeTab === 2 && <TabRoutines />}
       {activeTab === 3 && <TabGeld />}
-      {activeTab === 4 && <TabToekomst />}
+      {activeTab === 4 && (
+        <>
+          <TabToekomst />
+          {/* Persoonlijke ankers: hoe beter de coach weet welke muziek,
+              plek en smaak van jou zijn, hoe persoonlijker de voorstellen. */}
+          <AlivenessLibrary />
+        </>
+      )}
       {activeTab === 5 && <TabGlow />}
       {activeTab === 6 && <TabEten />}
     </div>

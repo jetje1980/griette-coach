@@ -7,6 +7,7 @@ import {
 } from '../forecast';
 import { loadWorkouts, fmtPace, paceToMin, cardiacDrift, toleranceFor } from '../workouts';
 import { loadHrSettings } from '../goals';
+import { runEconomyTrend, historicalComparison, allBreakdowns, correctSegment, SEGMENT } from '../pace';
 
 // Bewijsmateriaal voor de hardloopcoach: wat is er voorspeld, wat is er
 // werkelijk gebeurd, en hoeveel rust zat ertussen. Alle grafieken zijn
@@ -183,6 +184,162 @@ function CalendarStrip({ logs, currentDate }) {
         <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginTop: 6, lineHeight: 1.5 }}>
           {runCount} loopdagen · {restCount} rustdagen · getal = km ·
           ✓ goed verdragen, ✕ slecht, ? nog geen herstelcheck
+        </div>
+      </div>
+    </>
+  );
+}
+
+
+// ── Loopeconomie op het échte looptempo ─────────────────────────
+// De kernvisual van de hele hardloopcoach: dezelfde hartslag, sneller
+// looptempo. Uitdrukkelijk op run pace, niet op sessietempo — anders meet
+// je vooral hoeveel je gewandeld hebt.
+function RunEconomyCard({ logs, currentDate }) {
+  const econ = useMemo(() => runEconomyTrend({ currentDate }), [logs, currentDate]);
+  const hist = useMemo(() => historicalComparison({ currentDate }), [currentDate]);
+  const hr = loadHrSettings();
+
+  if (!econ.enough) {
+    return (
+      <>
+        <Label>Loopeconomie — zelfde hartslag, sneller lopen</Label>
+        <div className="os-card" style={{ marginBottom: 12 }}>
+          <Empty>{econ.note}</Empty>
+          <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.55, marginTop: 8,
+            paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+            {hist.note}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const pts = econ.points;
+  const paces = pts.map(p => p.runPace);
+  const lo = Math.min(...paces) - 0.3, hi = Math.max(...paces) + 0.3;
+  const X = (i) => 26 + (i / Math.max(1, pts.length - 1)) * 286;
+  const Y = (p) => 72 - ((p - lo) / Math.max(0.1, hi - lo)) * 58;
+  const hrLo = Math.min(...pts.map(p => p.hr)), hrHi = Math.max(...pts.map(p => p.hr));
+  const HY = (h) => 72 - ((h - hrLo + 4) / Math.max(1, hrHi - hrLo + 8)) * 58;
+
+  return (
+    <>
+      <Label right={<ConfidencePill level={pts.length >= 6 ? 'MEDIUM' : 'LOW'} />}>
+        Loopeconomie — zelfde hartslag, sneller lopen
+      </Label>
+      <div className="os-card" style={{ marginBottom: 12 }}>
+        <Chart height={88} ariaLabel="Looptempo en hartslag over tijd">
+          <line x1="26" y1="72" x2="312" y2="72" stroke={C.line} strokeWidth="1" />
+          {/* Hartslag als vlakke referentie: blijft die gelijk, dan is het winst */}
+          <polyline points={pts.map((p, i) => `${X(i).toFixed(1)},${HY(p.hr).toFixed(1)}`).join(' ')}
+            fill="none" stroke={C.warn} strokeWidth="1.2" strokeDasharray="3 3" />
+          <polyline points={pts.map((p, i) => `${X(i).toFixed(1)},${Y(p.runPace).toFixed(1)}`).join(' ')}
+            fill="none" stroke={C.run} strokeWidth="2" />
+          {pts.map((p, i) => (
+            <circle key={p.date + i} cx={X(i)} cy={Y(p.runPace)} r="2.6" fill={C.run} />
+          ))}
+          <text x="2" y="18" fontSize="7.5" fill="var(--ghost)">{fmtPace(lo + 0.3)}</text>
+          <text x="2" y="70" fontSize="7.5" fill="var(--ghost)">{fmtPace(hi - 0.3)}</text>
+          <text x="26" y="84" fontSize="7.5" fill="var(--ghost)">{pts[0].date.slice(5)}</text>
+          <text x="266" y="84" fontSize="7.5" fill="var(--ghost)">{pts[pts.length - 1].date.slice(5)}</text>
+        </Chart>
+        <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--ghost)', marginTop: 4 }}>
+          <span><span style={{ color: C.run, fontWeight: 800 }}>—</span> run pace</span>
+          <span><span style={{ color: C.warn, fontWeight: 800 }}>- -</span> hartslag</span>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55, marginTop: 6 }}>
+          {econ.verdict}
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 6,
+          paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+          Dit is het tempo in je <strong>loopblokken</strong>, niet het gemiddelde van de hele
+          sessie. {hist.available
+            ? `Twee jaar geleden liep je rond ${hist.thenPace}/km; nu ${hist.nowPace}/km bij hartslag ${econ.late.hr}. Dat verschil is context, geen norm.`
+            : hist.note}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Run/walk-blokken van de laatste sessies, met correctie ──────
+function SegmentCard({ logs, currentDate }) {
+  const [tick, setTick] = useState(0);
+  const [openId, setOpenId] = useState(null);
+  const rows = useMemo(() => allBreakdowns({ limit: 6, currentDate }), [currentDate, tick]);
+  const withSegments = rows.filter(r => r.segmentCount > 0);
+
+  if (!withSegments.length) {
+    return (
+      <>
+        <Label>Run/walk-blokken</Label>
+        <div className="os-card" style={{ marginBottom: 12 }}>
+          <Empty>
+            Nog geen sessie met ronden of kilometersplits. Die komen uit Strava zodra een
+            activiteit ronden heeft; zonder die blokken is alleen het sessietempo bekend —
+            en dat is niet je hardloopsnelheid.
+          </Empty>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Label>Run/walk-blokken — automatisch herkend</Label>
+      <div className="os-card" style={{ marginBottom: 12 }}>
+        {withSegments.map(r => {
+          const open = openId === r.workout.id;
+          return (
+            <div key={r.workout.id} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+              <div onClick={() => setOpenId(open ? null : r.workout.id)}
+                style={{ display: 'flex', alignItems: 'baseline', gap: 8, cursor: 'pointer' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, minWidth: 44 }}>{r.workout.date.slice(5)}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--sub)', flex: 1, minWidth: 0 }}>
+                  {r.runPaceLabel ? `run ${r.runPaceLabel}` : 'run —'}
+                  {r.walkPaceLabel ? ` · walk ${r.walkPaceLabel}` : ''}
+                  {r.sessionPaceLabel ? ` · sessie ${r.sessionPaceLabel}` : ''}
+                </div>
+                <span style={{ fontSize: 10, color: 'var(--ghost)' }}>{open ? '▲' : '▼'}</span>
+              </div>
+              {open && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginBottom: 5 }}>
+                    {r.segmentCount} blokken, {r.correctedCount} door jou gecorrigeerd.
+                    Tik op een blok om het om te zetten.
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {r.segments.map(seg => {
+                      const color = seg.kind === SEGMENT.RUN ? C.run
+                        : seg.kind === SEGMENT.WALK ? C.proj : 'var(--ghost)';
+                      const next = seg.kind === SEGMENT.RUN ? SEGMENT.WALK
+                        : seg.kind === SEGMENT.WALK ? SEGMENT.RUN : SEGMENT.RUN;
+                      return (
+                        <button key={seg.index}
+                          title={seg.reason}
+                          onClick={() => { correctSegment(r.workout.id, seg.index, next); setTick(t => t + 1); }}
+                          style={{ fontSize: 10, padding: '3px 7px', borderRadius: 6,
+                            border: `1px solid ${color}`, background: 'transparent',
+                            color, cursor: 'pointer', fontWeight: seg.corrected ? 800 : 600 }}>
+                          {seg.paceLabel || '?'}{seg.corrected ? ' ✎' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {r.note && (
+                    <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginTop: 6 }}>{r.note}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 8,
+          paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+          Blokken worden automatisch als lopen of wandelen geclassificeerd op tempo en hartslag.
+          Klopt er een niet, tik hem dan om — je correctie blijft bewaard en telt mee in je
+          looptempo.
         </div>
       </div>
     </>
@@ -660,15 +817,28 @@ function NextSessionForecastCard({ log, logs, currentDate }) {
         {row('Doelhartslag', `${f.targetHR.low}–${f.targetHR.high} bpm, wandelen boven ${f.targetHR.hardLimit}`)}
         {row('Verwachte gem. hartslag', f.expectedHR
           ? `${Math.round(f.expectedHR.low)}–${Math.round(f.expectedHR.high)} bpm` : '–')}
-        {row('Tempo loopblokken', f.runBlockPace
-          ? `${fmtPace(f.runBlockPace.low)}–${fmtPace(f.runBlockPace.high)}/km` : 'niet te splitsen')}
-        {row('Tempo hele sessie', f.sessionPace
-          ? `${fmtPace(f.sessionPace.low)}–${fmtPace(f.sessionPace.high)}/km` : '–')}
+        {/* Drie tempo's, uitdrukkelijk apart. Session pace telt de
+            wandelblokken mee en is dus niet je hardloopsnelheid. */}
+        {row('Run pace — loopblokken', f.paces?.runPace
+          ? `${fmtPace(f.paces.runPace.low)}–${fmtPace(f.paces.runPace.high)}/km`
+          : f.runBlockPace
+            ? `${fmtPace(f.runBlockPace.low)}–${fmtPace(f.runBlockPace.high)}/km`
+            : 'nog niet af te leiden')}
+        {row('Walk pace — wandelblokken', f.paces?.walkPace
+          ? `${fmtPace(f.paces.walkPace.low)}–${fmtPace(f.paces.walkPace.high)}/km` : '–')}
+        {row('Session pace — hele sessie', f.paces?.sessionPace
+          ? `${fmtPace(f.paces.sessionPace.low)}–${fmtPace(f.paces.sessionPace.high)}/km`
+          : f.sessionPace
+            ? `${fmtPace(f.sessionPace.low)}–${fmtPace(f.sessionPace.high)}/km` : '–')}
         {row('Verwachte RPE', f.expectedRPE ? `${f.expectedRPE.low}–${f.expectedRPE.high}/10` : '–')}
 
-        {f.runBlockNote && (
-          <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 6 }}>
-            {f.runBlockNote}
+        <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 6 }}>
+          {f.paces?.sessionPaceWarning || 'Het sessietempo telt de wandelblokken mee en is dus lager dan je hardloopsnelheid.'}
+          {f.paces?.caveat ? ` ${f.paces.caveat}` : ''}
+        </div>
+        {f.paces?.missing?.length > 0 && (
+          <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 4 }}>
+            Wat nog ontbreekt: {f.paces.missing.join(' · ')}.
           </div>
         )}
 
@@ -727,6 +897,8 @@ export default function RunForecastPanel({ log, logs, currentDate }) {
       <GateCard log={log} logs={logs} currentDate={currentDate} />
       <NextSessionForecastCard log={log} logs={logs} currentDate={currentDate} />
       <CalendarStrip logs={logs} currentDate={currentDate} />
+      <RunEconomyCard logs={logs} currentDate={currentDate} />
+      <SegmentCard logs={logs} currentDate={currentDate} />
       <PaceAtHRChart logs={logs} currentDate={currentDate} />
       <ExpectedVsActual logs={logs} currentDate={currentDate} />
       <WeeklyLoadChart logs={logs} currentDate={currentDate} />

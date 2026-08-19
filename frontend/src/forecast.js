@@ -18,6 +18,7 @@ import {
 } from './workouts';
 import { loadHrSettings } from './goals';
 import { longestToleratedRun, addDays } from './restday';
+import { pacePrediction } from './pace';
 
 // Wandeltempo uit het schema (6:30–7:00 /km). Wordt overschreven zodra er
 // echte wandelsessies geregistreerd zijn.
@@ -275,11 +276,16 @@ export function nextSessionForecast({ run, logs = {}, currentDate, gate = null }
     };
   })();
 
+  // De drie tempo's apart. Session pace is nadrukkelijk niet haar
+  // hardloopsnelheid en wordt daarom nooit als zodanig gepresenteerd.
+  const paceModel = pacePrediction({ run, currentDate });
+
   return {
     available: true,
     deferred,
     earliestDate: gate?.earliestRunDate || currentDate,
     run, split, walkPace,
+    paces: paceModel,
     duration,
     distanceKm: distRange,
     targetHR: { low: hr.easyLow, high: hr.easyHigh, hardLimit: hr.walkTrigger },

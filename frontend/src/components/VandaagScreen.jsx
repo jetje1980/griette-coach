@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { computeHeadCoach, computeNextSession } from './CoachAdvice';
 import { nextSessionForecast } from '../forecast';
 import StrengthToday from './StrengthToday';
+import LeverageCard from './LeverageCard';
+import AlivenessCard from './AlivenessCard';
+import { strengthDecision } from '../strengthGate';
 import { photoStore } from '../photoStore';
 import { dueCheckpoint, checkpointPrompt } from '../bodyProgress';
 import { fmtPace } from '../workouts';
@@ -854,6 +857,21 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
 
       {/* 2. Wat nu? */}
       <WatNuCard watNu={watNu} />
+
+      {/* 2b. De grootste hefboom van vandaag — waarom juist dit.
+             Bewust ná Wat Nu: dat blijft de enige echte volgende actie. */}
+      {!isFuture && hasData && (
+        <LeverageCard log={log} logs={logs} currentDate={currentDate}
+          coach={coach} runGate={coach?.gate}
+          strengthGate={strengthDecision({ log: log || {}, logs, currentDate,
+            runGate: coach?.gate, coach })} />
+      )}
+
+      {/* 2c. Eén klein stukje van het leven dat je wilt, vandaag al. */}
+      {!isFuture && hasData && (
+        <AlivenessCard log={log} logs={logs} currentDate={currentDate}
+          coach={coach} state={log?.adhd_state} />
+      )}
 
       {/* 3. Top 3 */}
       {!isFuture && (

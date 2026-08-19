@@ -48,6 +48,9 @@ export const strava = {
   // Meest recente activiteit met details, laps/splits en streams —
   // gebruikt om de koppeling aantoonbaar te testen.
   async latest() { return call('coach-strava', '/latest'); },
+  // Ronden en splits van één activiteit. Alleen op verzoek, want elke
+  // aanroep telt mee voor de Strava-limieten.
+  async detail(id) { return call('coach-strava', `/detail?id=${encodeURIComponent(id)}`); },
   async sync() { return call('coach-strava', '/sync', { method: 'POST' }); },
   async disconnect() { return call('coach-strava', '/disconnect', { method: 'POST' }); },
 };
