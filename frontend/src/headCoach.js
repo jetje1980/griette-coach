@@ -69,6 +69,19 @@ export function headCoachDecision({
 
   const trained = !!(log.run_done || log.strength_done || log.core_done);
 
+  // ── De statuskleur mag de poorten niet tegenspreken ───────────
+  // De dagkleur komt uit slaap, energie en symptomen van vandaag. Maar als
+  // de respons op de vorige sessie afwijkend was, kan de dag niet groen
+  // heten terwijl er volledige rust uit rolt. Anders leest ze een groene
+  // balk boven een rustadvies — precies het signaal dat ze in 2024 negeerde.
+  const forcedRest = runGate?.action === 'FULL_REST' || strength?.action === 'FULL_REST';
+  const status = (() => {
+    if (!forcedRest || coach.decision === 'RED' || coach.decision === 'BLUE') {
+      return { decision: coach.decision, word: coach.label, color: coach.color, emoji: coach.emoji };
+    }
+    return { decision: 'BLUE', word: 'Herstel', color: 'var(--blue, var(--gold))', emoji: '🛌' };
+  })();
+
   // ── BOTTLENECK ────────────────────────────────────────────────
   // De hefboom-engine bepaalt wat er op dit moment het meest in de weg
   // staat, over alle actieve doelen heen.
@@ -144,10 +157,7 @@ export function headCoachDecision({
 
   return {
     // De zes dingen die Vandaag mag tonen
-    status: {
-      decision: coach.decision, word: coach.label, color: coach.color,
-      emoji: coach.emoji, sub: statusSub(coach.decision, runGate, strength),
-    },
+    status: { ...status, sub: statusSub(status.decision, runGate, strength) },
     action: decision,
     priorities,
     protect,
