@@ -27,8 +27,11 @@ async function call(name, path = '', { method = 'GET', body = null } = {}) {
 }
 
 // ── Strava ──────────────────────────────────────────────────────
+// Coach leest alleen; er wordt nooit activity:write aangevraagd.
+export const STRAVA_REQUIRED_SCOPES = ['read', 'activity:read_all'];
+
 export const strava = {
-  // { connected, configured, reachable, athlete } — of unreachable
+  // { connected, configured, reachable, athlete, scopes, missingScopes, scopeOk }
   async status() {
     const r = await call('coach-strava', '/status');
     if (r.unreachable) return { connected: false, configured: false, reachable: false };
@@ -42,6 +45,9 @@ export const strava = {
     const r = await call('coach-strava', '/activities');
     return Array.isArray(r) ? r : [];
   },
+  // Meest recente activiteit met details, laps/splits en streams —
+  // gebruikt om de koppeling aantoonbaar te testen.
+  async latest() { return call('coach-strava', '/latest'); },
   async sync() { return call('coach-strava', '/sync', { method: 'POST' }); },
   async disconnect() { return call('coach-strava', '/disconnect', { method: 'POST' }); },
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { strava, trello, getTrelloConfig, saveTrelloConfig } from '../integrations';
+import { strava, trello, getTrelloConfig, saveTrelloConfig, STRAVA_REQUIRED_SCOPES } from '../integrations';
 
 // Overzicht van externe koppelingen. Elke status komt van een echte
 // serveraanroep — er wordt nooit "gekoppeld" getoond zonder bevestiging.
@@ -35,6 +35,21 @@ export default function Integrations() {
   const [lists, setLists] = useState([]);
   const [cfg, setCfg] = useState(getTrelloConfig);
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [latest, setLatest] = useState(null);
+  const [testError, setTestError] = useState('');
+
+  // Echte test: haalt de meest recente activiteit op met details en streams.
+  async function testLatest() {
+    setTesting(true); setTestError(''); setLatest(null);
+    try {
+      const r = await strava.latest();
+      if (r?.error) setTestError(r.error);
+      else if (!r?.activity) setTestError('Geen activiteiten gevonden in je Strava-account');
+      else setLatest(r.activity);
+    } catch (e) { setTestError(e.message); }
+    finally { setTesting(false); }
+  }
 
   useEffect(() => {
     strava.status().then(setStravaStatus).catch(() => setStravaStatus({ reachable: false }));
@@ -86,21 +101,102 @@ export default function Integrations() {
           </div>
           {sState === 'connected' && (
             <>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
-                Gekoppeld{stravaStatus.athlete ? ` als ${stravaStatus.athlete}` : ''}. Activiteiten
-                worden zonder duplicaten geïmporteerd.
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', marginBottom: 4 }}>
+                ✓ Verbonden{stravaStatus.athlete ? ` als ${stravaStatus.athlete}` : ''}
               </div>
-              <button className="os-toggle-chip" style={{ fontSize: 12 }}
-                onClick={() => strava.disconnect().then(() => strava.status().then(setStravaStatus))}>
-                Ontkoppelen
-              </button>
+
+              {/* Werkelijk verleende scopes — niet wat we vroegen, maar wat Strava gaf */}
+              <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>
+                Verleende toegang
+              </div>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+                {(stravaStatus.scopes || []).length === 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--ghost)' }}>onbekend</span>
+                )}
+                {(stravaStatus.scopes || []).map(sc => (
+                  <span key={sc} style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px',
+                    borderRadius: 99, color: 'var(--green)', border: '1px solid var(--green)' }}>
+                    {sc}
+                  </span>
+                ))}
+                {(stravaStatus.missingScopes || []).map(sc => (
+                  <span key={sc} style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px',
+                    borderRadius: 99, color: 'var(--rust)', border: '1px solid var(--rust)' }}>
+                    {sc} ontbreekt
+                  </span>
+                ))}
+              </div>
+
+              {stravaStatus.scopeOk === false && (
+                <div style={{ background: 'rgba(179,94,69,0.08)', border: '1px solid var(--rust)',
+                  borderRadius: 8, padding: '9px 11px', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--rust)', marginBottom: 3 }}>
+                    Te weinig toegang voor hartslag en splits
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5, marginBottom: 8 }}>
+                    Coach heeft {STRAVA_REQUIRED_SCOPES.join(' + ')} nodig. Autoriseer opnieuw
+                    en vink bij Strava de toegang tot je activiteiten aan.
+                  </div>
+                  <button className="btn btn-rust" style={{ background: '#FC4C02' }}
+                    onClick={connectStrava} disabled={busy}>
+                    Opnieuw autoriseren
+                  </button>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button className="os-toggle-chip" style={{ fontSize: 12 }}
+                  onClick={testLatest} disabled={testing}>
+                  {testing ? 'Ophalen…' : 'Test: laatste activiteit'}
+                </button>
+                <button className="os-toggle-chip" style={{ fontSize: 12 }}
+                  onClick={connectStrava} disabled={busy}>Opnieuw autoriseren</button>
+                <button className="os-toggle-chip" style={{ fontSize: 12 }}
+                  onClick={() => strava.disconnect().then(() => strava.status().then(setStravaStatus))}>
+                  Ontkoppelen
+                </button>
+              </div>
+
+              {testError && (
+                <div style={{ fontSize: 11.5, color: 'var(--rust)', fontWeight: 600,
+                  marginTop: 8, lineHeight: 1.4 }}>{testError}</div>
+              )}
+
+              {latest && (
+                <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--bg)',
+                  border: '1px solid var(--border)', borderRadius: 8 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>
+                    {latest.name} — {latest.type}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.7 }}>
+                    <div>Datum: {latest.date}</div>
+                    {latest.distanceKm != null && <div>Afstand: {latest.distanceKm} km</div>}
+                    {latest.movingTime && <div>Duur: {latest.movingTime} (bewegend)</div>}
+                    {latest.pacePerKm && <div>Pace: {latest.pacePerKm} /km</div>}
+                    {latest.averageHr != null
+                      ? <div>HR: gem. {Math.round(latest.averageHr)} · max {latest.maxHr} bpm</div>
+                      : <div style={{ color: 'var(--ghost)' }}>HR: niet beschikbaar in deze activiteit</div>}
+                    {latest.laps?.length > 0 && <div>Laps: {latest.laps.length}</div>}
+                    {latest.splits?.length > 0 && <div>Splits: {latest.splits.length} × 1 km</div>}
+                    {latest.streamsAvailable?.length > 0 && (
+                      <div>Streams: {latest.streamsAvailable.join(', ')}</div>
+                    )}
+                  </div>
+                  <a href={latest.url} target="_blank" rel="noreferrer"
+                    style={{ fontSize: 11, color: 'var(--sage)', fontWeight: 600,
+                      display: 'inline-block', marginTop: 6 }}>
+                    Bekijk op Strava →
+                  </a>
+                </div>
+              )}
             </>
           )}
           {sState === 'configured' && (
             <>
               <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.5 }}>
-                De serverfunctie draait. Koppel je Strava-account om activiteiten
-                automatisch te importeren.
+                De serverfunctie draait. Coach vraagt <strong>{STRAVA_REQUIRED_SCOPES.join(' + ')}</strong> —
+                genoeg om hartslag en splits te lezen, en bewust géén schrijfrechten.
               </div>
               <button className="btn btn-rust" style={{ background: '#FC4C02' }}
                 onClick={connectStrava} disabled={busy}>
