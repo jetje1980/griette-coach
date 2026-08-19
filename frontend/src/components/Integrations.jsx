@@ -105,6 +105,18 @@ export default function Integrations() {
                 ✓ Verbonden{stravaStatus.athlete ? ` als ${stravaStatus.athlete}` : ''}
               </div>
 
+              {/* Automatische sync draait elk uur server-side */}
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.5 }}>
+                🔄 Automatisch ophalen staat aan — elk uur.
+                {stravaStatus.autoSyncAt && (
+                  <> Laatste keer: {new Date(stravaStatus.autoSyncAt).toLocaleString('nl-NL',
+                    { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.</>
+                )}
+                {stravaStatus.importedCount != null && (
+                  <> {stravaStatus.importedCount} activiteiten opgehaald.</>
+                )}
+              </div>
+
               {/* Werkelijk verleende scopes — niet wat we vroegen, maar wat Strava gaf */}
               <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 700,
                 textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>
