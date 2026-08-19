@@ -34,6 +34,10 @@ export const DEFAULT_RUN_DAYS_PER_WEEK = 3;
 // niets anders tegelijk omhoog gaat.
 export const MAX_WEEKLY_VOLUME_GROWTH = 0.10;
 
+// ...maar alleen als de sprong ook in absolute zin iets voorstelt. Onder
+// deze grens is het verschil kleiner dan de variatie tussen twee sessies.
+export const MIN_MEANINGFUL_GROWTH_MIN = 10;
+
 // ── Datumhulp ───────────────────────────────────────────────────
 export function addDays(dateStr, n) {
   const d = new Date(dateStr + 'T12:00:00');
@@ -329,7 +333,12 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
   // ── 4. Weekvolume ─────────────────────────────────────────────
   if (action === 'RUN_TODAY' && load.baselineRunMinPerWeek) {
     const cap = load.baselineRunMinPerWeek * (1 + MAX_WEEKLY_VOLUME_GROWTH);
-    if (load.runMin7 >= cap) {
+    // Een tiende van een klein getal is geen prikkel maar ruis. Bij 21
+    // minuten basis is 10% nog geen twee en een halve minuut; daarop de
+    // week sluiten zou opbouw onmogelijk maken zonder ook maar iets over
+    // belastbaarheid te zeggen. Boven de relatieve grens moet er dus ook
+    // een absolute sprong zitten voordat dit een blokkade wordt.
+    if (load.runMin7 >= cap && load.runMin7 - load.baselineRunMinPerWeek >= MIN_MEANINGFUL_GROWTH_MIN) {
       action = 'ACTIVE_RECOVERY';
       blockers.push(`${load.runMin7} min gelopen deze week tegen een basis van ${load.baselineRunMinPerWeek} min — meer dan 10% groei`);
       earliestRunDate = addDays(currentDate, 2);

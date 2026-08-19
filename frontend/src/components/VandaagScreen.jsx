@@ -185,12 +185,13 @@ function computeWatNu({ log, coach, nextSession, currentDate, hasData }) {
 
   // Training als die vandaag past en nog niet gedaan is
   if (!trained && (decision === 'GREEN' || decision === 'AMBER') && hour < 19) {
-    const label = nextSession?.run ? `T${nextSession.nr}` : 'je sessie';
+    const label = nextSession?.purposeLabel || (nextSession?.run ? `T${nextSession.nr}` : 'je sessie');
     return {
       emoji: decision === 'GREEN' ? '🏃' : '🚶',
       action: decision === 'GREEN' ? `Training ${label} doen` : 'Aangepaste sessie of wandeling',
       context: nextSession?.run
-        ? `${nextSession.run.description} · ${nextSession.run.duration} min`
+        ? `${nextSession.run.description} · ${nextSession.run.duration} min` +
+          (nextSession.run.tempo ? ` · ${nextSession.run.tempo.replace('Looptempo: ', '')}` : '')
         : 'Lichte beweging helpt je herstel vandaag.',
       color: decision === 'GREEN' ? 'var(--sage)' : 'var(--gold)',
     };
@@ -308,7 +309,7 @@ function DecisionCockpit({ coach, nextSession, hasData, isFuture }) {
     : nextSession?.state === 'SWAP'
       ? 'Wandelen of zwemmen — geen hardlopen'
       : nextSession?.run
-        ? `T${nextSession.nr} — ${nextSession.run.description}`
+        ? `${nextSession.purposeLabel || `T${nextSession.nr}`} — ${nextSession.run.description}`
         : coach.trainingDesc;
 
   return (

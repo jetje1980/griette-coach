@@ -96,7 +96,7 @@ export function headCoachDecision({
 
   if (runGate?.action === 'RUN_TODAY' && nextSession?.run) {
     claims.push({ id: 'run', priority: PRIORITY.TRAINING, wants: 'hardlopen',
-      label: `T${nextSession.nr} — ${nextSession.run.description}`,
+      label: `${nextSession.purposeLabel || 'Loopsessie'} — ${nextSession.run.description}`,
       minutes: nextSession.run.duration });
   } else if (runGate) {
     claims.push({ id: 'run', priority: runGate.action === 'FULL_REST' ? PRIORITY.MEDICAL
@@ -233,11 +233,17 @@ function resolveAction({
   if (!trained && hour < 20) {
     if (runGate?.action === 'RUN_TODAY' && nextSession?.run) {
       return mk({
-        emoji: '🏃', headline: `T${nextSession.nr} — ${nextSession.run.description}`,
-        detail: `${nextSession.run.duration} min · ${nextSession.run.hrZone}`,
+        emoji: '🏃',
+        headline: `${nextSession.purposeLabel || 'Loopsessie'} — ${nextSession.run.description}`,
+        detail: `${nextSession.run.duration} min · ${nextSession.run.tempo || nextSession.run.hrZone}`,
         minutes: nextSession.run.duration, source: 'run', priority: PRIORITY.TRAINING,
-        why: [runGate.released?.[0] || 'Lopen is vrijgegeven.',
-          'Hartslag is de instructie, tempo is de uitkomst.'],
+        // Waaróm deze sessie staat vooraan: dat is de koppeling met het
+        // racedoel, en die is belangrijker dan de mededeling dat lopen mag.
+        why: [
+          nextSession.why,
+          runGate.released?.[0] || 'Lopen is vrijgegeven.',
+          'Hartslag is de instructie, tempo is de uitkomst.',
+        ].filter(Boolean),
       });
     }
     if (strength?.mayTrain && strength.recommendedClass) {

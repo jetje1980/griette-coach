@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { USER } from '../config';
 import { RUNS } from '../data/runningSchema';
+import { planNextSession, PURPOSE } from '../raceplan';
 import { lastRunWorkout, workoutWasHeavy, toleranceFor, workoutsForSession } from '../workouts';
 import { restDayDecision } from '../restday';
 import { todayLocal, addDays } from '../datetime';
@@ -311,7 +312,7 @@ export function computeHeadCoach(log, logs, currentDate) {
   const whyFinal = why.slice(0, 4);
 
   const ADAPTIVE_META = {
-    BUILD:  { emoji: '📈', label: 'Bouwen',      desc: 'Je bent klaar voor de volgende sessie in het schema.' },
+    BUILD:  { emoji: '📈', label: 'Bouwen',      desc: 'Je bent klaar voor de volgende stap in de opbouw.' },
     HOLD:   { emoji: '⏸',  label: 'Houd tempo',  desc: 'Herhaal de huidige sessie — lichaam is nog niet klaar om te stappen.' },
     REPEAT: { emoji: '🔄', label: 'Herhalen',    desc: 'Doe de vorige sessie opnieuw — de vorige keer was te zwaar.' },
     DELOAD: { emoji: '📉', label: 'Terugschalen', desc: 'Vermoeidheid vraagt een stap terug — dit is goed herstelbeleid.' },
@@ -396,9 +397,14 @@ export function computeNextSession(log, logs, currentDate) {
   // vooruitblik verdwijnt de forecast op elke rustdag uit beeld.
   if (gated) {
     const g = coach.gate;
+    // De sessie die straks vrijkomt, ook al mag hij vandaag niet.
+    const preview = planNextSession({ log, logs, currentDate, gate: g, ignoreGate: true });
     return {
       state, nr: null, run: null, adaptive: coach.adaptive,
-      previewNr: nr, previewRun: RUNS[nr - 1],
+      purpose: preview.purpose, purposeLabel: PURPOSE[preview.purpose]?.label || null,
+      race: preview.race, targetPace: preview.targetPace, why: preview.why,
+      timeline: preview.timeline, planInputs: preview.inputs,
+      previewNr: nr, previewRun: preview.run || RUNS[nr - 1],
       gate: g, action: g.action,
       note: g.blockers[0] || g.headline,
       releasedBy: g.released,
@@ -407,9 +413,20 @@ export function computeNextSession(log, logs, currentDate) {
     };
   }
 
+  // De sessie zelf komt uit de doelgestuurde planner: racedatum bepaalt het
+  // doel, belastbaarheid de zwaarte. Het schemanummer blijft alleen bestaan
+  // als koppeling naar je historie — het bepaalt niet meer wát je traint.
+  const plan = planNextSession({ log, logs, currentDate, gate: coach.gate });
+  const run = plan.run || RUNS[nr - 1];
+
   return {
-    state, nr, run: RUNS[nr - 1], adaptive: coach.adaptive, note,
-    previewNr: nr, previewRun: RUNS[nr - 1],
+    state, nr, run, adaptive: coach.adaptive,
+    note: plan.why || note,
+    purpose: plan.purpose, purposeLabel: PURPOSE[plan.purpose]?.label || null,
+    race: plan.race, targetPace: plan.targetPace, why: plan.why,
+    mayBuild: plan.mayBuild, derivedFrom: plan.derivedFrom,
+    timeline: plan.timeline, planInputs: plan.inputs, levers: plan.levers,
+    previewNr: nr, previewRun: run,
     gate: coach.gate, action: 'RUN_TODAY',
     releasedBy: coach.gate?.released || [],
     earliestRunDate: currentDate,

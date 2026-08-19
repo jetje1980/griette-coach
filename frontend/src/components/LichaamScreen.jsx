@@ -1040,8 +1040,18 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
             <div style={{ fontSize: 26 }}>{nextSession.state === 'SWAP' ? '🔀' : '🏃'}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
-                {nextSession.state === 'SWAP' ? 'Vandaag — wissel sport' : `Volgende sessie — T${nextRunNr}/35`}
+                {nextSession.state === 'SWAP' ? 'Vandaag — wissel sport'
+                  : nextSession.purposeLabel
+                    ? `Volgende sessie — ${nextSession.purposeLabel}`
+                    : `Volgende sessie — T${nextRunNr}/35`}
               </div>
+              {nextSession.race && (
+                <div style={{ fontSize: 10.5, color: 'var(--sage)', fontWeight: 700,
+                  marginBottom: 4 }}>
+                  richting {nextSession.race.distanceKm} km · {nextSession.race.targetMinutes}:00
+                  {nextSession.race.daysOut != null ? ` · nog ${nextSession.race.daysOut} dagen` : ''}
+                </div>
+              )}
               {nextSession.run ? (
                 <>
                   <div style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
@@ -1050,9 +1060,21 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
                   <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.4 }}>
                     {nextSession.run.goal}
                   </div>
+                  {nextSession.run.tempo && (
+                    <div style={{ fontSize: 12.5, color: 'var(--text)', marginTop: 5,
+                      fontWeight: 600 }}>
+                      {nextSession.run.tempo}
+                    </div>
+                  )}
                   <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 4 }}>
                     {nextSession.run.duration} min · {nextSession.run.hrZone}
                   </div>
+                  {nextSession.run.hrTip && (
+                    <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 4,
+                      lineHeight: 1.45 }}>
+                      {nextSession.run.hrTip}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.5 }}>
