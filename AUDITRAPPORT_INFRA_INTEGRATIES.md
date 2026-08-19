@@ -14,7 +14,7 @@ Deze ronde ging over productie-infrastructuur: authenticatie, gebruikersisolatie
 
 Opgelost: PK naar `(user_id, key)` na geverifieerde backup (73 rijen, identieke hash voor en na). Een expliciete AuthGate met eigen sessieopslag. Eén gedeelde Supabase-client in plaats van drie. Sync herschreven zodat de cloud leidend is en mislukte schrijfacties in een zichtbare wachtrij blijven staan. Dream Board-afbeeldingen en workout-screenshots gaan nu naar private opslag met readback-verificatie. De directe browser-AI-route met `dangerous-direct-browser-access` is verwijderd (0 hits in de bundle) en vervangen door een JWT-geverifieerde Edge Function. Drie Edge Functions live: `coach-ai`, `coach-strava`, `coach-trello`.
 
-Strava is inmiddels end-to-end geverifieerd (19 aug): OAuth voltooid met scopes `read,activity:read_all`, 30 activiteiten geimporteerd inclusief hartslag, server-side token-refresh aantoonbaar uitgevoerd en duplicaatpreventie getest. Trello is volledig gebouwd maar wacht nog op API-sleutels die alleen de eigenaar veilig kan zetten; zonder die secrets meldt de UI eerlijk "sleutels ontbreken".
+Strava is inmiddels end-to-end geverifieerd (19 aug): OAuth voltooid met scopes `read,activity:read_all`, 30 activiteiten geimporteerd inclusief hartslag, server-side token-refresh aantoonbaar uitgevoerd en duplicaatpreventie getest. Trello is volledig gebouwd; de API-key op de server is geldig, maar het opgeslagen token hoort bij een andere key — Trello antwoordt daarom `invalid key`. Vernieuwen kan sinds 19 aug vanuit de app zelf (Instellingen → Integraties → Trello, twee stappen); zie §22 stap 3.
 
 **ALGEMENE STATUS: PARTIAL** — privacy, auth, RLS en Strava zijn PASS; alleen Trello staat nog op AWAITING USER ACTION.
 
@@ -355,7 +355,7 @@ Uitgevoerd achter de AuthGate met een gesimuleerde sessie (netwerk geblokkeerd i
 
 | Item | Severity | Impact | Volgende stap |
 |---|---|---|---|
-| Trello-secrets niet gezet | P2 | Capture → Trello niet bruikbaar | §22, stap 3 |
+| Trello-token hoort bij een andere API-key | P2 | Capture → Trello niet bruikbaar tot het token vernieuwd is; key zelf is geldig | §22, stap 3 |
 | Cross-device niet echt getest | P2 | Onbekend of hydratatie in de praktijk vlekkeloos gaat | Zelf twee toestellen testen |
 | 6 oude foto's op legacy pad | P3 | Geen (blijven leesbaar en privé) | Optioneel migreren met copy→verify→delete |
 | Foto-analyses local-only | P3 | Verlies bij cache-clear | Naar `gc_coach_data` of eigen tabel |
@@ -409,12 +409,23 @@ Open https://jetje1980.github.io/griette-coach/ en log in met `griette@yahoo.com
 Deel de Client Secret met niemand, ook niet in een chat.
 
 ### Stap 3 — Trello aanzetten
-1. Ga naar **https://trello.com/power-ups/admin** → nieuwe Power-Up, of gebruik **https://trello.com/app-key** voor je API-key.
-2. Genereer een **Token** via de link op die pagina (rechten: read/write).
-3. Zet in **Supabase → Edge Functions → Secrets**:
-   - `TRELLO_API_KEY` = je API-key
-   - `TRELLO_TOKEN` = je token
-4. Open in Coach **Instellingen → Integraties** en kies je board en backlog-lijst.
+
+*Bijgewerkt 19 aug.* De API-key stáát goed en is los getoetst: geldig. Het
+opgeslagen token hoort alleen bij een **andere** API-key, waardoor Trello
+`invalid key` terugstuurt. Alleen het token moet dus vernieuwd worden, en dat kan
+nu vanuit de app zelf — je hoeft niet meer in het Supabase-dashboard te zijn.
+
+1. Open in Coach **Instellingen → Integraties → Trello**.
+2. Klik **Stap 1 — Trello autoriseren**. De link wordt server-side gebouwd, dus de
+   API-key komt niet in de app terecht. Geef toestemming aan "Griette Coach".
+3. Trello toont daarna een lange code. Plak die in het veld en klik
+   **Stap 2 — Opslaan**. De server toetst de code eerst bij Trello en bewaart hem
+   pas als hij werkt, in `app_secrets` — niet in je browser.
+4. Kies daarna je board en backlog-lijst. `Griette prive` en de lijst `backlog`
+   staan al voorgeselecteerd.
+
+Het token uit de database wint van het token in de omgeving, dus het oude,
+verkeerde secret hoeft niet eens verwijderd te worden.
 
 ### Optioneel — wachtwoordbescherming
 **Supabase → Authentication → Policies → Password protection** aanzetten (controleert tegen bekende gelekte wachtwoorden).
