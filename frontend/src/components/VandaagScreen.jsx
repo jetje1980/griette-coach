@@ -1,5 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { computeHeadCoach, computeNextSession } from './CoachAdvice';
+import { nextSessionForecast } from '../forecast';
+import { fmtPace } from '../workouts';
 import RecoveryCheck from './RecoveryCheck';
 import CaptureCenter from './CaptureCenter';
 import { USER } from '../config';
@@ -154,6 +156,25 @@ function computeWatNu({ log, coach, nextSession, currentDate, hasData }) {
       context: `"${followUp.title}" — je wilde hier vandaag op terugkomen.`, color: 'var(--gold)' };
   }
 
+  // De rustdagpoort gaat vóór het trainingsadvies: zonder dit blok bleef
+  // "Wat nu?" een run voorstellen terwijl de coach net rust voorschreef.
+  const gate = coach?.gate;
+  if (!trained && gate && gate.action !== 'RUN_TODAY' && hour < 21) {
+    const COLOR = {
+      STRENGTH_TODAY: '#7A5AA8', ACTIVE_RECOVERY: 'var(--blue)',
+      FULL_REST: 'var(--rust)', WAIT_FOR_RESPONSE: 'var(--gold)',
+    };
+    return {
+      emoji: gate.emoji,
+      action: gate.action === 'STRENGTH_TODAY' ? 'Krachttraining in plaats van lopen'
+        : gate.action === 'ACTIVE_RECOVERY' ? 'Wandelen — geen trainingsprikkel'
+        : gate.action === 'WAIT_FOR_RESPONSE' ? 'Beantwoord eerst je herstelcheck'
+        : 'Rust is vandaag de training',
+      context: gate.blockers[0] || gate.headline,
+      color: COLOR[gate.action] || 'var(--blue)',
+    };
+  }
+
   // Training als die vandaag past en nog niet gedaan is
   if (!trained && (decision === 'GREEN' || decision === 'AMBER') && hour < 19) {
     const label = nextSession?.run ? `T${nextSession.nr}` : 'je sessie';
@@ -269,16 +290,36 @@ function DecisionCockpit({ coach, nextSession, hasData, isFuture }) {
     );
   }
 
-  const actie = nextSession?.state === 'SWAP'
-    ? 'Wandelen of zwemmen — geen hardlopen'
-    : nextSession?.run
-      ? `T${nextSession.nr} — ${nextSession.run.description}`
-      : coach.trainingDesc;
+  // De rustdagpoort gaat vóór de sessiekeuze: staat lopen op slot, dan is
+  // dát het besluit van vandaag — niet de sessie die het schema klaar had.
+  const gate = coach.gate;
+  const gated = gate && gate.action !== 'RUN_TODAY';
+
+  const actie = gated
+    ? `${gate.emoji} ${gate.label}`
+    : nextSession?.state === 'SWAP'
+      ? 'Wandelen of zwemmen — geen hardlopen'
+      : nextSession?.run
+        ? `T${nextSession.nr} — ${nextSession.run.description}`
+        : coach.trainingDesc;
 
   return (
     <div className={`os-card os-verdict ${v.cls}`} style={{ marginBottom: 10 }}>
-      <div className="os-v-status">{v.word} — {v.sub}</div>
+      {/* De kleur beschrijft je toestand; bij een gesloten poort mag de
+          ondertitel niet alsnog "klaar voor training" beloven. */}
+      <div className="os-v-status">
+        {v.word} — {gated ? 'trainen staat op slot' : v.sub}
+      </div>
       <div className="os-v-head">{actie}</div>
+
+      {gated && (
+        <div style={{ fontSize: 12.5, color: 'var(--sub)', lineHeight: 1.45, marginBottom: 8 }}>
+          {gate.headline}
+          {gate.daysUntilRun > 0 && (
+            <> Volgende loopmoment op zijn vroegst <strong>{gate.earliestRunDate.slice(5)}</strong>.</>
+          )}
+        </div>
+      )}
 
       {coach.adaptive && (
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -303,6 +344,65 @@ function DecisionCockpit({ coach, nextSession, hasData, isFuture }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── 1b. Kleine forecast — Vandaag blijft compact ────────────────
+// Alleen de vier getallen die je vóór het vertrek wilt weten, plus hoe
+// zeker ze zijn. De volledige onderbouwing staat onder Progressie → Run.
+function ForecastMini({ log, logs, currentDate, coach, nextSession }) {
+  const f = useMemo(
+    () => nextSessionForecast({
+      run: nextSession?.run || nextSession?.previewRun,
+      logs, currentDate, gate: coach?.gate,
+    }),
+    [logs, currentDate, nextSession?.run?.nr, nextSession?.previewRun?.nr, coach?.gate?.action]);
+
+  if (!f.available) return null;
+
+  const CONF = {
+    HIGH: { label: 'hoog', color: 'var(--green)' },
+    MEDIUM: { label: 'gemiddeld', color: 'var(--gold)' },
+    LOW: { label: 'laag', color: 'var(--ghost)' },
+  }[f.confidence];
+
+  const cell = (label, value) => (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 9.5, color: 'var(--ghost)', fontWeight: 700,
+        textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+    </div>
+  );
+
+  return (
+    <div className="os-card" style={{ marginBottom: 10, padding: '10px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
+          textTransform: 'uppercase', letterSpacing: '0.5px', flex: 1 }}>
+          {f.deferred
+            ? `Verwachting — T${f.run.nr}, vanaf ${f.earliestDate.slice(5)}`
+            : 'Verwachting deze sessie'}
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 700, color: CONF.color,
+          border: `1px solid ${CONF.color}`, borderRadius: 99, padding: '1px 7px' }}>
+          {CONF.label}
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(74px, 1fr))', gap: 10 }}>
+        {cell('Duur', f.duration ? `${f.duration} min` : '–')}
+        {cell('Afstand', f.distanceKm ? `${f.distanceKm.low}–${f.distanceKm.high} km` : '–')}
+        {cell('Tempo', f.sessionPace ? `${fmtPace(f.sessionPace.low)}–${fmtPace(f.sessionPace.high)}` : '–')}
+        {cell('Hartslag', f.expectedHR
+          ? `${Math.round(f.expectedHR.low)}–${Math.round(f.expectedHR.high)}`
+          : `${f.targetHR.low}–${f.targetHR.high}`)}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.45, marginTop: 8,
+        paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+        <strong>Advies:</strong> {f.safe.runToday
+          ? `hartslag ${f.targetHR.low}–${f.targetHR.high}, boven ${f.targetHR.hardLimit} wandelen. Het tempo hierboven is een verwachting, geen doel.`
+          : f.safe.detail}
+      </div>
     </div>
   );
 }
@@ -697,6 +797,10 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
 
       {/* 1. Decision Cockpit + performance strip */}
       <DecisionCockpit coach={coach} nextSession={nextSession} hasData={hasData} isFuture={isFuture} />
+      {!isFuture && hasData && (
+        <ForecastMini log={log} logs={logs} currentDate={currentDate}
+          coach={coach} nextSession={nextSession} />
+      )}
       {!isFuture && hasData && (
         <PerformanceStrip log={log} logs={logs} currentDate={currentDate} />
       )}

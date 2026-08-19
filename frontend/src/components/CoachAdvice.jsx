@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { USER } from '../config';
 import { RUNS } from '../data/runningSchema';
 import { lastRunWorkout, workoutWasHeavy, toleranceFor, workoutsForSession } from '../workouts';
+import { restDayDecision } from '../restday';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -273,6 +274,43 @@ export function computeHeadCoach(log, logs, currentDate) {
     }
   }
 
+  // ── Rustdag- en frequentiepoort ─────────────────────────────────────────
+  // Vóór dit blok kon elke groene ochtend opnieuw een run opleveren,
+  // ongeacht hoeveel er die week al gelopen was. De poort beantwoordt de
+  // vraag "mag er vandaag überhaupt gelopen worden?" en overrulet de
+  // sessiekeuze — een goede hersteldag is geen hardloopdag.
+  const gate = restDayDecision({
+    log: log || {}, logs, currentDate,
+    coach: { decision, adaptiveState },
+  });
+
+  if (gate.action !== 'RUN_TODAY') {
+    // De kleur blijft staan (die beschrijft je toestand), de voorgeschreven
+    // training niet — die volgt nu de poort.
+    sessionLabel = gate.label;
+    if (gate.action === 'STRENGTH_TODAY') {
+      trainingDesc = 'Krachttraining vandaag (programma A of B) — geen hardlopen. Lopen komt terug zodra de rustdag geteld is.';
+    } else if (gate.action === 'ACTIVE_RECOVERY') {
+      trainingDesc = 'Wandelen 20–30 min rustig + mobiliteit. Bewegen mag, belasten niet.';
+    } else if (gate.action === 'WAIT_FOR_RESPONSE') {
+      trainingDesc = 'Vul eerst je herstelcheck in over de vorige training. Tot die tijd geen nieuwe loopprikkel — het 24–48u-venster is de meetlat.';
+    } else if (gate.action === 'FULL_REST' && decision !== 'RED') {
+      trainingDesc = 'Vandaag geen training. Rust is hier de trainingsprikkel.';
+    }
+    // Bullets die een training aanmoedigen zijn nu misleidend — die
+    // gingen over je ochtendsignalen, niet over de vraag of lopen mag.
+    for (let i = why.length - 1; i >= 0; i--) {
+      if (/geplande (training|sessie)|klaar voor de geplande/i.test(why[i])) why.splice(i, 1);
+    }
+    for (const b of gate.blockers) why.unshift(b);
+    if (adaptiveState === 'BUILD' || adaptiveState === 'TEST') adaptiveState = 'HOLD';
+  } else if (!gate.progression.levers.volume && !gate.progression.levers.intensity
+             && !gate.progression.levers.frequency && adaptiveState === 'BUILD') {
+    // Lopen mag, maar er gaat deze week niets omhoog.
+    adaptiveState = 'HOLD';
+    why.push(gate.progression.reason);
+  }
+
   const whyFinal = why.slice(0, 4);
 
   const ADAPTIVE_META = {
@@ -301,6 +339,8 @@ export function computeHeadCoach(log, logs, currentDate) {
     pendingRecoveryCheck,
     gateReason,
     lastWorkout: lastW || null,
+    gate,
+    mayRunToday: gate.action === 'RUN_TODAY',
   };
 }
 
@@ -311,6 +351,8 @@ export function computeHeadCoach(log, logs, currentDate) {
 export function computeNextSession(log, logs, currentDate) {
   const coach = computeHeadCoach(log, logs, currentDate);
   const state = coach.adaptiveState || 'BUILD';
+
+  const gated = !!(coach.gate && coach.gate.action !== 'RUN_TODAY');
 
   const lastDone = Object.values(logs || {})
     .filter(l => l.run_done && l.run_session)
@@ -341,6 +383,8 @@ export function computeNextSession(log, logs, currentDate) {
     case 'SWAP':
       return {
         state, nr: null, run: null, adaptive: coach.adaptive,
+        gate: coach.gate, action: 'ACTIVE_RECOVERY',
+        previewNr: null, previewRun: null,
         note: 'Vandaag geen hardlopen — wandel 20–30 min rustig of zwem als alternatief.',
       };
     case 'BUILD':
@@ -349,8 +393,29 @@ export function computeNextSession(log, logs, currentDate) {
       note = 'Je bent klaar voor de volgende stap in de opbouw.';
   }
   nr = Math.min(RUNS.length, Math.max(1, nr));
+
+  // Staat lopen op slot, dan is er vandaag geen sessienummer. De sessie
+  // die straks vrijkomt geven we wél mee als vooruitblik — zonder die
+  // vooruitblik verdwijnt de forecast op elke rustdag uit beeld.
+  if (gated) {
+    const g = coach.gate;
+    return {
+      state, nr: null, run: null, adaptive: coach.adaptive,
+      previewNr: nr, previewRun: RUNS[nr - 1],
+      gate: g, action: g.action,
+      note: g.blockers[0] || g.headline,
+      releasedBy: g.released,
+      earliestRunDate: g.earliestRunDate,
+      pendingRecoveryCheck: !!coach.pendingRecoveryCheck,
+    };
+  }
+
   return {
     state, nr, run: RUNS[nr - 1], adaptive: coach.adaptive, note,
+    previewNr: nr, previewRun: RUNS[nr - 1],
+    gate: coach.gate, action: 'RUN_TODAY',
+    releasedBy: coach.gate?.released || [],
+    earliestRunDate: currentDate,
     pendingRecoveryCheck: !!coach.pendingRecoveryCheck,
   };
 }

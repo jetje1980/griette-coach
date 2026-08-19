@@ -8,6 +8,7 @@ import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
 import { protectedHours } from './WeekScreen';
 import { store } from '../store';
 import SubTabs from './SubTabs';
+import RunForecastPanel from './RunForecastPanel';
 
 // Zeven domeinen: Body · Run · Strength · Fresh · Money · Freedom · Routines
 const SUBTABS = ['Overzicht', 'Body', 'Run', 'Strength', 'Fresh', 'Money', 'Freedom', 'Routines', 'Tijdlijn'];
@@ -640,6 +641,9 @@ function TabHardlopen({ logs }) {
 
   return (
     <div>
+      {/* Coachbesluit, forecast en de grafieken die het onderbouwen */}
+      <RunForecastPanel log={logs[tod]} logs={logs} currentDate={tod} />
+
       {/* Progress */}
       <div className="os-section-label" style={{ marginTop: 0 }}>Schema-voortgang</div>
       <div className="os-card">
