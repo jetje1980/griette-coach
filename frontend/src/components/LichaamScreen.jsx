@@ -11,6 +11,7 @@ import {
 import { TRAINING_BLOCKS, getCurrentBlock, upcomingWeekFoci, blockExpectation } from '../data/trainingBlocks';
 import TrainingPlan from './TrainingPlan';
 import WorkoutForm from './WorkoutForm';
+import StrengthModes from './StrengthModes';
 import RecoveryCheck from './RecoveryCheck';
 import CycleHistory from './CycleHistory';
 import { workoutOn, loadWorkouts, computePace } from '../workouts';
@@ -997,7 +998,10 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
         </div>
 
         {trainMode === 'kracht' && (
-          <KrachtModule currentDate={currentDate} saveFields={saveFields} isFuture={isFuture} />
+          <StrengthModes currentDate={currentDate} saveFields={saveFields} isFuture={isFuture}
+            WeightsModule={() => (
+              <KrachtModule currentDate={currentDate} saveFields={saveFields} isFuture={isFuture} />
+            )} />
         )}
 
         {trainMode === 'run' && (<>

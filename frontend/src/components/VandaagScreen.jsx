@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { computeHeadCoach, computeNextSession } from './CoachAdvice';
 import { nextSessionForecast } from '../forecast';
+import StrengthToday from './StrengthToday';
+import { photoStore } from '../photoStore';
+import { dueCheckpoint, checkpointPrompt } from '../bodyProgress';
 import { fmtPace } from '../workouts';
 import RecoveryCheck from './RecoveryCheck';
 import CaptureCenter from './CaptureCenter';
@@ -408,6 +411,40 @@ function ForecastMini({ log, logs, currentDate, coach, nextSession }) {
   );
 }
 
+// ── 1c. Fotomoment ──────────────────────────────────────────────
+// Verschijnt alleen op een ijkpunt. Twaalf weken later is de vergelijking
+// het enige echte bewijs van lichaamsverandering — die momenten mogen niet
+// stilletjes voorbijgaan.
+function PhotoCheckpointCard({ currentDate, goToTab }) {
+  const [cp, setCp] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    photoStore.getAll()
+      .then(sessions => { if (alive) setCp(dueCheckpoint(sessions, currentDate)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [currentDate]);
+
+  if (!cp) return null;
+  const prompt = checkpointPrompt(cp);
+
+  return (
+    <div className="os-card" style={{ marginBottom: 10, borderLeft: '4px solid var(--rust)' }}>
+      <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--font-serif)', marginBottom: 3 }}>
+        {prompt.title}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5, marginBottom: 8 }}>
+        {prompt.text}
+      </div>
+      <button className="btn-primary" onClick={() => goToTab?.(4)}
+        style={{ fontSize: 12.5, whiteSpace: 'normal' }}>
+        Naar Mijn verandering
+      </button>
+    </div>
+  );
+}
+
 // ── 2. Wat Nu? ──────────────────────────────────────────────────
 function WatNuCard({ watNu }) {
   if (!watNu) return null;
@@ -801,6 +838,15 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
       {!isFuture && hasData && (
         <ForecastMini log={log} logs={logs} currentDate={currentDate}
           coach={coach} nextSession={nextSession} />
+      )}
+      {/* Kracht is de tweede pijler en verschijnt hier alleen als hij
+          vandaag daadwerkelijk aan de beurt is — één les, één knop. */}
+      {!isFuture && <PhotoCheckpointCard currentDate={currentDate} goToTab={goToTab} />}
+
+      {!isFuture && hasData && (
+        <StrengthToday log={log} logs={logs} currentDate={currentDate}
+          runGate={coach?.gate} coach={coach}
+          onSaved={() => saveFields?.({ strength_done: true })} />
       )}
       {!isFuture && hasData && (
         <PerformanceStrip log={log} logs={logs} currentDate={currentDate} />

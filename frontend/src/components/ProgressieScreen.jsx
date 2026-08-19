@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { photoStore } from '../photoStore';
 import { dreamStore } from '../dreamStore';
 import { USER, PERSONAL_EVENTS } from '../config';
@@ -9,6 +9,8 @@ import { protectedHours } from './WeekScreen';
 import { store } from '../store';
 import SubTabs from './SubTabs';
 import RunForecastPanel from './RunForecastPanel';
+import StrengthPanel from './StrengthPanel';
+import MyChangePanel from './MyChangePanel';
 import { todayLocal } from '../datetime';
 
 // Zeven domeinen: Body · Run · Strength · Fresh · Money · Freedom · Routines
@@ -1436,18 +1438,41 @@ function TabFreedom() {
 export default function ProgressieScreen({ logs, streak }) {
   const [activeTab, setActiveTab] = useState(0);
   const [sessions, setSessions] = useState([]);
+  const [measurements, setMeasurements] = useState([]);
+
+  const reloadPhotos = useCallback(() => photoStore.getAll()
+    .then(s => setSessions(s.sort((a, b) => b.date.localeCompare(a.date))))
+    .catch(() => {}), []);
 
   useEffect(() => {
-    photoStore.getAll().then(s => setSessions(s.sort((a, b) => b.date.localeCompare(a.date)))).catch(() => {});
-  }, []);
+    reloadPhotos();
+    // Maten horen bij de fotovergelijking: beeld zonder cijfers zegt te weinig.
+    store.getMeasurements().then(setMeasurements).catch(() => {});
+  }, [reloadPhotos]);
 
   return (
     <div className="os-content">
       <SubTabs tabs={SUBTABS} active={activeTab} onChange={setActiveTab} />
       {activeTab === 0 && <TabOverzicht logs={logs} streak={streak} sessions={sessions} goToTab={setActiveTab} />}
-      {activeTab === 1 && <TabLichaam logs={logs} sessions={sessions} />}
+      {activeTab === 1 && (
+        <>
+          <MyChangePanel sessions={sessions} measurements={measurements}
+            logs={logs} currentDate={todayStr()}
+            onReload={reloadPhotos} />
+          <ExpandSection label="Metingen en weeghistorie">
+            <TabLichaam logs={logs} sessions={sessions} />
+          </ExpandSection>
+        </>
+      )}
       {activeTab === 2 && <TabHardlopen logs={logs} />}
-      {activeTab === 3 && <TabStrength logs={logs} />}
+      {activeTab === 3 && (
+        <>
+          <StrengthPanel log={logs[todayStr()]} logs={logs} currentDate={todayStr()} />
+          <ExpandSection label="Losse lifts en historie">
+            <TabStrength logs={logs} />
+          </ExpandSection>
+        </>
+      )}
       {activeTab === 4 && <TabEnergie logs={logs} />}
       {activeTab === 5 && <TabMoney />}
       {activeTab === 6 && <TabFreedom />}
