@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { computeHeadCoach } from './CoachAdvice';
 import { completeTask } from '../tasks';
 import { PERSONAL_EVENTS } from '../config';
+import { todayLocal } from '../datetime';
 
 const NL_DAYS   = ['Zo','Ma','Di','Wo','Do','Vr','Za'];
 const NL_DAYS_FULL = ['Zondag','Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag'];
 const NL_MONTHS_SHORT = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
 
 // ── date helpers ────────────────────────────────────────────────
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+const todayStr = todayLocal;
 
 function addDays(dateStr, n) {
   const d = new Date(dateStr + 'T12:00:00');

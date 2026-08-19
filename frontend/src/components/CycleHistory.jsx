@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { todayLocal } from '../datetime';
 
 // Historie van menstruatiestarts: toevoegen (ook historisch), wijzigen,
 // verwijderen. Voedt de persoonlijke patroonanalyse — geen vaste regels.
@@ -120,7 +121,7 @@ export default function CycleHistory({ onChange }) {
         </div>
       ) : (
         <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 8 }}
-          onClick={() => setForm({ original: null, date: new Date().toISOString().slice(0, 10) })}>
+          onClick={() => setForm({ original: null, date: todayLocal() })}>
           + Menstruatiestart toevoegen (datum vrij te kiezen)
         </button>
       )}

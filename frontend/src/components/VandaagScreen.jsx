@@ -8,6 +8,7 @@ import { USER } from '../config';
 import { loadTasks, dueFollowUps, getDayActions, saveDayActions, completeTask } from '../tasks';
 import { loadExecutiveFocus } from './LevenScreen';
 import { recoveryScore, runBuildScore, shapeScore, capacityLevel } from '../performance';
+import { todayLocal } from '../datetime';
 
 // ── Performance strip ───────────────────────────────────────────
 // Alleen percentages met een verdedigbare berekening; bij te weinig
@@ -61,7 +62,7 @@ function formatNL(dateStr) {
   return { dayName: NL_DAYS[d.getDay()], day: d.getDate(), month: NL_MONTHS[d.getMonth()] };
 }
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+const todayStr = todayLocal;
 function getHour()  { return new Date().getHours(); }
 
 // ── localStorage helpers ────────────────────────────────────────

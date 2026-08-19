@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import SubTabs from './SubTabs';
 import { ai } from '../ai';
 import { store } from '../store';
+import { todayLocal } from '../datetime';
 
 const SUBTABS = ['Nu', 'Weekanalyse', 'Maand'];
 
@@ -82,7 +83,7 @@ function TabNu({ logs, measurements }) {
     setLoading(true); setError('');
     try {
       const text = await ai.coachCheck(logs, measurements);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocal();
       localStorage.setItem(REPORT_KEY, text);
       localStorage.setItem(REPORT_DATE_KEY, today);
       setReport(text); setRDate(today);
@@ -179,7 +180,7 @@ function TabWeekanalyse({ logs, measurements }) {
     setLoading(true); setError('');
     try {
       const text = await ai.weeklyTrainingPlan(logs, measurements, coachReport);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocal();
       localStorage.setItem(PLAN_KEY, text);
       localStorage.setItem(PLAN_DATE_KEY, today);
       setPlan(text); setPDate(today);
@@ -307,7 +308,7 @@ function TabMaand({ logs }) {
     if (loading) return;
     setLoading(true); setError('');
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocal();
       const text = await ai.coachCheck(logs, []);
       localStorage.setItem('gc_monthly_bottleneck', text);
       localStorage.setItem('gc_monthly_bottleneck_date', today);

@@ -4,6 +4,7 @@ import { getSession } from '../supabase';
 import { pendingCount, forceSyncNow } from '../sync';
 import { LogoutButton } from './AuthGate';
 import Integrations from './Integrations';
+import { todayLocal } from '../datetime';
 
 const FOOD_PREF_KEY = 'gc_food_prefs';
 
@@ -62,7 +63,7 @@ function DataPortability() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `griette-coach-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `griette-coach-${todayLocal()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import SubTabs from './SubTabs';
 import { computeHeadCoach, computeNextSession } from './CoachAdvice';
 import { USER, MEDS, SUPPLEMENTS, PRN_MEDS } from '../config';
@@ -16,6 +16,9 @@ import CycleHistory from './CycleHistory';
 import { workoutOn, loadWorkouts, computePace } from '../workouts';
 import { strava } from '../integrations';
 import { store } from '../store';
+import { todayLocal, startOfWeek } from '../datetime';
+import { weekTrainingRows, nextOfferDate, STATUS_META } from '../trainingDay';
+import { ingestStravaWorkouts } from '../stravaIngest';
 
 // ── Constants ────────────────────────────────────────────────────
 const SYMPTOMS_LIST = [
@@ -156,7 +159,7 @@ function saveAjoviHistory(arr) {
 }
 
 function AjoviTracker() {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayLocal();
   const [next, setNext] = useState(() => localStorage.getItem(AJOVI_KEY) || null);
   const [history, setHistory] = useState(loadAjoviHistory);
   const [form, setForm] = useState(null);   // { id?, date, dose, note, sideEffect }
@@ -530,37 +533,25 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
 // A: huidig trainingsblok · B: deze week · C: komende 4 weken · D: 3–6 maanden.
 // De roadmap toont richting; exacte sessies blijven adaptief.
 function RunRoadmap({ logs, currentDate, nextSession }) {
-  const NL_DAYS = ['Zo', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za'];
   const block = getCurrentBlock(currentDate);
   const foci = upcomingWeekFoci(currentDate, 4);
+  const monday = startOfWeek(currentDate);
 
-  const monday = (() => {
-    const d = new Date(currentDate + 'T12:00:00');
-    const dow = d.getDay();
-    d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
-    return d.toISOString().slice(0, 10);
-  })();
-  const addD = (ds, n) => {
-    const d = new Date(ds + 'T12:00:00');
-    d.setDate(d.getDate() + n);
-    return d.toISOString().slice(0, 10);
-  };
+  // Eén bron voor de weekstatus. Hiervoor keek dit blok alleen naar
+  // `run_done` in de daglog, waardoor een run die via Strava of als
+  // WorkoutResult bestond onzichtbaar bleef — en een verstreken dinsdag
+  // eindeloos "Gepland" toonde.
+  const week = useMemo(
+    () => weekTrainingRows(monday, { logs, today: currentDate, gate: nextSession?.gate }),
+    [monday, logs, currentDate, nextSession?.gate?.action]);
 
-  // Deze week: geplande + gedane looptrainingen
-  const weekRuns = Array.from({ length: 7 }, (_, i) => {
-    const date = addD(monday, i);
-    const plan = (() => { try { return JSON.parse(localStorage.getItem(`gc_day_plan_${date}`) || '{}'); } catch { return {}; } })();
-    const log = logs?.[date];
-    const done = !!log?.run_done;
-    const planned = plan.training === 'run';
-    if (!done && !planned) return null;
-    const d = new Date(date + 'T12:00:00');
-    const isToday = date === currentDate;
-    const doneRun = done && log.run_session ? RUNS[Number(log.run_session) - 1] : null;
-    return { date, dayLabel: `${NL_DAYS[d.getDay()]} ${d.getDate()}`, done, planned, isToday, doneRun, isFuture: date > currentDate };
-  }).filter(Boolean);
-
-  const firstUpcoming = weekRuns.find(r => !r.done && (r.isToday || r.isFuture));
+  // De eerstvolgende dag waarop een sessie mág worden aangeboden. Een
+  // gemiste training verschuift niet vanzelf naar morgen — de herstel- en
+  // frequentiepoort bepaalt wanneer hij terugkomt.
+  const offerDate = nextOfferDate(week, { gate: nextSession?.gate, today: currentDate });
+  // De sessie die op die dag aan de beurt is. `run` is null zolang de poort
+  // vandaag dichtzit; `previewRun` is dezelfde sessie, vooruitgeblikt.
+  const offerRun = nextSession?.run || nextSession?.previewRun || null;
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -598,45 +589,90 @@ function RunRoadmap({ logs, currentDate, nextSession }) {
       {/* B: Deze week */}
       <SectionLabel>Deze week</SectionLabel>
       <div className="os-card">
-        {weekRuns.length === 0 && (
+        {week.length === 0 && (
           <div style={{ fontSize: 13, color: 'var(--sub)', textAlign: 'center', padding: '6px 0' }}>
-            Nog geen looptrainingen gepland deze week — plan ze in het Week-tabblad.
+            Nog niets geregistreerd of gepland deze week — plan je trainingen in het Week-tabblad.
           </div>
         )}
-        {weekRuns.map(r => (
-          <div key={r.date} style={{ padding: '8px 0', borderBottom: '1px solid var(--divide)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, minWidth: 44,
-                color: r.isToday ? 'var(--rust)' : 'var(--text)' }}>{r.dayLabel}</span>
-              <span style={{ fontSize: 12, fontWeight: 600,
-                color: r.done ? 'var(--green)' : r.isToday ? 'var(--rust)' : 'var(--sub)' }}>
-                {r.done ? '✓ Gedaan' : r.isToday ? 'Vandaag' : 'Gepland'}
-              </span>
+        {week.map(r => {
+          const meta = STATUS_META[r.status];
+          const isOffer = r.date === offerDate;
+          return (
+            <div key={r.date} style={{ padding: '8px 0', borderBottom: '1px solid var(--divide)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, minWidth: 44,
+                  color: r.isToday ? 'var(--rust)' : 'var(--text)' }}>
+                  {r.dow} {Number(r.date.slice(8))}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: meta.weight, color: meta.color }}>
+                  {meta.label}
+                </span>
+                {r.status === 'DONE' && r.sessionNr && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--sage)',
+                    border: '1px solid var(--sage)', borderRadius: 99, padding: '0 6px' }}>
+                    T{r.sessionNr}
+                  </span>
+                )}
+                {r.status === 'DONE' && r.sources.includes('strava') && (
+                  <span style={{ fontSize: 10, color: 'var(--ghost)' }}>via Strava</span>
+                )}
+              </div>
+
+              {/* Bij een gedane training tellen de werkelijke cijfers,
+                  niet wat het schema voorschreef. */}
+              {r.status === 'DONE' && (
+                <div style={{ fontSize: 12, color: 'var(--sub)', marginTop: 3, paddingLeft: 52 }}>
+                  {r.summary}
+                  {r.tolerance === 'poor' && (
+                    <span style={{ color: 'var(--rust)' }}> · slecht verdragen</span>
+                  )}
+                  {r.tolerance === 'pending' && (
+                    <span style={{ color: 'var(--ghost)' }}> · herstelcheck open</span>
+                  )}
+                </div>
+              )}
+
+              {/* Gemist blijft gemist: de sessie schuift niet vanzelf op. */}
+              {r.status === 'MISSED' && (
+                <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 2, paddingLeft: 52, lineHeight: 1.5 }}>
+                  Deze dag is voorbij zonder registratie. De sessie wordt niet
+                  automatisch doorgeschoven — de herstelpoort bepaalt wanneer hij terugkomt.
+                </div>
+              )}
+
+              {r.status === 'RECOVERY' && (
+                <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 2, paddingLeft: 52, lineHeight: 1.5 }}>
+                  {r.summary}
+                </div>
+              )}
+
+              {/* De concrete sessie hoort maar op één dag: de eerste dag
+                  waarop de poort lopen weer toestaat. Staat lopen vandaag op
+                  slot, dan is dat een vooruitblik — en niet de reden waarom
+                  het vandáág niet mag; die hoort bij vandaag, niet hier. */}
+              {isOffer && offerRun && (
+                <div style={{ fontSize: 12, color: 'var(--sub)', marginTop: 3, paddingLeft: 52, lineHeight: 1.5 }}>
+                  {r.date > currentDate && (
+                    <div style={{ color: 'var(--ghost)' }}>Eerste dag waarop lopen weer vrijkomt.</div>
+                  )}
+                  <div><span style={{ fontWeight: 700 }}>Sessie:</span> T{offerRun.nr} — {offerRun.description}</div>
+                  <div><span style={{ fontWeight: 700 }}>Doel:</span> {offerRun.goal}</div>
+                  <div>{offerRun.duration} min · run/walk · {offerRun.hrZone}</div>
+                </div>
+              )}
+              {isOffer && !offerRun && nextSession && (
+                <div style={{ fontSize: 12, color: 'var(--blue)', marginTop: 3, paddingLeft: 52 }}>
+                  {nextSession.note}
+                </div>
+              )}
+              {!isOffer && (r.status === 'PLANNED_FUTURE' || r.status === 'PLANNED_TODAY') && (
+                <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 2, paddingLeft: 52 }}>
+                  Adaptief — wordt op de dag zelf bepaald op basis van herstel
+                </div>
+              )}
             </div>
-            {r.done && r.doneRun && (
-              <div style={{ fontSize: 12, color: 'var(--sub)', marginTop: 3, paddingLeft: 52 }}>
-                T{r.doneRun.nr}: {r.doneRun.description} · {r.doneRun.duration} min
-              </div>
-            )}
-            {!r.done && firstUpcoming?.date === r.date && nextSession?.run && (
-              <div style={{ fontSize: 12, color: 'var(--sub)', marginTop: 3, paddingLeft: 52, lineHeight: 1.5 }}>
-                <div><span style={{ fontWeight: 700 }}>Sessie:</span> T{nextSession.nr} — {nextSession.run.description}</div>
-                <div><span style={{ fontWeight: 700 }}>Doel:</span> {nextSession.run.goal}</div>
-                <div>{nextSession.run.duration} min · run/walk · {nextSession.run.hrZone}</div>
-              </div>
-            )}
-            {!r.done && firstUpcoming?.date === r.date && nextSession && !nextSession.run && (
-              <div style={{ fontSize: 12, color: 'var(--blue)', marginTop: 3, paddingLeft: 52 }}>
-                {nextSession.note}
-              </div>
-            )}
-            {!r.done && firstUpcoming?.date !== r.date && (
-              <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 2, paddingLeft: 52 }}>
-                Adaptief — wordt op de dag zelf bepaald op basis van herstel
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* C: Komende 4 weken */}
@@ -808,7 +844,14 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     try {
       const res = await strava.sync();
       if (res?.error) { showFlash?.('❌', res.error); return; }
-      showFlash?.('🏃', `${res.count} nieuw, ${res.skipped || 0} al bekend`);
+      // Ophalen is niet genoeg: pas na het doortrekken naar trainingen en
+      // daglogs weet de coach dat er gelopen is.
+      const ing = await ingestStravaWorkouts({ logs });
+      const bits = [`${res.count} nieuw`];
+      if (ing.ok && ing.added) bits.push(`${ing.added} als training verwerkt`);
+      if (ing.ok && ing.enriched) bits.push(`${ing.enriched} aangevuld`);
+      showFlash?.('🏃', bits.join(', '));
+      await saveFields?.({});          // weekkalender direct verversen
       setStravaActivities(await strava.activities());
     } catch { showFlash?.('❌', 'Sync mislukt'); }
     finally { setSyncing(false); }

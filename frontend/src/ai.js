@@ -5,6 +5,7 @@
 
 import { USER } from './config';
 import { SUPABASE_URL, getAccessToken } from './supabase';
+import { todayLocal } from './datetime';
 
 const MODEL = 'claude-sonnet-4-6';
 const EDGE_FN = `${SUPABASE_URL}/functions/v1/coach-ai`;
@@ -60,7 +61,7 @@ function buildContext(logs, measurements) {
     { date: '2026-07-17', nr: 10 },
     { date: '2026-07-25', nr: 11 },
   ];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const huidigePrik = (() => {
     const geweest = PRIK_SCHEMA.filter(p => p.date <= today);
     if (!geweest.length) return { nr: 4, date: '2026-05-23', dagenGeleden: null };

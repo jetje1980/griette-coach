@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { USER } from '../config';
 import { store } from '../store';
+import { todayLocal } from '../datetime';
 
 export default function Onboarding({ onDone }) {
   const [step, setStep] = useState(0);
@@ -8,7 +9,7 @@ export default function Onboarding({ onDone }) {
   const [bpSys, setBpSys] = useState('');
   const [bpDia, setBpDia] = useState('');
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
 
   async function finish() {
     const fields = {};

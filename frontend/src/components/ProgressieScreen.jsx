@@ -9,6 +9,7 @@ import { protectedHours } from './WeekScreen';
 import { store } from '../store';
 import SubTabs from './SubTabs';
 import RunForecastPanel from './RunForecastPanel';
+import { todayLocal } from '../datetime';
 
 // Zeven domeinen: Body · Run · Strength · Fresh · Money · Freedom · Routines
 const SUBTABS = ['Overzicht', 'Body', 'Run', 'Strength', 'Fresh', 'Money', 'Freedom', 'Routines', 'Tijdlijn'];
@@ -16,7 +17,7 @@ const SUBTABS = ['Overzicht', 'Body', 'Run', 'Strength', 'Fresh', 'Money', 'Free
 const TRAIL_DATE = '2026-10-03';
 const TOTAL_RUNS = 35;
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+const todayStr = todayLocal;
 
 function daysBetween(fromStr, toStr) {
   return Math.ceil((new Date(toStr) - new Date(fromStr)) / 86400000);

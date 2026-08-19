@@ -3,14 +3,11 @@ import { USER } from '../config';
 import { RUNS } from '../data/runningSchema';
 import { lastRunWorkout, workoutWasHeavy, toleranceFor, workoutsForSession } from '../workouts';
 import { restDayDecision } from '../restday';
+import { todayLocal, addDays } from '../datetime';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function prevDate(dateStr, n = 1) {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
+const prevDate = (dateStr, n = 1) => addDays(dateStr, -n);
 
 function avg(arr) {
   const v = arr.filter(x => x != null);
@@ -425,7 +422,7 @@ export function computeNextSession(log, logs, currentDate) {
 export default function CoachAdvice({ log, logs, currentDate }) {
   const [showDetails, setShowDetails] = useState(false);
 
-  const date = currentDate || new Date().toISOString().slice(0, 10);
+  const date = currentDate || todayLocal();
 
   // Only show after minimal data is entered
   const hasData = log?.sleep_quality != null || log?.energy != null ||

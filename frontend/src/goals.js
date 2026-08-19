@@ -7,6 +7,7 @@
 
 import { USER } from './config';
 import { loadWorkouts, paceToMin } from './workouts';
+import { todayLocal } from './datetime';
 
 const KEY = 'gc_goals';
 
@@ -179,7 +180,7 @@ export function feasibilityCheck(goal, logs = {}) {
     return { verdict: 'onbekend', reason: 'Zonder streefdatum kan ik geen haalbaarheid berekenen.' };
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const weeks = Math.max(0, (new Date(goal.target_date) - new Date(today)) / (7 * 86400000));
   if (weeks < 0.5) {
     return { verdict: 'te kort', reason: 'De streefdatum is (bijna) verstreken.' };

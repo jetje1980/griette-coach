@@ -3,6 +3,7 @@ import SubTabs from './SubTabs';
 import { dreamStore, fileToDreamImage } from '../dreamStore';
 import CaptureCenter from './CaptureCenter';
 import GoalSettings from './GoalSettings';
+import { todayLocal } from '../datetime';
 
 // Leven = levensorganisatie en Future Self. Taken bundelt Capture en
 // projecten zodat er geen concurrerende taakmodules meer zijn.
@@ -202,7 +203,7 @@ function loadGlowEvents() {
 function saveGlowEvents(arr) { localStorage.setItem(GLOW_KEY, JSON.stringify(arr)); }
 
 function TabGlow() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const [events, setEvents] = useState(loadGlowEvents);
   const [adding, setAdding] = useState(null);
   const [form, setForm] = useState({});
@@ -434,7 +435,7 @@ function TabProjecten() {
   function add() {
     if (!form.name.trim()) return;
     if (form.status === 'actief' && activeCount() >= wipLimit) { blockByWip(); return; }
-    persist([{ id: Date.now().toString(), ...form, createdAt: new Date().toISOString().slice(0, 10) }, ...projects]);
+    persist([{ id: Date.now().toString(), ...form, createdAt: todayLocal() }, ...projects]);
     setForm({ name: '', outcome: '', status: 'actief', nextAction: '' });
     setAdding(false);
   }
@@ -674,7 +675,7 @@ function TabGeld() {
     if (isNaN(val)) return;
     persist({ ...data, buffer: val });
     // Historie bijhouden zodat groei/tempo/ETA berekend kan worden
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     persistHistory([{ id: `gh_${Date.now()}`, date: today, amount: val },
       ...history.filter(h => h.date !== today)]);
     setBufferInput('');
@@ -788,7 +789,7 @@ function TabGeld() {
           </div>
         ) : (
           <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 6 }}
-            onClick={() => setHistForm({ date: new Date().toISOString().slice(0, 10), amount: '', note: '' })}>
+            onClick={() => setHistForm({ date: todayLocal(), amount: '', note: '' })}>
             + Stand toevoegen (datum vrij te kiezen)
           </button>
         )}
@@ -898,7 +899,7 @@ function TabRoutines() {
 
   function add() {
     if (!form.name.trim()) return;
-    persist([...routines, { id: Date.now().toString(), ...form, createdAt: new Date().toISOString().slice(0, 10) }]);
+    persist([...routines, { id: Date.now().toString(), ...form, createdAt: todayLocal() }]);
     setForm({ name: '', stage: 'learning', trigger: '', time: '' });
     setAdding(false);
   }
@@ -1235,7 +1236,7 @@ function TabToekomst() {
 
   function addLetter() {
     if (!letterText.trim()) return;
-    const letter = { id: Date.now().toString(), text: letterText, date: new Date().toISOString().slice(0, 10) };
+    const letter = { id: Date.now().toString(), text: letterText, date: todayLocal() };
     persist({ ...data, letters: [letter, ...(data.letters || [])] });
     setLetterText('');
     setWritingLetter(false);
@@ -1474,7 +1475,7 @@ function TabEten() {
 // Taken = één plek voor Capture (inbox met statussen) én projecten met
 // WIP-limiet. Geen concurrerende taakmodules meer.
 function TabTaken() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const [view, setView] = useState('capture');
   return (
     <div>

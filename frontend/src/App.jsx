@@ -15,13 +15,15 @@ import CoachScreen     from './components/CoachScreen';
 import Settings        from './components/Settings';
 import Onboarding      from './components/Onboarding';
 import StravaCallback  from './components/StravaCallback';
+import { todayLocal, addDays } from './datetime';
+import { ingestStravaWorkouts } from './stravaIngest';
 
 const TABS = ['Vandaag', 'Week', 'Lichaam', 'Leven', 'Progressie', 'Coach'];
 const MAX_FUTURE_DAYS = 90;
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
+// Kalenderdag in Europe/Amsterdam — nooit de UTC-datum, die rond
+// middernacht nog op gisteren staat.
+const today = todayLocal;
 
 function dayNumber(date) {
   const start = new Date(USER.startDate);
@@ -67,22 +69,36 @@ export default function App() {
     for (const r of rows) map[r.date] = r;
     setLogs(map);
     let s = 0;
+    const today = todayLocal();
     for (let i = 0; i < 90; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dk = d.toISOString().slice(0, 10);
-      const l = map[dk];
+      const l = map[addDays(today, -i)];
       if (l && (l.run_done || l.core_done || l.mounjaro || l.candesartan || l.adhd_meds)) s++;
       else if (i > 0) break;
     }
     setStreak(s);
+    return map;
   }, []);
 
   useEffect(() => {
     // Cloud is de bron: eerst hydrateren, daarna media synchroniseren.
-    restoreFromCloud().then(count => {
-      if (count > 0) { loadLog(currentDate); loadLogs(); }
-    });
+    (async () => {
+      const count = await restoreFromCloud().catch(() => 0);
+      if (count > 0) loadLog(currentDate);
+      const map = await loadLogs();
+
+      // Strava-activiteiten omzetten naar trainingen. Zonder deze stap
+      // bestaat een run die alleen via Strava binnenkwam nergens in de app
+      // en blijft de weekkalender "Gepland" tonen op een dag waarop
+      // aantoonbaar gelopen is.
+      try {
+        const res = await ingestStravaWorkouts({ logs: map });
+        if (res.ok && (res.added || res.enriched || res.logUpdates)) {
+          await loadLogs();
+          if (res.added) showFlash?.('🏃', `${res.added} training${res.added > 1 ? 'en' : ''} uit Strava toegevoegd`);
+        }
+      } catch { /* zonder koppeling gebeurt er simpelweg niets */ }
+    })();
+
     photoStore.restoreFromCloud();
     // Beeldmateriaal dat eerder alleen lokaal stond alsnog veiligstellen
     dreamStore.syncWithCloud?.().catch(() => {});
@@ -113,17 +129,11 @@ export default function App() {
     showFlash('🗑️', `Dagdata ${currentDate} verwijderd`);
   }, [currentDate, loadLogs, showFlash]);
 
-  const maxFutureDate = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + MAX_FUTURE_DAYS);
-    return d.toISOString().slice(0, 10);
-  })();
+  const maxFutureDate = addDays(today(), MAX_FUTURE_DAYS);
 
   const shiftDay = (delta) => {
     if (delta === 0) { setCurrentDate(today()); return; }
-    const d = new Date(currentDate);
-    d.setDate(d.getDate() + delta);
-    const newDate = d.toISOString().slice(0, 10);
+    const newDate = addDays(currentDate, delta);
     if (newDate <= maxFutureDate) setCurrentDate(newDate);
   };
 
