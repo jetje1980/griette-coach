@@ -1,6 +1,7 @@
 # GRIËTTE COACH — INFRA- EN INTEGRATIE-AUDITRAPPORT
 
-Datum: 18 augustus 2026 · Opgesteld door: Claude (Anthropic) in Claude Code
+Datum: 18 augustus 2026 · Strava-verificatie bijgewerkt 19 augustus 2026
+Opgesteld door: Claude (Anthropic) in Claude Code
 Vervolg op: `AUDITRAPPORT.md` (18 augustus 2026)
 
 ---
@@ -13,9 +14,9 @@ Deze ronde ging over productie-infrastructuur: authenticatie, gebruikersisolatie
 
 Opgelost: PK naar `(user_id, key)` na geverifieerde backup (73 rijen, identieke hash voor en na). Een expliciete AuthGate met eigen sessieopslag. Eén gedeelde Supabase-client in plaats van drie. Sync herschreven zodat de cloud leidend is en mislukte schrijfacties in een zichtbare wachtrij blijven staan. Dream Board-afbeeldingen en workout-screenshots gaan nu naar private opslag met readback-verificatie. De directe browser-AI-route met `dangerous-direct-browser-access` is verwijderd (0 hits in de bundle) en vervangen door een JWT-geverifieerde Edge Function. Drie Edge Functions live: `coach-ai`, `coach-strava`, `coach-trello`.
 
-Wat nog niet af is: Strava en Trello zijn volledig gebouwd maar wachten op API-sleutels die alleen jij veilig kunt zetten. Zonder die secrets melden ze eerlijk "sleutels ontbreken".
+Strava is inmiddels end-to-end geverifieerd (19 aug): OAuth voltooid met scopes `read,activity:read_all`, 30 activiteiten geimporteerd inclusief hartslag, server-side token-refresh aantoonbaar uitgevoerd en duplicaatpreventie getest. Trello is volledig gebouwd maar wacht nog op API-sleutels die alleen de eigenaar veilig kan zetten; zonder die secrets meldt de UI eerlijk "sleutels ontbreken".
 
-**ALGEMENE STATUS: PARTIAL** — privacy, auth en RLS zijn PASS; Strava en Trello staan op AWAITING USER ACTION.
+**ALGEMENE STATUS: PARTIAL** — privacy, auth, RLS en Strava zijn PASS; alleen Trello staat nog op AWAITING USER ACTION.
 
 ---
 
@@ -25,10 +26,10 @@ Wat nog niet af is: Strava en Trello zijn volledig gebouwd maar wachten op API-s
 |---|---|
 | Repository | `jetje1980/griette-coach` |
 | Branch | `claude/coach-app-archive-missing-0dgmzb` |
-| Commit (code) | `cd9aa82` |
+| Commit (code) | `5920017` |
 | Vorige commit deze sessie | `4d79088` (rapport), `a2edb1a` (goal engine) |
-| Deployment branch | `gh-pages`, commit `a317927` |
-| Live bundle | `assets/index-CvqaPTw0.js` — identiek aan lokale build (geverifieerd) |
+| Deployment branch | `gh-pages`, commit `f5fe213` |
+| Live bundle | `assets/index-JsI6S6JT.js` — identiek aan lokale build (geverifieerd) |
 
 ---
 
@@ -41,7 +42,7 @@ Wat nog niet af is: Strava en Trello zijn volledig gebouwd maar wachten op API-s
 | Data | Supabase Postgres, tabel `gc_coach_data` (+ 4 nieuwe tabellen) |
 | Private media | Supabase Storage, bucket `progress-photos` (privé) |
 | AI | Supabase Edge Function `coach-ai` (verify_jwt = true) |
-| Strava | Supabase Edge Function `coach-strava` |
+| Strava | Supabase Edge Function `coach-strava` v2 — **werkend** |
 | Trello | Supabase Edge Function `coach-trello` (verify_jwt = true) |
 | Oude Express-backend | Niet meer gebruikt door de frontend; `api.js` wordt nergens meer aangeroepen voor Strava |
 
