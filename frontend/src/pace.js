@@ -222,6 +222,30 @@ export function correctSegment(workoutId, index, kind) {
   return all;
 }
 
+// ── Kilometersplits zijn geen loop/wandelblokken ────────────────
+// Strava levert voor een gewone run drie soorten segmenten: handmatige
+// ronden, tijd-auto-laps en afstandsplits van precies één kilometer. Alleen
+// de eerste twee volgen de structuur van een run/wandel-sessie. Bij
+// kilometersplits zit in elke kilometer zowel gelopen als gewandeld, en het
+// laatste stukje is meestal een restje van een paar honderd meter dat er
+// altijd sneller uitziet. Wie dat als "het loopblok" leest, krijgt een
+// looptempo dat nergens op slaat.
+//
+// De herkenning: de volle segmenten liggen allemaal binnen een paar procent
+// van dezelfde afstand, of ze dragen een expliciet km-nummer.
+export function looksLikeDistanceSplits(segments) {
+  if (segments.length < 2) return false;
+  // Het laatste segment is bij afstandsplits het restje; dat mag afwijken.
+  // Alle andere moeten vrijwel even lang zijn — precies wat afstandsplits
+  // onderscheidt van loop/wandelblokken, die juist in lengte verschillen.
+  const body = segments.slice(0, -1);
+  if (body.length < 2) return false;
+  const d = body.map(s => s.distanceKm).sort((a, b) => a - b);
+  const med = d[Math.floor(d.length / 2)];
+  if (!med) return false;
+  return body.every(s => Math.abs(s.distanceKm - med) / med <= 0.05);
+}
+
 // ── De drie tempo's van één workout ─────────────────────────────
 export function paceBreakdown(workout, { hrSettings = null, plannedRun = null } = {}) {
   if (!workout) return { available: false, reason: 'geen sessie' };
@@ -253,9 +277,15 @@ export function paceBreakdown(workout, { hrSettings = null, plannedRun = null } 
   // hieronder, zodat ze elke automatische uitkomst overrulen.
   const planned = plannedRun || (workout.plannedSessionId
     ? RUNS.find(r => r.nr === Number(workout.plannedSessionId)) : null);
+  // Restjes van een paar honderd meter zeggen niets over tempostructuur;
+  // ze vertekenen elke vergelijking binnen de sessie.
+  const meaningful = base.filter(s => s.distanceKm >= 0.15 || s.minutes >= 1);
+  const splitsOnly = looksLikeDistanceSplits(meaningful) ||
+    (raw.some(r => r?.km != null) && !workout.laps?.length);
+
   const classified = classifyByPlan(base, planned)
     || classifyByEvidence(base, hr)
-    || classifyWithin(base, hr);
+    || (splitsOnly ? [] : classifyWithin(meaningful, hr));
 
   const segments = classified.map((s, i) => {
     const corrected = corrections[`${workout.id}:${i}`];
@@ -310,8 +340,11 @@ export function paceBreakdown(workout, { hrSettings = null, plannedRun = null } 
     runHr: avgOf(runSegs.map(s => s.avgHr)),
     walkHr: avgOf(walkSegs.map(s => s.avgHr)),
 
+    splitsOnly,
     note: derived
-      ? 'Deze sessie heeft geen ronden of kilometersplits, dus loop- en wandeltempo zijn niet te scheiden. Alleen het sessietempo is bekend — en dat is niet je hardloopsnelheid.'
+      ? (splitsOnly
+        ? 'Deze sessie heeft alleen kilometersplits. In elke kilometer zit zowel gelopen als gewandeld, dus daar valt geen loop- of wandeltempo uit te halen. Zet ronden aan op je horloge bij de loop- en wandelblokken, dan verschijnt het hier vanzelf.'
+        : 'Deze sessie heeft geen ronden of kilometersplits, dus loop- en wandeltempo zijn niet te scheiden. Alleen het sessietempo is bekend — en dat is niet je hardloopsnelheid.')
       : runSegs.length && walkSegs.length
         ? null
         : runSegs.length

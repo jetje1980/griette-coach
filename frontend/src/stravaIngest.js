@@ -133,15 +133,16 @@ const ENRICH_FIELDS = ['distance', 'duration', 'averagePace', 'averageHR',
 // zodat de UI kan tonen wat er precies gebeurd is.
 export async function ingestStravaWorkouts({ logs = {}, sinceDays = 180 } = {}) {
   const res = await fetchStravaImports({ sinceDays });
-  if (!res.ok) return { ok: false, reason: res.reason, added: 0, enriched: 0, skipped: 0, dates: [] };
+  if (!res.ok) return { ok: false, reason: res.reason, added: 0, enriched: 0, skipped: 0, retyped: 0, dates: [] };
 
   const existing = loadWorkouts();
   const byExternal = new Map(
     existing.filter(w => w.externalId).map(w => [String(w.externalId), w]));
 
-  let added = 0, enriched = 0, skipped = 0;
+  let added = 0, enriched = 0, skipped = 0, retyped = 0;
   const touched = [];
   const assigned = [];       // sessienummers die we in deze ronde uitdelen
+  const demoted = [];        // dagen waarvan een 'run' een wandeling bleek
 
   for (const act of res.activities) {
     // Alleen wat de coach als training telt; ritjes en zwemmen laten we
@@ -152,6 +153,15 @@ export async function ingestStravaWorkouts({ logs = {}, sinceDays = 180 } = {}) 
     if (already) {
       // Al bekend. Alleen aanvullen als er velden leeg staan.
       const patch = fillGaps(already, act, ENRICH_FIELDS);
+      // Het activiteitstype is een feit van Strava, geen inschatting van ons:
+      // een sessie die daar Walk of Hike heet, hoort niet in het hardloop-
+      // model thuis. Eerder verkeerd opgeslagen types worden hier alsnog
+      // rechtgezet — tenzij jij hem zelf hebt omgezet.
+      if (!already.activityTypeUser && already.activityType !== act.activityType) {
+        patch.activityType = act.activityType;
+        retyped++;
+        if (act.activityType !== 'run') demoted.push(act.date);
+      }
       if (Object.keys(patch).length) {
         saveWorkout({ ...already, ...patch });
         enriched++;
@@ -223,6 +233,18 @@ export async function ingestStravaWorkouts({ logs = {}, sinceDays = 180 } = {}) 
   // Daglogs bijwerken: een geregistreerde run betekent run_done op die dag.
   // Zonder deze stap blijft de rest van de coach denken dat er niet gelopen is.
   const logUpdates = [];
+
+  // Andersom ook: was een sessie eerder als run geboekt en blijkt het een
+  // wandeling, dan mag run_done die dag niet blijven staan — anders telt een
+  // wandeling stilzwijgend mee als hardlooptraining. Alleen als er die dag
+  // werkelijk geen run meer over is.
+  const runDates = new Set(loadWorkouts()
+    .filter(w => w.activityType === 'run' || w.activityType == null).map(w => w.date));
+  for (const d of new Set(demoted)) {
+    if (runDates.has(d)) continue;
+    if (!logs?.[d]?.run_done) continue;
+    logUpdates.push({ date: d, run_done: false, run_session: null });
+  }
   for (const a of assigned) {
     const log = logs?.[a.date] || {};
     const needsDone = !log.run_done;
@@ -237,7 +259,7 @@ export async function ingestStravaWorkouts({ logs = {}, sinceDays = 180 } = {}) 
   }
 
   return {
-    ok: true, added, enriched, skipped,
+    ok: true, added, enriched, skipped, retyped,
     logUpdates: logUpdates.length,
     dates: [...new Set(touched)].sort(),
     total: res.activities.length,
