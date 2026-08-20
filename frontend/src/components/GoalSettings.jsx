@@ -169,13 +169,14 @@ export default function GoalSettings({ logs }) {
           <div className="os-section-label">Hartslag &amp; RPE-kaders</div>
           <div className="os-card">
             <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5, marginBottom: 10 }}>
-              De coach gebruikt deze grenzen in elke sessie en beoordeling.
+              Je easy-band en je RPE-ankers. Wat op een gegeven dag werkelijk mag,
+              komt niet hiervandaan maar uit je hartslagmodel — CPET-context,
+              recente goed verdragen runs, en de respons van de vorige sessie.
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
                 { k: 'easyLow',     label: 'Easy HR onder',     unit: 'bpm' },
                 { k: 'easyHigh',    label: 'Easy HR boven',     unit: 'bpm' },
-                { k: 'walkTrigger', label: 'Wandelen boven (optioneel)', unit: 'bpm' },
                 { k: 'resumeBelow', label: 'Hervatten onder',   unit: 'bpm' },
                 { k: 'rpeEasy',     label: 'RPE easy',          unit: '/10' },
                 { k: 'rpeThreshold', label: 'RPE grens',        unit: '/10' },

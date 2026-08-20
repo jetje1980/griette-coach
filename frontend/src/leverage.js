@@ -20,6 +20,7 @@ import { strengthStats, patternCoverage, capacityChange } from './strength';
 import { trainingLoad } from './restday';
 import { runEconomyTrend } from './pace';
 import { store } from './store';
+import { scoreCandidates } from './goalIntelligence';
 
 const ACTION_LOG_KEY = 'gc_leverage_log';
 const ROUTINE_KEY = 'gc_glow_routine';
@@ -325,6 +326,10 @@ export function analyseDomain(domainId, { logs = {}, currentDate = todayLocal() 
 export function highestLeverageAction({
   logs = {}, currentDate = todayLocal(), coach = null, runGate = null,
   strengthGate = null, minutes = null, domainIds = null,
+  // Goal Intelligence, optioneel. Zonder deze twee werkt alles precies zoals
+  // voorheen — dat is met opzet: de driver-logica hieronder is bewezen en
+  // wordt niet vervangen, alleen aangevuld met wat de doelen ervan vinden.
+  assessments = null, budget = null, relations = [],
 } = {}) {
   const active = domainIds || activeDomainIds();
   const analyses = active.map(id => analyseDomain(id, { logs, currentDate })).filter(Boolean);
@@ -366,10 +371,27 @@ export function highestLeverageAction({
   candidates.sort((a, b) => b.weight - a.weight ||
     (a.action.minutes || 0) - (b.action.minutes || 0));
 
+  // ── Doelbijdrage, als die er is ───────────────────────────────
+  // Nu pas, en niet eerder. Wat hierboven staat is de capaciteit van vandaag;
+  // wat hieronder gebeurt is kiezen binnen wat die capaciteit toelaat. Een
+  // doel met een naderende datum kan de volgorde veranderen, nooit de poort.
+  let scored = null;
+  if (assessments?.length) {
+    scored = scoreCandidates(candidates, { assessments, budget, relations });
+    if (scored.length) {
+      candidates.length = 0;
+      candidates.push(...scored);
+    }
+  }
+
   const best = candidates[0];
   const alsoServes = analyses
     .filter(a => a.bottleneck?.id === best.driverId)
     .map(a => a.domain.label.split('—')[0].trim());
+
+  // Welke doelen deze actie werkelijk dient — met naam, niet als "draagt bij
+  // aan je doelen".
+  const servesGoals = best.contribution?.served?.slice(0, 3) || [];
 
   return {
     available: true,
@@ -378,12 +400,16 @@ export function highestLeverageAction({
     driver: { id: best.driverId, label: best.driverLabel, note: best.driverNote, status: best.status },
     domain: best.domain,
     alsoServes,
+    goalContribution: best.contribution || null,
+    scored: !!scored,
     // "Waarom dit?" — hooguit vier korte redenen, geen essay.
     why: [
       `${best.driverLabel} is nu de beperkende factor: ${best.driverNote}.`,
-      alsoServes.length > 1
-        ? `Dit blokkeert tegelijk ${alsoServes.join(' en ')} — daarom levert het meer op dan een losse actie.`
-        : `Dit is wat ${best.domain.label.split('—')[0].trim().toLowerCase()} op dit moment tegenhoudt.`,
+      servesGoals.length
+        ? `Dit werkt door in ${servesGoals.map(g => g.label.toLowerCase()).join(' en ')}.`
+        : alsoServes.length > 1
+          ? `Dit blokkeert tegelijk ${alsoServes.join(' en ')} — daarom levert het meer op dan een losse actie.`
+          : `Dit is wat ${best.domain.label.split('—')[0].trim().toLowerCase()} op dit moment tegenhoudt.`,
       capacity.note,
       best.domain.caution ? best.domain.caution.split('.')[0] + '.' : null,
     ].filter(Boolean).slice(0, 4),
@@ -396,7 +422,17 @@ export function highestLeverageAction({
 // standaard als er nog niets is ingesteld.
 export function activeDomainIds() {
   const goals = loadGoals().filter(g => g.status === 'active');
-  const map = { RUN: 'RUN', BODY: 'BODY', SHAPE: 'STRENGTH', FRESHNESS: 'FRESHNESS', TIME: 'TIME' };
+  // Het generieke doelmodel kent meer domeinen dan de driver-engine. Slaap,
+  // herstel, voeding en gewoontes hebben geen eigen driverset maar horen wel
+  // ergens thuis: hun drivers zitten in FRESHNESS en BODY.
+  const map = {
+    RUN: 'RUN', RUN_GENERIC: 'RUN',
+    BODY: 'BODY', NUTRITION: 'BODY', HABITS: 'BODY',
+    SHAPE: 'STRENGTH',
+    FRESHNESS: 'FRESHNESS', SLEEP: 'FRESHNESS', RECOVERY: 'FRESHNESS',
+    GLOW: 'GLOW',
+    TIME: 'TIME',
+  };
   const ids = new Set();
   for (const g of goals) {
     const d = map[g.domain];

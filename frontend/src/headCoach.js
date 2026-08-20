@@ -21,6 +21,10 @@ import { suggestExperience } from './aliveness';
 import { dueCheckpoint } from './bodyProgress';
 import { todayLocal, addDays } from './datetime';
 import { loadTasks, dueFollowUps } from './tasks';
+import {
+  assessAll, goalRelations, salientGoals, doMaintainDontPush,
+  runLimiter, distanceCoverage, FEASIBILITY,
+} from './goalIntelligence';
 
 // Rangorde van besluiten. Hoe hoger, hoe harder het advies andere
 // overrulet. Herstel staat bovenaan omdat het bij long COVID het enige is
@@ -82,11 +86,27 @@ export function headCoachDecision({
     return { decision: 'BLUE', word: 'Herstel', color: 'var(--blue, var(--gold))', emoji: '🛌' };
   })();
 
+  // ── HARDE POORT → BUDGET → DOELEN ─────────────────────────────
+  // De vololgorde is hier het hele punt. Eerst hebben de poorten hierboven
+  // bepaald wat er überhaupt mag. Pas daarna komen de doelen aan bod, en die
+  // krijgen alleen te zeggen wát er gekozen wordt binnen wat al is
+  // vrijgegeven — nooit óf er iets vrijgegeven wordt.
+  //
+  // Een naderende race, een deadline op een gewichtsdoel of een doel dat van
+  // koers raakt kan de volgorde van kandidaten veranderen. Een dichte poort
+  // openen kan het niet.
+  const goals = assessAll({ logs, currentDate, runGate, strengthGate: strength, log });
+  const relations = goalRelations(goals.all);
+  const budget = goals.budget;
+
   // ── BOTTLENECK ────────────────────────────────────────────────
   // De hefboom-engine bepaalt wat er op dit moment het meest in de weg
-  // staat, over alle actieve doelen heen.
+  // staat, over alle actieve doelen heen. Zij krijgt de doelbeoordelingen
+  // mee zodat een actie die drie doelen tegelijk dient zwaarder telt dan een
+  // actie die er één dient.
   const leverage = highestLeverageAction({
     logs, currentDate, coach, runGate, strengthGate: strength, minutes,
+    assessments: goals.all, budget, relations,
   });
 
   // ── TRADE-OFF ─────────────────────────────────────────────────
@@ -155,6 +175,17 @@ export function headCoachDecision({
     .map(c => ({ what: c.wants, why: c.reason || c.label }))
     .slice(0, 2);
 
+  // ── Welk doel verdient vandaag aandacht? ──────────────────────
+  // Niet alle doelen elke dag. Alleen wat een beslissing vraagt, van koers
+  // raakt, of waar een meting voor ontbreekt.
+  const salient = salientGoals(goals.all, { relations, currentDate, limit: 3 });
+  const primaryRace = goals.races.find(r => r.goal?.raceGoal?.type !== 'STRETCH')
+    || goals.races[0] || null;
+  const limiter = runLimiter({
+    state: goals.state, budget,
+    raceDistanceKm: primaryRace?.goal?.raceGoal?.distanceKm || null,
+  });
+
   return {
     // De zes dingen die Vandaag mag tonen
     status: { ...status, sub: statusSub(status.decision, runGate, strength) },
@@ -169,6 +200,25 @@ export function headCoachDecision({
       coach, runGate, strength, nextSession, leverage,
       claims, notToday, review,
       trained, inFreeBlock,
+      // Goal Intelligence. Staat bewust in `detail`: Vandaag blijft één
+      // besluit tonen, geen doelendashboard.
+      goals: {
+        assessments: goals.all,
+        races: goals.races,
+        relations,
+        budget,
+        limiter,
+        salient: salient.map(s => ({
+          label: s.assessment.label,
+          feasibility: s.assessment.feasibility,
+          why: s.reasons.join(' · '),
+          guidance: doMaintainDontPush(s.assessment, { budget, relations }),
+        })),
+        coverage: primaryRace
+          ? distanceCoverage({
+            raceDistanceKm: primaryRace.goal.raceGoal.distanceKm, state: goals.state })
+          : null,
+      },
     },
   };
 }

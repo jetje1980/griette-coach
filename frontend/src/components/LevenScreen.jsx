@@ -3,6 +3,7 @@ import SubTabs from './SubTabs';
 import { dreamStore, fileToDreamImage } from '../dreamStore';
 import CaptureCenter from './CaptureCenter';
 import GoalSettings from './GoalSettings';
+import GoalDashboard from './GoalDashboard';
 import { todayLocal } from '../datetime';
 import { AlivenessLibrary } from './AlivenessCard';
 
@@ -74,7 +75,8 @@ function TabFocus({ logs }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-        {[{ id: 'focus', label: '🎯 Focus' }, { id: 'goals', label: '📐 Doelen' }].map(v => (
+        {[{ id: 'focus', label: '🎯 Focus' }, { id: 'goals', label: '📐 Doelen' },
+          { id: 'settings', label: '⚙ Instellen' }].map(v => (
           <button key={v.id} className={`os-scale-btn ${view === v.id ? 'active' : ''}`}
             onClick={() => setView(v.id)} style={{ flex: 1, padding: '9px 4px', fontSize: 12 }}>
             {v.label}
@@ -82,7 +84,10 @@ function TabFocus({ logs }) {
         ))}
       </div>
 
-      {view === 'goals' && <GoalSettings logs={logs} />}
+      {/* Doelen: eerst het oordeel, dan pas de invoervelden. Wie hier komt
+          wil weten of ze op koers ligt, niet welke velden er bestaan. */}
+      {view === 'goals' && <GoalDashboard logs={logs} />}
+      {view === 'settings' && <GoalSettings logs={logs} />}
 
       {view === 'focus' && (<>
       <div className="os-section-label" style={{ marginTop: 0 }}>Huidig seizoen</div>

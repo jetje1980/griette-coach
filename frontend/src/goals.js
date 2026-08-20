@@ -1,148 +1,104 @@
-// Centrale doelenstore — één bron voor alle aanpasbare doelen.
-// Vervangt verspreide hardcoded targets. Coachlogica leest hier.
+// Verenigbaarheidslaag over het generieke doelmodel.
 //
-// Goal = { id, domain, metric, current_value, target_value, target_date,
-//          priority, status, unit, notes, strategy, constraints,
-//          created_at, updated_at }
+// Het model zelf staat in goalModel.js; hier staat wat de rest van de app al
+// jaren aanroept. Dat is geen dubbeling maar een vertaalslag: het oude model
+// kende `domain: 'RUN'` voor generieke loopdoelen, het nieuwe noemt dat
+// RUN_GENERIC. Wie hier binnenkomt met de oude naam krijgt gewoon antwoord.
+//
+// Wat hier is gebleven omdat het bewezen werkt en getest is:
+// `feasibilityCheck` (met zijn expliciete weigering om tijd- en tempodoelen
+// te beoordelen) en `bodyCompositionVerdict`.
 
 import { USER } from './config';
-import { loadWorkouts, paceToMin } from './workouts';
+import { loadWorkouts } from './workouts';
 import { todayLocal } from './datetime';
+import {
+  DOMAIN_META, METRICS, metricsForDomain,
+  metricInfo as modelMetricInfo,
+  loadGoals as modelLoadGoals,
+  saveGoal as modelSaveGoal,
+  deleteGoal as modelDeleteGoal,
+  PRIORITY, STATUS,
+} from './goalModel';
 
-const KEY = 'gc_goals';
+// Oude domeinnaam → nieuwe. Alleen RUN is hernoemd.
+const toModelDomain = (d) => (d === 'RUN' ? 'RUN_GENERIC' : d);
+// En terug, zodat bestaande schermen hun eigen naam blijven zien.
+const toLegacyDomain = (d) => (d === 'RUN_GENERIC' ? 'RUN' : d);
 
 export const GOAL_DOMAINS = [
-  { id: 'RUN',       emoji: '🏃', label: 'Run' },
-  { id: 'BODY',      emoji: '⚖️', label: 'Body' },
-  { id: 'SHAPE',     emoji: '💪', label: 'Shape' },
-  { id: 'FRESHNESS', emoji: '🌿', label: 'Freshness' },
-  { id: 'MONEY',     emoji: '💰', label: 'Money' },
-  { id: 'TIME',      emoji: '🕐', label: 'Time' },
-  { id: 'LIFE_WORK', emoji: '💼', label: 'Life/Work' },
+  { id: 'RUN',       emoji: DOMAIN_META.RUN_GENERIC.emoji, label: 'Run' },
+  { id: 'BODY',      emoji: DOMAIN_META.BODY.emoji,      label: 'Body' },
+  { id: 'SHAPE',     emoji: DOMAIN_META.SHAPE.emoji,     label: 'Shape' },
+  { id: 'SLEEP',     emoji: DOMAIN_META.SLEEP.emoji,     label: 'Slaap' },
+  { id: 'FRESHNESS', emoji: DOMAIN_META.FRESHNESS.emoji, label: 'Freshness' },
+  { id: 'RECOVERY',  emoji: DOMAIN_META.RECOVERY.emoji,  label: 'Herstel' },
+  { id: 'GLOW',      emoji: DOMAIN_META.GLOW.emoji,      label: 'Glow' },
+  { id: 'NUTRITION', emoji: DOMAIN_META.NUTRITION.emoji, label: 'Voeding' },
+  { id: 'HABITS',    emoji: DOMAIN_META.HABITS.emoji,    label: 'Gewoontes' },
+  { id: 'MONEY',     emoji: DOMAIN_META.MONEY.emoji,     label: 'Money' },
+  { id: 'TIME',      emoji: DOMAIN_META.TIME.emoji,      label: 'Time' },
+  { id: 'LIFE_WORK', emoji: DOMAIN_META.LIFE_WORK.emoji, label: 'Life/Work' },
 ];
 
-export const GOAL_PRIORITIES = ['primary', 'secondary', 'someday'];
-export const GOAL_STATUSES = ['active', 'achieved', 'paused', 'dropped'];
+export const GOAL_PRIORITIES = PRIORITY;
+export const GOAL_STATUSES = STATUS.filter(s => s !== 'revised' && s !== 'expired');
 
-// Metrics per domein — bepalen invoertype en eenheid
-export const GOAL_METRICS = {
-  RUN: [
-    { id: 'run_walk_minutes', label: 'Comfortabele run/walk-duur', unit: 'min' },
-    { id: 'continuous_min',   label: 'Aaneengesloten lopen',       unit: 'min' },
-    { id: 'distance_km',      label: 'Afstand uitlopen',           unit: 'km' },
-    { id: 'time_5k',          label: '5 km tijd',                  unit: 'min' },
-    // 'pace_easy' is hier bewust weg. Easy tempo is een méting uit je
-    // eigen data (zie easyPace.js), geen doel om naartoe te werken. Het
-    // stond hier als drager van "5 km in 35:00" — een racedoel vermomd als
-    // rustig trainingstempo. Racedoelen horen in het RaceGoal-model.
-    { id: 'run_days_week',    label: 'Max hardloopdagen per week', unit: 'dagen' },
-    { id: 'max_session_min',  label: 'Max duur per sessie',        unit: 'min' },
-  ],
-  BODY: [
-    { id: 'weight',      label: 'Gewicht',        unit: 'kg' },
-    { id: 'weight_min',  label: 'Ondergrens gewicht', unit: 'kg' },
-    { id: 'waist',       label: 'Taille',         unit: 'cm' },
-    { id: 'hip',         label: 'Heup',           unit: 'cm' },
-    { id: 'body_fat',    label: 'Vetpercentage',  unit: '%' },
-    { id: 'clothing',    label: 'Kledingmaat',    unit: '' },
-  ],
-  SHAPE: [
-    { id: 'strength_focus', label: 'Krachtfocus',            unit: '' },
-    { id: 'squat_kg',       label: 'Squat',                  unit: 'kg' },
-    { id: 'hinge_kg',       label: 'Deadlift/hinge',         unit: 'kg' },
-    { id: 'glutes_kg',      label: 'Hip thrust',             unit: 'kg' },
-    { id: 'push_reps',      label: 'Push-ups',               unit: 'reps' },
-    { id: 'sessions_week',  label: 'Krachtsessies per week', unit: 'x' },
-  ],
-  FRESHNESS: [
-    { id: 'sleep_hours',    label: 'Slaapuren',            unit: 'u' },
-    { id: 'pem_days_month', label: 'PEM-dagen per maand',  unit: 'dagen' },
-    { id: 'routines_auto',  label: 'Automatische routines', unit: '' },
-  ],
-  MONEY:     [{ id: 'buffer', label: 'Buffer', unit: '€' }],
-  TIME:      [{ id: 'free_evenings', label: 'Vrije avonden per week', unit: '' },
-              { id: 'protected_hours', label: 'Beschermde uren per week', unit: 'u' }],
-  LIFE_WORK: [{ id: 'active_projects', label: 'Max actieve projecten', unit: '' }],
-};
+// Metrics per domein, in de vorm die de bestaande schermen verwachten.
+export const GOAL_METRICS = Object.fromEntries(
+  GOAL_DOMAINS.map(d => [d.id,
+    metricsForDomain(toModelDomain(d.id)).map(m => ({ id: m.id, label: m.label, unit: m.unit }))]));
 
 export function metricInfo(domain, metric) {
-  return (GOAL_METRICS[domain] || []).find(m => m.id === metric)
-    || { id: metric, label: metric, unit: '' };
+  const m = modelMetricInfo(metric, toModelDomain(domain));
+  return { id: m.id, label: m.label, unit: m.unit || '' };
 }
 
-// ── Opslag ──────────────────────────────────────────────────────
-function readRaw() {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; }
+// ── Opslag: één bron, in goalModel ──────────────────────────────
+export function loadGoals() {
+  return modelLoadGoals().map(g => ({ ...g, domain: toLegacyDomain(g.domain) }));
 }
-function persist(arr) { localStorage.setItem(KEY, JSON.stringify(arr)); }
-
-// Eenmalige, niet-destructieve seed uit de bestaande lichaamsconfig.
-// Zo blijven de huidige waarden behouden en worden ze bewerkbaar.
-function seedIfEmpty() {
-  const existing = readRaw();
-  if (existing.length) return existing;
-  const now = new Date().toISOString();
-  const seeded = [
-    { domain: 'BODY', metric: 'weight', current_value: null,
-      target_value: USER.goalWeight, unit: 'kg', priority: 'primary' },
-    { domain: 'BODY', metric: 'weight_min', current_value: null,
-      target_value: USER.minWeight, unit: 'kg', priority: 'primary',
-      notes: 'Absolute ondergrens — nooit onder, ongeacht tempo.' },
-    { domain: 'RUN', metric: 'distance_km', current_value: null,
-      target_value: 5, unit: 'km', priority: 'primary' },
-    { domain: 'MONEY', metric: 'buffer', current_value: null,
-      target_value: 15000, unit: '€', priority: 'secondary' },
-  ].map((g, i) => ({
-    id: `g_seed_${i}`, target_date: null, status: 'active',
-    created_at: now, updated_at: now, ...g,
-  }));
-  persist(seeded);
-  return seeded;
-}
-
-export function loadGoals() { return seedIfEmpty(); }
 
 export function goalsByDomain(domain) {
-  return loadGoals().filter(g => g.domain === domain && g.status !== 'dropped');
+  const d = toLegacyDomain(toModelDomain(domain));
+  return loadGoals().filter(g => g.domain === d && g.status !== 'dropped');
 }
 
-// Actief doel voor één metric — de canonieke waarde voor coachlogica
 export function activeGoal(domain, metric) {
-  return loadGoals().find(g => g.domain === domain && g.metric === metric && g.status === 'active') || null;
+  const d = toLegacyDomain(toModelDomain(domain));
+  return loadGoals().find(g =>
+    g.domain === d && g.metric === metric && g.status === 'active') || null;
 }
 
 export function goalTarget(domain, metric, fallback = null) {
-  const g = activeGoal(domain, metric);
-  const v = g?.target_value;
+  const v = activeGoal(domain, metric)?.target_value;
   return v == null || v === '' ? fallback : v;
 }
 
 export function saveGoal(fields) {
-  const arr = loadGoals();
-  const now = new Date().toISOString();
-  if (fields.id) {
-    const i = arr.findIndex(g => g.id === fields.id);
-    if (i >= 0) { arr[i] = { ...arr[i], ...fields, updated_at: now }; persist(arr); return arr[i]; }
-  }
-  const goal = {
-    id: `g_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-    domain: 'RUN', metric: '', current_value: null, target_value: null,
-    target_date: null, priority: 'secondary', status: 'active',
-    unit: '', notes: '', created_at: now, updated_at: now, ...fields,
-  };
-  arr.unshift(goal);
-  persist(arr);
-  return goal;
+  const patch = { ...fields };
+  if (patch.domain) patch.domain = toModelDomain(patch.domain);
+  const saved = modelSaveGoal(patch);
+  return { ...saved, domain: toLegacyDomain(saved.domain) };
 }
 
-export function deleteGoal(id) { persist(loadGoals().filter(g => g.id !== id)); }
+export function deleteGoal(id) { return modelDeleteGoal(id); }
 
 // ── Hartslag- en RPE-kaders — instelbaar, met veilige defaults ──
 const HR_KEY = 'gc_hr_settings';
+// De easy-band en de RPE-ankers. Meer niet.
+//
+// Hier stond ook `walkTrigger: 130` — een vaste hartslag waarboven je moest
+// gaan wandelen, ingesteld vanuit het doelenscherm. Dat is precies het soort
+// grens dat hier niet hoort: een getal in de doelenlaag dat het actuele
+// tolerantiemodel overruled. Wat er op een gegeven dag mag hangt af van de
+// CPET-context, recente goed verdragen runs, tempo bij gelijke hartslag,
+// drift, RPE, de vertraagde respons en de actuele intensity release — en dat
+// staat allemaal in hrModel.js. Een wandelinstructie hoort bij een sessie,
+// niet bij een doel.
 const HR_DEFAULTS = {
   easyLow: USER.hrZone?.low ?? 106,
   easyHigh: USER.hrZone?.high ?? 132,
-  walkTrigger: 130,      // hierboven: overgaan op wandelen
   resumeBelow: 105,      // hervatten zodra HR hieronder zakt
   recoveryHR: null,      // optioneel
   rpeEasy: 4,
