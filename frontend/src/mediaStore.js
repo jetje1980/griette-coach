@@ -6,6 +6,7 @@
 // alleen de eigenaar toe.
 
 import { supabase, getUserId } from './supabase';
+import { mediaUploadStart, mediaUploadDone } from './sync';
 
 const BUCKET = 'progress-photos';
 
@@ -39,6 +40,7 @@ async function blobToB64(blob) {
 export async function uploadMedia(kind, id, base64, mimeType) {
   const path = await mediaPath(kind, id, mimeType);
   if (!path) return null;
+  mediaUploadStart();
   try {
     const blob = b64toBlob(base64, mimeType);
     const { error } = await supabase.storage.from(BUCKET)
@@ -47,10 +49,12 @@ export async function uploadMedia(kind, id, base64, mimeType) {
 
     // Verificatie: pas als het bestand terugleesbaar is, geldt het als geland
     const { data: check, error: dlErr } = await supabase.storage.from(BUCKET).download(path);
-    if (dlErr || !check || check.size === 0) return null;
+    if (dlErr || !check || check.size === 0) throw new Error('teruglezen mislukt');
+    mediaUploadDone(path, null);
     return path;
   } catch (e) {
-    console.warn(`Media-upload mislukt (${kind}/${id}):`, e.message);
+    // Ook hier: niet alleen naar de console. De centrale melding moet het weten.
+    mediaUploadDone(path, e?.message || String(e), `${kind}/${id}`);
     return null;
   }
 }

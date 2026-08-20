@@ -2,6 +2,7 @@
 // Eigen afbeeldingen per domein (body/style/sport/work/money/freedom), max 3 per domein.
 
 import { uploadMedia, downloadMedia, deleteMedia, listMedia } from './mediaStore';
+import { prepareImage } from './imagePrep';
 
 const DB_NAME = 'gc_dreams';
 const STORE = 'images';
@@ -134,31 +135,8 @@ export const dreamStore = {
   },
 };
 
-// Bestand → geschaalde base64 (max ~1200px, jpeg) zodat IndexedDB klein blijft
+// Bestand → geschaalde base64 (max ~1200px, jpeg) zodat IndexedDB klein blijft.
+// De bewerking zelf staat in imagePrep, samen met de EXIF-correctie.
 export function fileToDreamImage(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 1200;
-        let { width, height } = img;
-        if (width > MAX || height > MAX) {
-          const scale = MAX / Math.max(width, height);
-          width = Math.round(width * scale);
-          height = Math.round(height * scale);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
-      };
-      img.onerror = reject;
-      img.src = reader.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+  return prepareImage(file, { max: 1200, quality: 0.82 });
 }

@@ -1,6 +1,7 @@
 // IndexedDB voor progressiefoto's — per datum en type (voor/zij/achter)
 // Cloud backup via Supabase Storage (progress-photos bucket)
 import { supabase, getUserId } from './supabase';
+import { mediaUploadStart, mediaUploadDone } from './sync';
 
 const DB_NAME = 'gc_photos';
 const STORE = 'photos';
@@ -37,20 +38,40 @@ export async function userPrefix() {
   return uid ? `${uid}/progress` : null;
 }
 
+// Naar de cloud, en eerlijk over de afloop.
+//
+// Dit ging eerder mis op twee manieren tegelijk: de aanroeper wachtte niet
+// op het resultaat, en een fout werd alleen naar de console geschreven. Een
+// foto kon dus alleen op dit toestel staan zonder dat er iets van te zien
+// was — precies het scenario waarin een gewiste telefoon hem meeneemt.
+//
+// Nu: de upload wordt afgewacht, de status gaat naar de centrale melding,
+// en de uitkomst komt terug als { ok, path, reason }.
 async function uploadToCloud(date, type, base64, mimeType) {
+  const prefix = await userPrefix();
+  if (!prefix) {
+    return { ok: false, skipped: true, reason: 'niet ingelogd' };
+  }
+  const ext = mimeType.split('/')[1] || 'jpg';
+  const path = `${prefix}/${date}/${type}.${ext}`;
+  mediaUploadStart();
   try {
-    const prefix = await userPrefix();
-    if (!prefix) return;   // niet ingelogd: geen cloud-write
     const blob = b64toBlob(base64, mimeType);
-    const ext = mimeType.split('/')[1] || 'jpg';
-    const path = `${prefix}/${date}/${type}.${ext}`;
     const { error } = await supabase.storage.from(BUCKET).upload(path, blob, {
       upsert: true,
       contentType: mimeType,
     });
-    if (error) console.warn('Foto upload mislukt:', error.message);
+    if (error) throw error;
+    // Teruglezen: een upload zonder readback is geen bewijs.
+    const { error: readErr } = await supabase.storage.from(BUCKET)
+      .list(`${prefix}/${date}`, { search: `${type}.${ext}` });
+    if (readErr) throw readErr;
+    mediaUploadDone(path, null);
+    return { ok: true, path };
   } catch (e) {
-    console.warn('Foto upload fout:', e.message);
+    const reason = e?.message || String(e);
+    mediaUploadDone(path, reason, `foto ${type} van ${date}`);
+    return { ok: false, path, reason };
   }
 }
 
@@ -79,7 +100,10 @@ export async function checkPhotoCloud() {
 }
 
 export const photoStore = {
-  async save(date, type, base64, mimeType) {
+  // meta: vrije beschrijvende velden (bron, afmetingen, oriëntatie). Ze
+  // gaan mee de lokale opslag in zodat later te zien is waar een foto
+  // vandaan kwam en hoe hij bewerkt is.
+  async save(date, type, base64, mimeType, meta = {}) {
     const db = await openDB();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
@@ -87,12 +111,27 @@ export const photoStore = {
         id: `${date}_${type}`,
         date, type, base64, mimeType,
         savedAt: new Date().toISOString(),
+        ...meta,
       });
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
     });
-    // Upload to cloud in background (non-blocking)
-    uploadToCloud(date, type, base64, mimeType);
+    // Eerst lokaal (dan is hij nooit kwijt), daarna naar de cloud — en op
+    // die cloud wachten we wél, zodat het scherm de waarheid kan tonen.
+    const res = await uploadToCloud(date, type, base64, mimeType);
+    if (res.ok) {
+      const db2 = await openDB();
+      await new Promise(done => {
+        const tx = db2.transaction(STORE, 'readwrite');
+        const st = tx.objectStore(STORE);
+        const req = st.get(`${date}_${type}`);
+        req.onsuccess = () => {
+          if (req.result) st.put({ ...req.result, cloudOk: true, cloudPath: res.path });
+        };
+        tx.oncomplete = done; tx.onerror = done;
+      });
+    }
+    return res;
   },
 
   async getAll() {
@@ -124,6 +163,36 @@ export const photoStore = {
       tx.onerror = () => reject(tx.error);
     });
     deleteFromCloud(date, type);
+  },
+
+  // Alles wat lokaal staat maar niet in de cloud, alsnog omhoog.
+  // Dit is de tegenhanger van restoreFromCloud: die haalt op, deze brengt.
+  // Draait bij het opstarten, zodat een foto die tijdens een slechte
+  // verbinding is gemaakt niet op één toestel blijft hangen.
+  async pushMissingToCloud() {
+    const prefix = await userPrefix();
+    if (!prefix) return { uploaded: 0, failed: 0, skipped: true };
+    const db = await openDB();
+    const all = await new Promise((res, rej) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => rej(req.error);
+    });
+    let uploaded = 0, failed = 0;
+    for (const p of all) {
+      if (p.cloudOk) continue;
+      const r = await uploadToCloud(p.date, p.type, p.base64, p.mimeType || 'image/jpeg');
+      if (r.ok) {
+        uploaded++;
+        await new Promise(res => {
+          const tx = db.transaction(STORE, 'readwrite');
+          tx.objectStore(STORE).put({ ...p, cloudOk: true, cloudPath: r.path });
+          tx.oncomplete = res; tx.onerror = res;
+        });
+      } else if (!r.skipped) failed++;
+    }
+    return { uploaded, failed };
   },
 
   // Restore photos from cloud that are missing in IndexedDB

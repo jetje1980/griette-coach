@@ -2,6 +2,7 @@
 // Alleen bewaard als de gebruiker dat wil; gekoppeld aan WorkoutResult via sourceImageIds.
 
 import { uploadMedia, downloadMedia, deleteMedia } from './mediaStore';
+import { prepareImage, MAX_DIM, QUALITY } from './imagePrep';
 
 const DB_NAME = 'gc_workout_imgs';
 const STORE = 'images';
@@ -104,31 +105,8 @@ export const workoutImages = {
   },
 };
 
-// Bestand → base64 (max ~1600px zodat AI-extractie leesbaar blijft, jpeg)
+// Bestand → base64 (max ~1600px zodat AI-extractie leesbaar blijft, jpeg).
+// De bewerking zelf staat in imagePrep, samen met de EXIF-correctie.
 export function fileToWorkoutImage(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 1600;
-        let { width, height } = img;
-        if (width > MAX || height > MAX) {
-          const scale = MAX / Math.max(width, height);
-          width = Math.round(width * scale);
-          height = Math.round(height * scale);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
-      };
-      img.onerror = reject;
-      img.src = reader.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+  return prepareImage(file, { max: MAX_DIM, quality: QUALITY });
 }

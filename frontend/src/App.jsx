@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { USER } from './config';
 import { store } from './store';
-import { restoreFromCloud, onSyncStatus, getSyncStatus, forceSyncNow } from './sync';
+import { restoreFromCloud } from './sync';
 import { photoStore } from './photoStore';
 import { dreamStore } from './dreamStore';
 import { workoutImages } from './workoutImages';
@@ -13,6 +13,7 @@ import LevenScreen     from './components/LevenScreen';
 import ProgressieScreen from './components/ProgressieScreen';
 import CoachScreen     from './components/CoachScreen';
 import Settings        from './components/Settings';
+import SyncStatus      from './components/SyncStatus';
 import Onboarding      from './components/Onboarding';
 import StravaCallback  from './components/StravaCallback';
 import { todayLocal, addDays } from './datetime';
@@ -39,18 +40,12 @@ export default function App() {
   const [streak, setStreak] = useState(0);
   const [flash, setFlash] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [syncStatus, setSyncStatus] = useState(() => getSyncStatus());
   const [onboardingDone, setOnboardingDone] = useState(
     () => !!localStorage.getItem('gc_onboarding_done')
   );
   const flashTimer = useRef(null);
 
   const dayNum = dayNumber(currentDate);
-
-  useEffect(() => {
-    const unsub = onSyncStatus(setSyncStatus);
-    return unsub;
-  }, []);
 
   const showFlash = useCallback((icon, text) => {
     if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -111,6 +106,9 @@ export default function App() {
     })();
 
     photoStore.restoreFromCloud();
+    // En de andere kant op: foto's die lokaal staan maar de cloud nooit
+    // gehaald hebben (gemaakt zonder verbinding) alsnog omhoog.
+    photoStore.pushMissingToCloud?.().catch(() => {});
     // Beeldmateriaal dat eerder alleen lokaal stond alsnog veiligstellen
     dreamStore.syncWithCloud?.().catch(() => {});
     workoutImages.migrateToCloud?.().catch(() => {});
@@ -184,19 +182,9 @@ export default function App() {
         </button>
       </nav>
 
-      {/* Synchronisatie zichtbaar maken: een mislukte schrijfactie mag niet
-          stil verdwijnen. Wachtrij blijft staan en wordt opnieuw geprobeerd. */}
-      {(syncStatus === 'error' || syncStatus === 'offline') && (
-        <div style={{ position: 'fixed', bottom: 8, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 150, background: 'var(--card)', border: '1px solid var(--rust)',
-          borderRadius: 99, padding: '6px 14px', fontSize: 12, color: 'var(--rust)',
-          fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, maxWidth: '92vw' }}>
-          {syncStatus === 'offline' ? '📴 Offline — wijzigingen staan klaar' : '⚠️ Sync mislukt — wijzigingen bewaard'}
-          <button onClick={() => forceSyncNow()}
-            style={{ background: 'none', border: 'none', color: 'var(--sage)', cursor: 'pointer',
-              fontWeight: 700, fontSize: 12 }}>opnieuw</button>
-        </div>
-      )}
+      {/* Synchronisatie zichtbaar maken: één melding voor sleutels én
+          beeldmateriaal. Een mislukte schrijfactie mag niet stil verdwijnen. */}
+      <SyncStatus />
 
       {/* Screens */}
       {tab === 0 && (

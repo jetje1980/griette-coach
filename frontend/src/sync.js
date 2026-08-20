@@ -9,9 +9,23 @@ import { supabase, getUserId, onAuthChange } from './supabase';
 
 const TABLE = 'gc_coach_data';
 
-// Niet synchroniseren: secrets, grote binaire caches en auth-state.
+// Niet synchroniseren. Kort gehouden en per stuk verantwoord, want elke regel
+// hier betekent: deze gegevens gaan NOOIT naar de cloud. Een uitzondering die
+// niemand meer kan uitleggen is een gegevensverlies dat wacht op zijn moment.
+//
+//   gc_api_key         een restant uit een oudere versie; ai.js wist hem bij
+//                      het opstarten. Sleutels horen sowieso niet omhoog.
+//   gc_photos          de naam van de IndexedDB met foto's. Die gaan langs
+//                      photoStore naar de bucket, niet langs deze tabel.
+//   gc_auth_session    de inlog zelf. Hoort per toestel te blijven.
+//   gc_pending_sync    de wachtrij van dit toestel.
+//   gc_cloud_hydrated  wanneer dit toestel voor het laatst is bijgewerkt.
+//
+// Eerder stonden hier ook 'gc_photo_analysis_' en 'gc_strava_'. Die sleutels
+// bestaan nergens in de app — het waren dode uitzonderingen die stilzwijgend
+// een toekomstige sleutel met die naam zouden hebben tegengehouden.
 const SKIP_PREFIXES = [
-  'gc_api_key', 'gc_photos', 'gc_photo_analysis_', 'gc_strava_',
+  'gc_api_key', 'gc_photos',
   'gc_auth_session', 'gc_pending_sync', 'gc_cloud_hydrated',
 ];
 
@@ -24,12 +38,88 @@ function shouldSync(key) {
 // 'idle' | 'pending' | 'ok' | 'error' | 'offline' | 'signed-out'
 let _status = 'idle';
 const _listeners = new Set();
-function setStatus(s) { _status = s; _listeners.forEach(fn => fn(s)); }
+function setStatus(s) { _status = s; _listeners.forEach(fn => fn(s)); notify(); }
 
 export function getSyncStatus() { return _status; }
 export function onSyncStatus(fn) {
   _listeners.add(fn);
   return () => _listeners.delete(fn);
+}
+
+// ── Het mediakanaal ─────────────────────────────────────────────
+// Foto's en afbeeldingen gaan niet via gc_coach_data maar via Supabase
+// Storage. Dat is een tweede kanaal, en het had een eigen — onzichtbare —
+// afloop: een mislukte upload werd naar de console geschreven en verder
+// gebeurde er niets. Voor wie de app gebruikt bestond die fout dan niet.
+//
+// Daarom melden alle uploads zich hier. Eén status voor de hele app: als
+// er ook maar iets niet online staat, staat dat er.
+let _mediaBusy = 0;
+const _mediaFailed = new Map();          // pad → { reason, at, what }
+
+export function mediaUploadStart() { _mediaBusy++; notify(); }
+export function mediaUploadDone(path, error, what) {
+  _mediaBusy = Math.max(0, _mediaBusy - 1);
+  if (error) _mediaFailed.set(path, { reason: String(error), at: new Date().toISOString(), what: what || 'bestand' });
+  else _mediaFailed.delete(path);
+  notify();
+}
+export function mediaFailures() {
+  return [..._mediaFailed.entries()].map(([path, v]) => ({ path, ...v }));
+}
+export function clearMediaFailure(path) { _mediaFailed.delete(path); notify(); }
+
+// ── Eén samenvatting voor het scherm ────────────────────────────
+// Drie toestanden, in de woorden die de gebruiker leest:
+//   ok       ✓ Alles online opgeslagen
+//   pending  ⏳ Bezig met synchroniseren
+//   error    ⚠ Online opslaan mislukt
+// Plus 'offline' en 'signed-out', want die vragen om iets anders dan
+// "opnieuw proberen".
+export function syncSummary() {
+  const queued = loadPending().size;
+  const failedMedia = _mediaFailed.size;
+
+  if (_status === 'signed-out') {
+    return { state: 'signed-out', icon: '☁', label: 'Niet ingelogd — alleen op dit toestel',
+      detail: 'Log in om alles in de cloud te bewaren.', queued, failedMedia };
+  }
+  if (failedMedia || _status === 'error') {
+    const parts = [];
+    if (queued) parts.push(`${queued} wijziging${queued > 1 ? 'en' : ''}`);
+    if (failedMedia) parts.push(`${failedMedia} foto${failedMedia > 1 ? "'s" : ''}`);
+    return { state: 'error', icon: '⚠', label: 'Online opslaan mislukt',
+      detail: parts.length ? `${parts.join(' en ')} staan nog niet in de cloud. Ze blijven bewaard.`
+        : 'De laatste schrijfactie kwam niet aan. Niets is verloren.',
+      queued, failedMedia };
+  }
+  if (_status === 'offline') {
+    return { state: 'offline', icon: '📴', label: 'Offline — wijzigingen staan klaar',
+      detail: 'Zodra je weer verbinding hebt gaat alles alsnog omhoog.', queued, failedMedia };
+  }
+  if (_mediaBusy > 0 || queued > 0 || _status === 'pending') {
+    return { state: 'pending', icon: '⏳', label: 'Bezig met synchroniseren',
+      detail: _mediaBusy ? 'Beeldmateriaal wordt geüpload.' : 'Wijzigingen worden opgeslagen.',
+      queued, failedMedia };
+  }
+  if (_status === 'ok') {
+    return { state: 'ok', icon: '✓', label: 'Alles online opgeslagen',
+      detail: 'Deze gegevens staan in je eigen cloudopslag.', queued: 0, failedMedia: 0 };
+  }
+  return { state: 'idle', icon: '·', label: 'Nog niet gesynchroniseerd',
+    detail: '', queued, failedMedia };
+}
+
+// Elke verandering — sleutels of media — laat het scherm bijwerken.
+const _summaryListeners = new Set();
+function notify() {
+  const s = syncSummary();
+  _summaryListeners.forEach(fn => { try { fn(s); } catch { /* een luisteraar mag de sync niet breken */ } });
+}
+export function onSyncSummary(fn) {
+  _summaryListeners.add(fn);
+  fn(syncSummary());
+  return () => _summaryListeners.delete(fn);
 }
 
 // ── Pending-wijzigingen (overleven een refresh) ─────────────────
@@ -52,6 +142,15 @@ function markPending(key) {
 export function pendingCount() { return loadPending().size; }
 
 // ── Schrijfacties onderscheppen ─────────────────────────────────
+// Een gewone toewijzing, geen defineProperty: localStorage is een platform-
+// object met een named property setter, en defineProperty gaat dáár langs.
+// Het gevolg zou zijn dat er een sleutel "setItem" wordt opgeslagen met de
+// functie als tekst erin, terwijl de echte setItem onaangeroerd blijft — en
+// dan synchroniseert er niets meer.
+//
+// Nevenwerking van de toewijzing: setItem en removeItem verschijnen in
+// Object.keys(localStorage). De app telt haar sleutels met length/key(i),
+// dus dat heeft geen gevolgen.
 localStorage.setItem = function (key, value) {
   _origSet(key, value);
   if (shouldSync(key)) { markPending(key); scheduleSync(); }

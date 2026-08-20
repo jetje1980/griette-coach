@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { photoStore } from '../photoStore';
+import { prepareImage } from '../imagePrep';
 import {
   PHOTO_VIEWS, PHOTO_INSTRUCTIONS, VISUAL_OBSERVATIONS,
   checkpoints, comparisonSet, changeStory, loadObservations, saveObservation,
@@ -120,22 +121,44 @@ function CheckpointTimeline({ cps, onShoot }) {
 }
 
 // ── Foto's maken ────────────────────────────────────────────────
+// Twee wegen naar binnen, één verwerking.
+//
+// Er was hier alleen een camera-invoer met capture="environment". Op Android
+// betekent dat: de camera opent, en verder niets. Een foto die gisteren met
+// een andere app is gemaakt, of die iemand anders van je nam, kon er niet in.
+//
+// Nu staat er per vak een cameraknop en een galerijknop. Ze wijzen naar twee
+// verschillende <input>-elementen — dat moet, want capture is een eigenschap
+// van het element — maar allebei komen ze uit bij dezelfde `handle`. Dezelfde
+// compressie, dezelfde EXIF-correctie, dezelfde opslag, dezelfde upload.
 function ShootPanel({ date, existing, onSaved, onClose }) {
   const [busy, setBusy] = useState(null);
-  const inputs = useRef({});
+  const [error, setError] = useState(null);
+  const camInputs = useRef({});
+  const galInputs = useRef({});
 
-  async function handle(view, file) {
+  async function handle(view, file, source) {
     if (!file) return;
     setBusy(view);
+    setError(null);
     try {
-      const base64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onloadend = () => res(String(r.result).split(',')[1]);
-        r.onerror = rej;
-        r.readAsDataURL(file);
+      // Verkleinen en rechtop zetten gebeurt hier, niet per bron.
+      const prepped = await prepareImage(file, { source });
+      const res = await photoStore.save(date, view, prepped.base64, prepped.mimeType, {
+        source,
+        width: prepped.width,
+        height: prepped.height,
+        orientation: prepped.orientation,
+        bytes: prepped.bytes,
       });
-      await photoStore.save(date, view, base64, file.type || 'image/jpeg');
       await onSaved?.();
+      if (res && !res.ok) {
+        setError(res.skipped
+          ? 'Opgeslagen op dit toestel. Log in om hem ook online te bewaren.'
+          : 'Opgeslagen op dit toestel, maar online opslaan is niet gelukt. Hij staat in de wachtrij.');
+      }
+    } catch (e) {
+      setError(e?.message || 'Deze foto kon niet worden verwerkt.');
     } finally { setBusy(null); }
   }
 
@@ -158,11 +181,10 @@ function ShootPanel({ date, existing, onSaved, onClose }) {
             <div key={v.key}>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
                 marginBottom: 3, textAlign: 'center' }}>{v.label}</div>
-              <button onClick={() => inputs.current[v.key]?.click()}
-                disabled={busy === v.key}
-                style={{ width: '100%', aspectRatio: '3/4', borderRadius: 8, padding: 0,
+              <div
+                style={{ width: '100%', aspectRatio: '3/4', borderRadius: 8,
                   border: has ? '1px solid var(--sage)' : '1px dashed var(--border)',
-                  background: 'var(--surface)', cursor: 'pointer', overflow: 'hidden',
+                  background: 'var(--surface)', overflow: 'hidden',
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {has ? (
                   <img src={src(has)} alt={v.label}
@@ -172,10 +194,40 @@ function ShootPanel({ date, existing, onSaved, onClose }) {
                     {busy === v.key ? '…' : '📷'}
                   </span>
                 )}
-              </button>
-              <input ref={el => { inputs.current[v.key] = el; }}
+              </div>
+
+              {/* Camera en galerij naast elkaar. Allebei even bereikbaar:
+                  soms wíl je nu een foto maken, soms staat hij er al. */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
+                <button type="button" data-photo-camera={v.key}
+                  onClick={() => camInputs.current[v.key]?.click()}
+                  disabled={busy === v.key}
+                  style={{ width: '100%', fontSize: 10.5, fontWeight: 700, padding: '5px 2px',
+                    borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)',
+                    color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  📷 Maak foto
+                </button>
+                <button type="button" data-photo-gallery={v.key}
+                  onClick={() => galInputs.current[v.key]?.click()}
+                  disabled={busy === v.key}
+                  style={{ width: '100%', fontSize: 10.5, fontWeight: 700, padding: '5px 2px',
+                    borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)',
+                    color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  🖼 Kies uit galerij
+                </button>
+              </div>
+
+              {/* capture stuurt Android rechtstreeks naar de camera … */}
+              <input ref={el => { camInputs.current[v.key] = el; }}
                 type="file" accept="image/*" capture="environment" hidden
-                onChange={e => handle(v.key, e.target.files?.[0])} />
+                data-input-camera={v.key}
+                onChange={e => { handle(v.key, e.target.files?.[0], 'camera'); e.target.value = ''; }} />
+              {/* … en zonder capture opent dezelfde knop de fotobibliotheek. */}
+              <input ref={el => { galInputs.current[v.key] = el; }}
+                type="file" accept="image/*" hidden
+                data-input-gallery={v.key}
+                onChange={e => { handle(v.key, e.target.files?.[0], 'galerij'); e.target.value = ''; }} />
+
               {has && (
                 <button onClick={async () => { await photoStore.delete(date, v.key); await onSaved?.(); }}
                   style={{ background: 'none', border: 'none', color: 'var(--rust)',
@@ -187,6 +239,14 @@ function ShootPanel({ date, existing, onSaved, onClose }) {
           );
         })}
       </div>
+
+      {error && (
+        <div style={{ fontSize: 11, color: 'var(--rust)', lineHeight: 1.5,
+          marginBottom: 8, padding: '6px 8px', borderRadius: 6,
+          border: '1px solid var(--rust)' }}>
+          ⚠ {error}
+        </div>
+      )}
 
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
         textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
