@@ -16,7 +16,7 @@ import Settings        from './components/Settings';
 import Onboarding      from './components/Onboarding';
 import StravaCallback  from './components/StravaCallback';
 import { todayLocal, addDays } from './datetime';
-import { ingestStravaWorkouts, enrichRecentSegments } from './stravaIngest';
+import { ingestStravaWorkouts, enrichRecentSegments, deriveSegmentsFromStreams } from './stravaIngest';
 
 const TABS = ['Vandaag', 'Week', 'Lichaam', 'Leven', 'Progressie', 'Coach'];
 const MAX_FUTURE_DAYS = 90;
@@ -99,6 +99,14 @@ export default function App() {
         // Ronden nahalen voor recente runs: zonder die blokken is er geen
         // looptempo, alleen een sessietempo — en dat is iets anders.
         await enrichRecentSegments({ limit: 3 }).catch(() => {});
+        // Levert het horloge geen ronden, dan leiden we de blokken alsnog af
+        // uit de streams. Dat is het verschil tussen een looptempo en een
+        // sessietempo waar wandelpauzes in meetellen.
+        const der = await deriveSegmentsFromStreams({ limit: 4 }).catch(() => null);
+        if (der?.derived) {
+          await loadLogs();
+          showFlash?.('📈', `Loopblokken afgeleid uit ${der.derived} sessie${der.derived > 1 ? 's' : ''}`);
+        }
       } catch { /* zonder koppeling gebeurt er simpelweg niets */ }
     })();
 

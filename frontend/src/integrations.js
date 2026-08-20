@@ -51,6 +51,12 @@ export const strava = {
   // Ronden en splits van één activiteit. Alleen op verzoek, want elke
   // aanroep telt mee voor de Strava-limieten.
   async detail(id) { return call('coach-strava', `/detail?id=${encodeURIComponent(id)}`); },
+  // De ruwe streams van één activiteit: snelheid, hartslag en cadans per
+  // paar seconden. Hieruit leidt de app zelf loop- en wandelblokken af voor
+  // sessies waarbij het horloge geen ronden heeft vastgelegd.
+  async streams(id, every = 2) {
+    return call('coach-strava', `/streams?id=${encodeURIComponent(id)}&every=${every}`);
+  },
   async sync() { return call('coach-strava', '/sync', { method: 'POST' }); },
   async disconnect() { return call('coach-strava', '/disconnect', { method: 'POST' }); },
 };

@@ -19,6 +19,8 @@
 
 import { supabase, getUserId } from './supabase';
 import { loadWorkouts, saveWorkout, computePace } from './workouts';
+import { segmentsFromStreams, toLaps } from './streamSegments';
+import { paceBreakdown } from './pace';
 import { store } from './store';
 import { RUNS } from './data/runningSchema';
 import { todayLocal, addDays, localDayOf } from './datetime';
@@ -300,4 +302,63 @@ export async function enrichRecentSegments({ limit = 3, sinceDays = 21 } = {}) {
   }
   return { ok: true, enriched, checked: Math.min(limit, candidates.length),
     remaining: Math.max(0, candidates.length - limit), errors };
+}
+
+// ── Blokken afleiden uit de streams ─────────────────────────────
+// Voor sessies waarbij het horloge géén ronden heeft vastgelegd. Strava
+// levert dan alleen kilometersplits, en daar zit lopen en wandelen dóór
+// elkaar — het looptempo blijft leeg en de racevoorspelling valt terug op
+// sessietempo. De streams bevatten wél per paar seconden de snelheid, de
+// hartslag en meestal de cadans, en daaruit zijn de blokken alsnog af te
+// leiden zonder dat er onderweg op een knop hoeft te worden gedrukt.
+//
+// De afgeleide blokken worden als `laps` bewaard met een merkteken, zodat
+// altijd zichtbaar blijft dat ze berekend zijn en niet gemeten.
+export async function deriveSegmentsFromStreams({ limit = 4, sinceDays = 120 } = {}) {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, reason: 'niet ingelogd', derived: 0 };
+
+  const since = addDays(todayLocal(), -sinceDays);
+  const candidates = loadWorkouts().filter(w => {
+    if (!w.externalId || w.date < since) return false;
+    if (!(w.activityType === 'run' || w.activityType == null)) return false;
+    if (w.streamsChecked) return false;              // niet twee keer proberen
+    // Al bruikbare blokken? Dan is er niets af te leiden.
+    const b = paceBreakdown(w);
+    return b?.splitsOnly === true || !(w.laps?.length);
+  });
+
+  if (!candidates.length) return { ok: true, derived: 0, checked: 0 };
+
+  let derived = 0, checked = 0;
+  const notes = [];
+  for (const w of candidates.slice(0, limit)) {
+    checked++;
+    try {
+      const r = await strava.streams(w.externalId);
+      if (!r?.available) {
+        // Onthouden dat het niet lukt, anders vragen we het elke keer opnieuw.
+        saveWorkout({ ...w, streamsChecked: true,
+          streamsNote: r?.reason || 'geen streams beschikbaar' });
+        notes.push(`${w.date}: ${r?.reason || 'geen streams'}`);
+        continue;
+      }
+      const seg = segmentsFromStreams(r.streams);
+      if (!seg.available) {
+        saveWorkout({ ...w, streamsChecked: true, streamsNote: seg.reason,
+          // Een doorlopende run is een uitkomst, geen mislukking.
+          continuousRun: seg.uniform === true });
+        notes.push(`${w.date}: ${seg.reason}`);
+        continue;
+      }
+      const laps = toLaps(seg);
+      saveWorkout({ ...w, laps, streamsChecked: true,
+        segmentSource: 'streams', streamsNote: seg.note });
+      derived++;
+      notes.push(`${w.date}: ${seg.note}`);
+    } catch (e) {
+      notes.push(`${w.date}: ${e.message}`);
+    }
+  }
+  return { ok: true, derived, checked, notes };
 }
