@@ -16,7 +16,7 @@
 // de gewenste finishtijd. Zelfde eenheid, zelfde afstand, zelfde vraag.
 
 import { todayLocal, daysBetween } from './datetime';
-import { raceForecast } from './forecast';
+import { racePerformanceEstimate } from './racePerformance';
 import { runningState } from './raceGoals';
 import { fmtSec, fmtPaceSec } from './sessionMath';
 
@@ -59,24 +59,26 @@ export function raceFeasibility(goal, { logs = {}, currentDate = todayLocal(),
 
   const race = asRace(goal);
   const st = state || runningState({ logs, currentDate });
-  const forecast = raceForecast(race, logs, currentDate);
+  // De voorspelling komt uit het raceprestatiemodel, niet uit een
+  // sessietempo-anker: dat laatste rekende met wandelingen mee.
+  const forecast = racePerformanceEstimate({ goal, logs, currentDate, state: st });
   const weeks = Math.max(0, daysBetween(currentDate, goal.date) / 7);
 
-  const likely = forecast?.scenarios?.find(s => s.key === 'likely')
-    || forecast?.scenarios?.[0] || null;
+  const likely = forecast?.likely || null;
 
-  if (!forecast?.available || !likely?.finishMinutes) {
+  if (!forecast?.available || !likely?.finishSec) {
     return {
       goal, race, weeks: +weeks.toFixed(1),
       verdict: FEASIBILITY.UNKNOWN.id, ...FEASIBILITY.UNKNOWN,
       forecast,
       reason: forecast?.reason ||
         'Nog geen voorspelling mogelijk — daarvoor zijn een paar goed verdragen runs met hartslag nodig.',
+      basis: forecast?.basis || [], limits: forecast?.limits || [],
     };
   }
 
   // Dezelfde eenheid, dezelfde afstand: seconden op deze race.
-  const currentSec = Math.round(likely.finishMinutes * 60);
+  const currentSec = likely.finishSec;
   const targetSec = goal.targetTimeSec;
   const gapSec = currentSec - targetSec;
   const gapPct = targetSec ? gapSec / targetSec : null;
@@ -131,6 +133,8 @@ export function raceFeasibility(goal, { logs = {}, currentDate = todayLocal(),
   const info = FEASIBILITY[verdict];
   return {
     goal, race, forecast,
+    basis: forecast.basis, limits: forecast.limits,
+    forecastSource: forecast.source, forecastConfidence: forecast.confidence,
     weeks: +weeks.toFixed(1),
     verdict, label: info.label, meaning: info.meaning,
 

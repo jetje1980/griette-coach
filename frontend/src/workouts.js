@@ -163,6 +163,11 @@ export function compareWithPrevious(workout) {
 // Workouts met HR in aerobe band → pace-trend bij vergelijkbare hartslag
 export function paceAtHRTrend(hrLow = 120, hrHigh = 135, minObservations = 3) {
   const pts = loadWorkouts()
+    // Alleen hardlooptrainingen. Zonder dit filter kwamen wandelingen in de
+    // tempotrend terecht: op haar data waren zes van de zeven punten Hikes
+    // van 11:49 tot 17:20 per kilometer, waarmee de hele racevoorspelling
+    // op wandeltempo werd gebouwd.
+    .filter(w => w.activityType === 'run' || w.activityType == null)
     .filter(w => w.averageHR != null && w.averageHR >= hrLow && w.averageHR <= hrHigh)
     .map(w => {
       const pace = paceToMin(w.averagePace) ?? (w.distance && w.duration ? w.duration / w.distance : null);

@@ -13,6 +13,8 @@
 // `dataNote` draagt.
 
 import { RUNS, runDistanceKm } from './data/runningSchema';
+import { racePerformanceEstimate } from './racePerformance';
+import { loadRaceGoals } from './raceGoalModel';
 import {
   loadWorkouts, toleranceFor, paceToMin, fmtPace, cardiacDrift, paceAtHRTrend,
 } from './workouts';
@@ -348,17 +350,26 @@ function load5kTests() {
 
 // ── Aankomende races ────────────────────────────────────────────
 export function upcomingRaces(currentDate) {
+  // Afstand, datum en doeltijd van een wedstrijd komen uit het racedoel,
+  // niet uit het trainingsschema. Het schema beschrijft de dag eromheen —
+  // inlopen, strategie, uitlopen — maar bepaalt niet hoe lang de race is.
+  const goals = loadRaceGoals();
   return RUNS
-    .filter(r => r.race && r.fixedDate && r.fixedDate >= currentDate)
-    .map(r => ({
-      nr: r.nr,
-      date: r.fixedDate,
-      name: r.description.replace(/^🏁\s*/, '').split('·')[0].trim(),
-      distanceKm: runDistanceKm(r),
-      terrain: RACE_TERRAIN[r.nr] || 'road',
-      strategy: { runMin: r.runMin, walkMin: r.walkMin },
-      run: r,
-    }))
+    .filter(r => r.race && r.fixedDate)
+    .map(r => {
+      const goal = r.raceGoalId ? goals.find(g => g.id === r.raceGoalId) : null;
+      const date = goal?.date || r.fixedDate;
+      return {
+        nr: r.nr, date,
+        name: goal?.name || r.description.replace(/^🏁\s*/, '').split('·')[0].trim(),
+        distanceKm: goal?.distanceKm ?? runDistanceKm(r),
+        targetTimeSec: goal?.targetTimeSec ?? null,
+        terrain: goal?.terrain || RACE_TERRAIN[r.nr] || 'road',
+        strategy: { runMin: r.runMin, walkMin: r.walkMin },
+        goal, run: r,
+      };
+    })
+    .filter(r => r.date >= currentDate)
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -398,15 +409,19 @@ export function raceForecast(race, logs = {}, currentDate) {
   if (race.distanceKm && race.distanceKm <= 5.5 && tests.length) {
     anchorPace = tests[0].minutes / 5;
     anchorSource = `5 km-test van ${tests[0].date}`;
-  } else if (econ.enough) {
-    // pace@HR is al een sessietempo inclusief wandelpauzes, net als de
-    // race zelf gelopen wordt — vergelijkbaar zonder herrekening.
-    anchorPace = econ.currentPace;
-    anchorSource = `sessietempo bij hartslag ${econ.currentHR} over ${econ.count} sessies`;
   } else {
-    const runs = loadWorkouts().filter(isRun).slice(0, 6).map(sessionPace).filter(Boolean);
-    anchorPace = median(runs);
-    anchorSource = runs.length ? `gemiddelde van je laatste ${runs.length} sessies` : null;
+    // Het anker komt uit het raceprestatiemodel: looptempo uit de segmenten,
+    // wedstrijdinspanning voor zover vrijgegeven, en de loop/wandel-verhouding
+    // die ze aantoonbaar aankan. Vroeger stond hier pace@HR, en dat was een
+    // sessietempo waar wandelingen in meetelden.
+    const perf = racePerformanceEstimate({
+      goal: { distanceKm: race.distanceKm, terrain: race.terrain },
+      logs, currentDate,
+    });
+    if (perf.available) {
+      anchorPace = perf.basePaceSecPerKm / 60;
+      anchorSource = perf.basis[0] || 'raceprestatiemodel';
+    }
   }
 
   if (!anchorPace) {

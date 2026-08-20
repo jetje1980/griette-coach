@@ -216,7 +216,13 @@ export const RUNS = [
   },
   {
     nr: 21, week: 7,
-    runMin: 5, walkMin: 3, reps: null, duration: 42,
+    runMin: 5, walkMin: 3, reps: null,
+    // Drie verschillende getallen, en ze mogen nooit als één worden getoond.
+    // `raceTargetFrom` verwijst naar het racedoel (5 km in 35:00); warmlopen
+    // en uitlopen staan apart; `duration` is de tijd die de hele dag kost.
+    raceTargetFrom: 'okt3',
+    warmupMin: 10, cooldownMin: 10,
+    duration: 55,
     fixedDate: '2026-10-03',
     raceGoalId: 'okt3',
     description: '🏁 TRAIL 5 KM · Run-walk strategie: 5 min lopen / 3 min wandelen',
@@ -338,7 +344,10 @@ export const RUNS = [
   },
   {
     nr: 33, week: 11,
-    runMin: 7, walkMin: 3, reps: null, duration: 65,
+    runMin: 7, walkMin: 3, reps: null,
+    raceTargetFrom: 'okt31',
+    warmupMin: 10, cooldownMin: 10,
+    duration: 85,
     fixedDate: '2026-10-31',
     raceGoalId: 'okt31',
     description: '🏁 BERELOOP 10 KM TERSCHELLING · Run-walk: 7 min lopen / 3 min wandelen',
@@ -377,7 +386,7 @@ export const RUNS = [
 // Zonder tempo is er geen afstand — en dat is eerlijker dan een getal
 // verzinnen. Wie het actuele looptempo meegeeft, krijgt een afstand die
 // bij háár data past in plaats van bij een schemagemiddelde.
-import { sessionMath, sessionRange } from '../sessionMath';
+import { sessionMath, sessionRange, fmtSec } from '../sessionMath';
 
 export function schemaPaces(run) {
   const parse = (t) => { const m = String(t).match(/(\d+):(\d+)/); return m ? +m[1] + +m[2] / 60 : null; };
@@ -418,4 +427,29 @@ export function runDistance(run, paces = null) {
 export function runDistanceKm(run, paces = null) {
   const d = runDistance(run, paces);
   return d ? d.mid : null;
+}
+
+// ── Racedag: doeltijd, opwarmen en sessieduur apart ─────────────
+// Het schema had één `duration`-veld dat soms de racetijd en soms de hele
+// dag betekende. Wie die twee als hetzelfde getal toont, belooft een
+// finishtijd die eigenlijk inclusief warmlopen was — of andersom.
+export function raceDayBreakdown(run, goal = null) {
+  if (!run?.race) return null;
+  const targetSec = goal?.targetTimeSec ?? null;
+  const warmup = Number(run.warmupMin) || 0;
+  const cooldown = Number(run.cooldownMin) || 0;
+  const raceMin = targetSec != null ? targetSec / 60 : null;
+  return {
+    raceTargetMin: raceMin,
+    raceTargetLabel: targetSec != null ? fmtSec(targetSec) : null,
+    warmupMin: warmup,
+    cooldownMin: cooldown,
+    totalSessionMin: raceMin != null ? Math.round(raceMin + warmup + cooldown)
+      : (Number(run.duration) || null),
+    note: raceMin != null
+      ? `Doeltijd ${fmtSec(targetSec)} op de klok. Daar komt ${warmup} min inlopen en ` +
+        `${cooldown} min uitlopen bij, dus reken op ${Math.round(raceMin + warmup + cooldown)} min ` +
+        'van start tot thuis.'
+      : null,
+  };
 }
