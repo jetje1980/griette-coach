@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { RUNS } from '../data/runningSchema';
 import { ai } from '../ai';
 import { store } from '../store';
+import { reconcileDayLog, deleteActivity } from '../activityEdit';
 import {
   saveWorkout, computePace, localVerdict, compareWithPrevious, logAdaptiveEvent,
 } from '../workouts';
@@ -183,16 +184,21 @@ export default function WorkoutForm({ defaultDate, defaultSessionNr, logs, saveF
       confirmedByUser: true,
     });
 
-    // Daglog van de trainingsdatum bijwerken (ook bij backdating)
-    if (f.activityType === 'run' && f.plannedSessionId) {
+    // Daglog van de trainingsdatum bijwerken (ook bij backdating).
+    // Belangrijk: dit zette vroeger alleen run_done aan en nooit uit. Wie een
+    // per ongeluk als training geboekte wandeling corrigeerde, hield daardoor
+    // een dag die als hardlooptraining bleef tellen. De vlag volgt nu uit de
+    // activiteiten die er werkelijk staan.
+    if (f.activityType === 'run') {
       await store.saveLog(f.date, {
-        run_done: true, run_session: Number(f.plannedSessionId),
         ...(f.rpe != null ? { training_rpe: f.rpe } : {}),
         ...(f.legs ? { training_legs: f.legs } : {}),
         ...(f.couldDoMore ? { training_could_more: f.couldDoMore } : {}),
       });
-    } else if (f.activityType === 'run') {
-      await store.saveLog(f.date, { run_done: true });
+    }
+    await reconcileDayLog(f.date, { force: true });
+    if (initialWorkout && initialWorkout.date !== f.date) {
+      await reconcileDayLog(initialWorkout.date, { force: true });
     }
     // App-state verversen
     try { await saveFields?.({}); } catch { /* alleen refresh */ }

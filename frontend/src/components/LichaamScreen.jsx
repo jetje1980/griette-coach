@@ -21,6 +21,7 @@ import { todayLocal, startOfWeek } from '../datetime';
 import { weekTrainingRows, nextOfferDate, STATUS_META } from '../trainingDay';
 import { ingestStravaWorkouts } from '../stravaIngest';
 import ExerciseTechnique from './ExerciseTechnique';
+import ActivityList from './ActivityList';
 
 // ── Constants ────────────────────────────────────────────────────
 const SYMPTOMS_LIST = [
@@ -1192,6 +1193,11 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
             )}
           </>
         )}
+
+        {/* Elke activiteit corrigeerbaar, ook zonder schemakoppeling */}
+        <ActivityList currentDate={currentDate}
+          onEdit={(w) => { setEditingWorkout(w); setShowWorkoutForm(true); }}
+          onChanged={() => { setPlanRefresh(k => k + 1); saveFields?.({}); }} />
 
         {/* Volledig trainingsplan T1–T35 */}
         <TrainingPlan key={planRefresh} logs={logs} currentNr={nextRunNr}
