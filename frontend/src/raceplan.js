@@ -27,6 +27,7 @@ import { loadHrSettings } from './goals';
 import { allBreakdowns } from './pace';
 import { exertionalResponse } from './symptoms';
 import { calibrateHr } from './runningHistory';
+import { hrPrescription, intensityRelease, loadHrModel } from './hrModel';
 import { runningState, RACES as DEFAULT_RACES } from './raceGoals';
 import { restDayDecision, MAX_WEEKLY_VOLUME_GROWTH } from './restday';
 import { RUNS } from './data/runningSchema';
@@ -326,9 +327,7 @@ function buildRun({ purpose, base, targetPace, hrZone, race, walkPace }) {
       runMin, walkMin, reps,
       duration,
       hrZone,
-      hrTip: purpose === 'FIVE_K_SPECIFIC' || purpose === 'TEN_K_SPECIFIC'
-        ? 'Tempoblokken mogen boven je rustige band uitkomen, maar stop het blok zodra je de praatregel verliest. Wandel volledig uit tussen de blokken.'
-        : 'Boven je bovengrens: wandelen tot je weer onder je rustige band zit.',
+      hrTip: null,
       tempo: paceText ? paceText + walkText : null,
       goal: PURPOSE[purpose].aim,
       km_estimate: km ? `${km.toFixed(1)} km` : null,
@@ -354,6 +353,11 @@ export function planNextSession({
   const hrSettings = loadHrSettings();
   const cal = calibrateHr({ logs, currentDate });
 
+  // Fysiologie en tolerantie apart: de CPET zegt wat er bestaat, de
+  // herstelrespons van de afgelopen weken zegt hoeveel daarvan nu vrij is.
+  const hrModelSnapshot = loadHrModel();
+  const releaseSnapshot = intensityRelease({ logs, currentDate, model: hrModelSnapshot });
+
   const runGate = gate || restDayDecision({ log, logs, currentDate });
 
   // De respons op de laatste sessie: dit bepaalt of er überhaupt opgebouwd
@@ -376,7 +380,9 @@ export function planNextSession({
     runKm7: st.runKm7, runKm28: st.runKm28,
     runMin7: st.runMin7, runMin28: st.runMin28,
     pemFreeWeeks: st.pemFreeWeeks,
-    hrRange: cal.currentRange, hrCeiling: cal.ceiling,
+    hrRange: cal.currentRange, easyHigh: cal.easyHigh ?? cal.currentRange.high,
+    vt1Hr: hrModelSnapshot.vt1Hr, vt2Hr: hrModelSnapshot.vt2Hr,
+    intensityCeiling: releaseSnapshot.ceiling, releaseLevel: releaseSnapshot.level,
     lastResponse: lastResponse?.status || null,
     warnings,
   };
@@ -420,22 +426,24 @@ export function planNextSession({
   const race = raceForPurpose(chosen, timeline);
   const targetPace = paceFor(chosen, { runPace: st.runPace, race });
   const walkPace = st.runPace ? +(st.runPace + 1.25).toFixed(2) : null;
-  // Een band van 128 tot 128 is geen band. Bij te weinig spreiding in de
-  // metingen tonen we een werkbare marge in plaats van één getal.
-  const lo = cal.currentRange.low, hi = cal.currentRange.high;
-  const band = hi - lo >= 6 ? { lo, hi }
-    : { lo: Math.max(90, Math.round((lo + hi) / 2) - 6),
-        hi: Math.min(cal.ceiling ?? hi + 6, Math.round((lo + hi) / 2) + 6) };
-  const hrZone = `Rustige band ${band.lo}–${band.hi} bpm` +
-    (cal.ceiling ? ` · boven ${cal.ceiling} wandelen` : '');
+  // Eén hartslaginstructie per sessie, en die komt uit het hartslagmodel:
+  // fysiologie (CPET), tolerantie (herstelrespons) en het doel van déze
+  // sessie samen. Nooit een richtgebied naast een wandelgrens die elkaar
+  // overlappen.
+  const hrx = hrPrescription({ purpose: chosen, logs, currentDate,
+    model: hrModelSnapshot, release: releaseSnapshot });
+  const hrZone = hrx.line;
+  const hrDetail = hrx.text;
 
   const { run, levers } = buildRun({
     purpose: chosen, base, targetPace, hrZone, race, walkPace,
   });
+  run.hrDetail = hrDetail;
+  run.hrWhy = hrx.why;
 
   return {
     purpose: chosen, race, timeline, run,
-    targetPace, hrZone, mayBuild, derivedFrom,
+    targetPace, hrZone, hr: hrx, mayBuild, derivedFrom,
     reason: reasonFor({ chosen, mayBuild, lastResponse, st }),
     why: whyText({ chosen, race, timeline, st, proven, mayBuild, targetPace, currentDate }),
     gate: runGate, inputs, levers,

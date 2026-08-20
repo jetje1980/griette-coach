@@ -528,7 +528,6 @@ export function pacePrediction({ run = null, currentDate = todayLocal() } = {}) 
     runPace: band(medRun),
     walkPace: band(medWalk, 0.06),
     sessionPace: band(predictedSession),
-    targetHrCeiling: hr.walkTrigger,
     targetHr: { low: hr.easyLow, high: hr.easyHigh },
     expectedAvgHr: median(recent.map(b => b.runHr ?? Number(b.workout.averageHR)).filter(Boolean)),
     expectedDistanceKm: (structure && predictedSession)
@@ -540,9 +539,11 @@ export function pacePrediction({ run = null, currentDate = todayLocal() } = {}) 
       !recent.some(b => b.walkPace) ? 'nog geen gemeten wandeltempo — nu geschat' : null,
       !econ.enough ? 'nog te weinig punten voor een economie-trendlijn' : null,
     ].filter(Boolean),
-    // De zin die overal moet blijven staan.
-    caveat: 'Hartslag is de instructie, tempo is de uitkomst. Boven ' +
-      `${hr.walkTrigger} bpm ga je wandelen, ook als het tempo dan wegzakt.`,
+    // De zin die overal moet blijven staan. Let op de formulering: het
+    // richtgebied is een doel, geen grens waarboven iets fout gaat.
+    caveat: 'Hartslag is de instructie, tempo is de uitkomst. Blijft je hartslag ' +
+      `structureel boven ${hr.easyHigh} bpm, laat dan het tempo zakken — ook als dat ` +
+      'trager voelt dan je zou willen.',
     sessionPaceWarning: 'Het sessietempo telt de wandelblokken mee. Het is dus lager dan je hardloopsnelheid en zegt daar niets over.',
   };
 }

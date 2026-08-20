@@ -4,7 +4,8 @@
 // 9 km/u en dus sneller dan de loopblokken — fysiek onmogelijk als
 // richtlijn. Ze zijn afgeleid van het looptempo van elke sessie: een
 // wandelpauze hoort langzamer te zijn dan het blok ervoor.
-// Grensregel: boven 130 bpm → direct wandelen tot < 105 bpm, dan hervat
+// Richtgebied, geen stopgrens: blijft de hartslag structureel boven het
+// easy-doel, dan gaat het tempo omlaag. VT1 (132) is een overgang.
 
 export const RUNS = [
   // ── Week 1 · Aug 18-22 · Eerste stappen — hartslag is de baas ─────────────
@@ -231,7 +232,7 @@ export const RUNS = [
     runMin: 5, walkMin: 3, reps: null, duration: 75,
     fixedDate: '2026-10-03',
     description: '🏁 TRAIL 10 KM · Run-walk strategie: 5 min lopen / 3 min wandelen',
-    hrZone: 'Zone B HARD LIMIT: nooit boven 132 bpm',
+    hrZone: 'Wedstrijd: hartslagadvies per afstand — zie het raceplan',
     hrTip: 'Race-strategie: bij 130+ DIRECT wandelen. Liever 10 min langzamer dan PEM riskeren. Wandelen op heuvels/klimmen altijd.',
     tempo: 'Looptempo: ~10:00-11:00 min/km · Wandeltempo: ~12:15-13:00 min/km · Doeltijd: ~75-85 min',
     goal: 'UITLOPEN, niet sprinten. Finishen in zone B = succes. Eerste race = ervaring opdoen.',
@@ -364,7 +365,7 @@ export const RUNS = [
     runMin: 7, walkMin: 3, reps: null, duration: 80,
     fixedDate: '2026-10-30',
     description: '🏁 BERELOOP 10 KM TERSCHELLING · Run-walk: 7 min lopen / 3 min wandelen',
-    hrZone: 'Zone B HARD LIMIT: nooit boven 132 bpm',
+    hrZone: 'Wedstrijd: hartslagadvies per afstand — zie het raceplan',
     hrTip: 'Race-strategie: zand en duin = meer weerstand. Bij 130+ DIRECT wandelen. Terschelling is pittiger dan weg — verwacht 5-10% lagere snelheid. Liever slenteren dan PEM.',
     tempo: 'Looptempo: ~10:00-11:30 min/km op strand · Wandeltempo: ~12:45-13:30 min/km · Doeltijd: ~75-90 min',
     goal: 'TERSCHELLING BERELOOP — finishen is winnen. Zone B door de hele race. Genieten van het eiland.',

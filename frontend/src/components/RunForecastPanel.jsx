@@ -710,7 +710,7 @@ function RaceForecasts({ logs, currentDate }) {
                 </div>
                 <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginBottom: 8 }}>
                   Hartslag in alle scenario's {f.expectedHR.low}–{f.expectedHR.high} bpm,
-                  harde grens {f.expectedHR.hardLimit}. Basis: {f.anchorSource}.
+                  Basis: {f.anchorSource}.
                 </div>
 
                 <div style={{ paddingTop: 8, borderTop: '1px solid var(--border)' }}>
@@ -814,7 +814,7 @@ function NextSessionForecastCard({ log, logs, currentDate }) {
         </div>
         {row('Duur', f.duration ? `${f.duration} min` : '–')}
         {row('Afstand', f.distanceKm ? `${f.distanceKm.low}–${f.distanceKm.high} km` : '–')}
-        {row('Doelhartslag', `${f.targetHR.low}–${f.targetHR.high} bpm, wandelen boven ${f.targetHR.hardLimit}`)}
+        {row('Easy-richtgebied', `${f.targetHR.low}–${f.targetHR.high} bpm`)}
         {row('Verwachte gem. hartslag', f.expectedHR
           ? `${Math.round(f.expectedHR.low)}–${Math.round(f.expectedHR.high)} bpm` : '–')}
         {/* Drie tempo's, uitdrukkelijk apart. Session pace telt de

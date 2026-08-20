@@ -409,7 +409,7 @@ function ForecastMini({ log, logs, currentDate, coach, nextSession }) {
       <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.45, marginTop: 8,
         paddingTop: 8, borderTop: '1px solid var(--border)' }}>
         <strong>Advies:</strong> {f.safe.runToday
-          ? `hartslag ${f.targetHR.low}–${f.targetHR.high}, boven ${f.targetHR.hardLimit} wandelen. Het tempo hierboven is een verwachting, geen doel.`
+          ? `richtgebied ${f.targetHR.low}–${f.targetHR.high} bpm. Het tempo hierboven is een verwachting, geen doel.`
           : f.safe.detail}
       </div>
     </div>

@@ -70,7 +70,9 @@ export function sessionDetail(run) {
     }`,
     cooldown: '5 min rustig wandelen + kort losmaken (kuiten, heupen)',
     stopCriteria: [
-      `Boven ${loadHrSettings().walkTrigger} bpm → wandelen tot onder ${loadHrSettings().resumeBelow} bpm, eventueel sessie inkorten`,
+      `Blijft je hartslag structureel boven ${loadHrSettings().easyHigh} bpm → tempo omlaag; ` +
+        `gaat hij richting ${loadHrSettings().easyHigh + 8} → wandelen tot onder ` +
+        `${loadHrSettings().resumeBelow} bpm`,
       `RPE hoger dan ${loadHrSettings().rpeEasy + 1} → terug naar wandelen`,
       'Zware benen of duizeligheid → stoppen, dit is data, geen falen',
       'Herstelstatus is Amber → de lichtere variant kiezen',

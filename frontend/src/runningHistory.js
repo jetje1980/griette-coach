@@ -148,32 +148,43 @@ export function calibrateHr({ logs = {}, currentDate = todayLocal(), sinceDays =
       enough: false, observations: rows.length, safeObservations: safe.length,
       historicalVt1: CPET.vt1Hr,
       currentRange: { low: hr.easyLow, high: hr.easyHigh },
-      ceiling: hr.walkTrigger,
+      // Anker, geen stopgrens: VT1 is de bovenkant van het rustige gebied,
+      // niet het punt waarboven je moet wandelen.
+      vt1Anchor: CPET.vt1Hr,
       confidence: 'LOW',
-      note: `Nog ${Math.max(0, 3 - safe.length)} goed verdragen run(s) met hartslag nodig om je band uit eigen data af te leiden. Tot dan geldt je huidige instelling ${hr.easyLow}–${hr.easyHigh}, met het CPET-VT1 van ${CPET.vt1Hr} als bovengrens-anker.`,
+      note: `Nog ${Math.max(0, 3 - safe.length)} goed verdragen run(s) met hartslag nodig om je easy-richtgebied uit eigen data af te leiden. Tot dan geldt je huidige instelling ${hr.easyLow}–${hr.easyHigh}. Het CPET-VT1 van ${CPET.vt1Hr} is daarbij het anker voor rustig werk — geen grens waarboven je moet wandelen.`,
       supporting: safe,
     };
   }
 
   const hrs = safe.map(r => r.hr).sort((a, b) => a - b);
   const q = (p) => hrs[Math.min(hrs.length - 1, Math.floor(hrs.length * p))];
-  const low = Math.round(q(0.1));
-  const high = Math.round(q(0.9));
+  let low = Math.round(q(0.1));
+  let high = Math.round(q(0.9));
+  // Een band van 124 tot 124 is geen band. Liggen de metingen te dicht op
+  // elkaar, dan tonen we een werkbare marge rond het midden.
+  if (high - low < 8) {
+    const mid = Math.round((low + high) / 2);
+    low = mid - 4; high = mid + 4;
+  }
 
-  // De bovengrens gaat nooit boven het CPET-VT1: dat is het punt waarboven
-  // het aerobe karakter verdwijnt, en precies waar het in 2024 misging.
-  const ceiling = Math.min(CPET.vt1Hr, high + 4);
+  // Het easy-richtgebied loopt niet boven VT1: rustige duurtraining hoort
+  // rond of onder de eerste drempel te blijven. Dat is een keuze die past
+  // bij het doel van zulke sessies — geen uitspraak dat daarboven gevaar
+  // ligt. Wat er boven VT1 is vrijgegeven, bepaalt intensityRelease.
+  const easyHigh = Math.min(CPET.vt1Hr, high + 4);
 
   const confidence = safe.length >= 8 ? 'HIGH' : safe.length >= 5 ? 'MEDIUM' : 'LOW';
 
   return {
     enough: true, observations: rows.length, safeObservations: safe.length,
     historicalVt1: CPET.vt1Hr,
-    currentRange: { low, high },
-    ceiling,
+    currentRange: { low, high: Math.min(high, easyHigh) },
+    vt1Anchor: CPET.vt1Hr,
+    easyHigh,
     confidence,
     supporting: safe.slice(-6),
-    note: `Afgeleid uit ${safe.length} goed verdragen runs met hartslag in de loopblokken. Je huidige veilige band ligt op ${low}–${high}; boven ${ceiling} ga je wandelen. Het CPET-VT1 van ${CPET.vt1Hr} is de harde bovengrens, ook als je data hoger uitkomt.`,
+    note: `Afgeleid uit ${safe.length} goed verdragen runs met hartslag in de loopblokken. Je easy-richtgebied ligt op ${low}–${Math.min(high, easyHigh)} bpm. VT1 (${CPET.vt1Hr}) is daarbij het anker voor rustig werk, geen grens waarboven je moet stoppen: erboven begint het intensievere werk, niet het verbodene; hoeveel daarvan is vrijgegeven hangt af van je herstelrespons, niet van de test.`,
     differsFromSetting: low !== hr.easyLow || high !== hr.easyHigh,
   };
 }
@@ -182,10 +193,13 @@ export function calibrateHr({ logs = {}, currentDate = todayLocal(), sinceDays =
 // stilzwijgend.
 export function applyCalibration(cal) {
   if (!cal?.enough) return null;
+  // Bewust alleen het easy-richtgebied. Vroeger schoof deze functie het
+  // CPET-VT1 door naar `walkTrigger`, waarna overal in de app "boven 132
+  // wandelen" verscheen. Dat maakte van een fysiologische overgang een
+  // stopgrens die de CPET nergens beweert.
   return saveHrSettings({
     easyLow: cal.currentRange.low,
     easyHigh: cal.currentRange.high,
-    walkTrigger: cal.ceiling,
   });
 }
 

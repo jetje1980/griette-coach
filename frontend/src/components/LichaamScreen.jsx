@@ -1070,10 +1070,13 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
                   <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 4 }}>
                     {nextSession.run.duration} min · {nextSession.run.hrZone}
                   </div>
-                  {nextSession.run.hrTip && (
+                  {(nextSession.run.hrDetail || nextSession.run.hrTip) && (
                     <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 4,
                       lineHeight: 1.45 }}>
-                      {nextSession.run.hrTip}
+                      {nextSession.run.hrDetail || nextSession.run.hrTip}
+                      {nextSession.run.hrWhy && (
+                        <div style={{ marginTop: 3 }}>{nextSession.run.hrWhy}</div>
+                      )}
                     </div>
                   )}
                 </>

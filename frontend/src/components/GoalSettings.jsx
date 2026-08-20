@@ -175,7 +175,7 @@ export default function GoalSettings({ logs }) {
               {[
                 { k: 'easyLow',     label: 'Easy HR onder',     unit: 'bpm' },
                 { k: 'easyHigh',    label: 'Easy HR boven',     unit: 'bpm' },
-                { k: 'walkTrigger', label: 'Wandelen boven',    unit: 'bpm' },
+                { k: 'walkTrigger', label: 'Wandelen boven (optioneel)', unit: 'bpm' },
                 { k: 'resumeBelow', label: 'Hervatten onder',   unit: 'bpm' },
                 { k: 'rpeEasy',     label: 'RPE easy',          unit: '/10' },
                 { k: 'rpeThreshold', label: 'RPE grens',        unit: '/10' },

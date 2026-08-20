@@ -259,7 +259,8 @@ export function nextSessionForecast({ run, logs = {}, currentDate, gate = null }
       };
     }
     const caps = [
-      `Hartslag is de baas: ${hr.easyLow}–${hr.easyHigh} bpm, boven ${hr.walkTrigger} direct wandelen tot onder ${hr.resumeBelow}.`,
+      `Richtgebied ${hr.easyLow}–${hr.easyHigh} bpm. Kort erboven is geen fout; blijft de ` +
+        'hartslag er structureel boven, laat dan het tempo zakken.',
       `RPE niet boven ${hr.rpeEasy}/10 — als het zwaarder voelt, is het te snel, ongeacht wat de klok zegt.`,
     ];
     if (confidence === 'LOW') {
@@ -288,7 +289,7 @@ export function nextSessionForecast({ run, logs = {}, currentDate, gate = null }
     paces: paceModel,
     duration,
     distanceKm: distRange,
-    targetHR: { low: hr.easyLow, high: hr.easyHigh, hardLimit: hr.walkTrigger },
+    targetHR: { low: hr.easyLow, high: hr.easyHigh },
     expectedHR: hrRange,
     runBlockPace: runBlockRange,
     runBlockNote,
@@ -511,7 +512,7 @@ export function raceForecast(race, logs = {}, currentDate) {
     weeksOut: +weeksOut.toFixed(1),
     anchorPace, anchorSource,
     scenarios: [conservative, likely, stretch].filter(Boolean),
-    expectedHR: { low: hr.easyLow, high: hr.easyHigh, hardLimit: hr.walkTrigger },
+    expectedHR: { low: hr.easyLow, high: hr.easyHigh },
     confidence, confidenceText: CONFIDENCE_TEXT[confidence],
     limits,
     economy: econ, drift, longestTolerated: longest,
@@ -533,7 +534,8 @@ function safeRaceAdvice(race, longest, hr, coverage) {
     runMin && walkMin
       ? `Run/walk ${runMin} min lopen / ${walkMin} min wandelen vanaf de start — ook als het makkelijk voelt.`
       : 'Run/walk vanaf de start, ook als het makkelijk voelt.',
-    `Hartslag is de enige maatstaf: ${hr.easyLow}–${hr.easyHigh} bpm, boven ${hr.walkTrigger} direct wandelen.`,
+    `Wedstrijdhartslag volgt een eigen advies per afstand — zie het raceplan. ` +
+      `De easy delen liggen rond ${hr.easyLow}–${hr.easyHigh} bpm.`,
     'Klimmen altijd wandelen, ongeacht hoe je je voelt.',
     'Finishen binnen de hartslagband is het doel. De tijd is een uitkomst, geen opdracht.',
   ];

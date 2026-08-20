@@ -4,6 +4,7 @@ import { headacheTrend, HEADACHE_SEVERITY, exertionalResponse } from '../symptom
 import { calibrateHr, applyCalibration, CPET, HISTORICAL_RUNS, TOLERANCE_LABELS,
   historicalCapacity, LESSONS, PROGRESSION_RULE, earlyWarnings, PHASES } from '../runningHistory';
 import { fmtPace, loadWorkouts } from '../workouts';
+import { loadHrModel, intensityRelease } from '../hrModel';
 import { todayLocal } from '../datetime';
 
 // Progressie → Run, radicaal simpel.
@@ -52,6 +53,9 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
   const races = useMemo(() => upcomingRaces(currentDate).map(r =>
     raceReadiness(r, { logs, currentDate, state })), [state, currentDate]);
   const hist = historicalCapacity();
+  const hrm = loadHrModel();
+  const release = useMemo(() => intensityRelease({ logs, currentDate, model: hrm }),
+    [logs, currentDate]);
 
   // De laatste sessie en hoe hij landde — dat is de vraag die vandaag telt.
   const lastRun = loadWorkouts().find(w =>
@@ -173,13 +177,18 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
       <Label>Je hartslagband nu</Label>
       <div className="os-card" style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-          <Stat label="Veilige band" value={`${cal.currentRange.low}–${cal.currentRange.high}`}
+          <Stat label="Easy-richtgebied" value={`${cal.currentRange.low}–${cal.currentRange.high}`}
             sub="afgeleid uit je eigen runs" />
-          <Stat label="Wandelen boven" value={String(cal.ceiling)} />
-          <Stat label="CPET VT1" value={String(cal.historicalVt1)} sub="4 feb 2025" />
+          <Stat label="Vrijgegeven tot" value={String(release.ceiling)}
+            sub={release.label.toLowerCase()} />
+          <Stat label="CPET VT1 · VT2" value={`${hrm.vt1Hr} · ${hrm.vt2Hr}`} sub="4 feb 2025" />
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 8 }}>
           {cal.note}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5, marginTop: 8,
+          paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+          <strong>{release.label}.</strong> {release.why}
         </div>
         {cal.enough && cal.differsFromSetting && !calApplied && (
           <button className="btn-secondary"
