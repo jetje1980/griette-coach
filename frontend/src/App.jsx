@@ -105,10 +105,14 @@ export default function App() {
       } catch { /* zonder koppeling gebeurt er simpelweg niets */ }
     })();
 
-    photoStore.restoreFromCloud();
-    // En de andere kant op: foto's die lokaal staan maar de cloud nooit
-    // gehaald hebben (gemaakt zonder verbinding) alsnog omhoog.
-    photoStore.pushMissingToCloud?.().catch(() => {});
+    // Ophalen, dan wat nog niet in de cloud staat alsnog omhoog, dan wat op
+    // een oude padindeling staat overzetten. In die volgorde: eerst compleet
+    // maken, dan pas opruimen.
+    (async () => {
+      await photoStore.restoreFromCloud().catch(() => 0);
+      await photoStore.pushMissingToCloud?.().catch(() => {});
+      await photoStore.migratePaths?.().catch(() => {});
+    })();
     // Beeldmateriaal dat eerder alleen lokaal stond alsnog veiligstellen
     dreamStore.syncWithCloud?.().catch(() => {});
     workoutImages.migrateToCloud?.().catch(() => {});

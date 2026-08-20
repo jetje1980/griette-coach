@@ -245,7 +245,6 @@ function AccountInfo() {
 }
 
 export default function Settings({ onClose }) {
-  const [apiKey, setApiKey] = useState('');
   const [aiEndpoint, setAiEndpointState] = useState('');
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -253,17 +252,15 @@ export default function Settings({ onClose }) {
   const [backupResult, setBackupResult] = useState(null);
 
   useEffect(() => {
-    try { setApiKey(sessionStorage.getItem('gc_api_key_session') || ''); } catch { /* geen storage */ }
     try { setAiEndpointState(localStorage.getItem('gc_ai_endpoint') || ''); } catch { /* geen storage */ }
   }, []);
 
   function saveKey() {
-    // Sessie-sleutel: alleen sessionStorage — verdwijnt bij sluiten browser.
-    // Er wordt bewust NIETS persistent (localStorage) opgeslagen.
-    try {
-      if (apiKey.trim()) sessionStorage.setItem('gc_api_key_session', apiKey.trim());
-      else sessionStorage.removeItem('gc_api_key_session');
-    } catch { /* geen storage */ }
+    // Hier stond een schrijfactie die een API-sleutel in sessionStorage zette.
+    // Er is geen invoerveld meer voor die sleutel en ai.js leest hem nergens
+    // — alle AI-verkeer loopt via een geauthenticeerde Edge Function. Wat
+    // overbleef was dus alleen nog een plek waar een geheim terecht kón
+    // komen. Weg.
     try {
       if (aiEndpoint.trim()) localStorage.setItem('gc_ai_endpoint', aiEndpoint.trim().replace(/\/$/, ''));
       else localStorage.removeItem('gc_ai_endpoint');
@@ -292,10 +289,10 @@ export default function Settings({ onClose }) {
       } else if (r.status === 503) {
         setTestResult({ ok: false, msg: 'Server bereikbaar maar ANTHROPIC_API_KEY ontbreekt in backend .env' });
       } else {
-        setTestResult({ ok: false, msg: `Server niet beschikbaar (${r.status}) — sessie-sleutel wordt als fallback gebruikt` });
+        setTestResult({ ok: false, msg: `AI-server niet beschikbaar (${r.status}).` });
       }
     } catch (err) {
-      setTestResult({ ok: false, msg: `Server niet bereikbaar — sessie-sleutel wordt als fallback gebruikt` });
+      setTestResult({ ok: false, msg: 'AI-server niet bereikbaar.' });
     } finally {
       setTesting(false);
     }

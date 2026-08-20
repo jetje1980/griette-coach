@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { buildStamp } from './buildstamp';
 
 export default defineConfig(({ command }) => ({
-  plugins: [react()],
+  plugins: [react(), buildStamp()],
   base: command === 'build' ? '/griette-coach/' : '/',
   server: {
     port: 5173,

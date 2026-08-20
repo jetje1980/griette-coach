@@ -31,11 +31,47 @@ function b64toBlob(base64, mimeType) {
   return new Blob([arr], { type: mimeType });
 }
 
-// Nieuwe paden staan onder de gebruiker: {user_id}/progress/{datum}/{type}.ext
-// Oude paden ({datum}/{type}.ext) blijven leesbaar tot ze gemigreerd zijn.
+// ── Het pad ─────────────────────────────────────────────────────
+//
+//   {user_id}/progress/{datum}/{type}/{id}.{ext}
+//
+// Vier dingen, elk met een reden:
+//
+//   user_id   het opslagbeleid schrijft eigenaar-alleen voor; met het id
+//             vooraan is dat ook aan het pad te zien;
+//   progress  deze bucket herbergt ook workout-screenshots en droombeelden.
+//             Zonder dit segment lopen die door elkaar;
+//   datum     één fotomoment is één map;
+//   type      voor, zij, achter — een eigen map, geen bestandsnaam. Zo kan er
+//             later een tweede opname bij zonder de eerste te overschrijven;
+//   id        het beslissende verschil met het oude pad. Daar heette het
+//             bestand `voor.jpeg`, en een tweede foto van hetzelfde moment
+//             overschreef de eerste stilzwijgend.
+//
+// Twee oudere indelingen blijven leesbaar zolang er nog bestanden op staan:
+//   {user_id}/progress/{datum}/{type}.{ext}   (vorige versie)
+//   {datum}/{type}.{ext}                      (de allereerste)
 export async function userPrefix() {
   const uid = await getUserId();
   return uid ? `${uid}/progress` : null;
+}
+
+const PHOTO_TYPES = ['voor', 'zij', 'achter'];
+
+function newPhotoId() {
+  return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function photoPath({ prefix, date, type, id, ext }) {
+  return `${prefix}/${date}/${type}/${id}.${ext}`;
+}
+
+// Het nieuwe pad herken je aan de aanzichtmap: .../{datum}/{type}/{id}.{ext}
+const NEW_LAYOUT = new RegExp(
+  `/\\d{4}-\\d{2}-\\d{2}/(?:${PHOTO_TYPES.join('|')})/[^/]+\\.[A-Za-z0-9]+$`);
+
+export function isNewLayout(path) {
+  return !!path && NEW_LAYOUT.test(path);
 }
 
 // Naar de cloud, en eerlijk over de afloop.
@@ -47,13 +83,14 @@ export async function userPrefix() {
 //
 // Nu: de upload wordt afgewacht, de status gaat naar de centrale melding,
 // en de uitkomst komt terug als { ok, path, reason }.
-async function uploadToCloud(date, type, base64, mimeType) {
+async function uploadToCloud(date, type, base64, mimeType, photoId = null) {
   const prefix = await userPrefix();
   if (!prefix) {
     return { ok: false, skipped: true, reason: 'niet ingelogd' };
   }
-  const ext = mimeType.split('/')[1] || 'jpg';
-  const path = `${prefix}/${date}/${type}.${ext}`;
+  const ext = (mimeType.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  const id = photoId || newPhotoId();
+  const path = photoPath({ prefix, date, type, id, ext });
   mediaUploadStart();
   try {
     const blob = b64toBlob(base64, mimeType);
@@ -63,11 +100,12 @@ async function uploadToCloud(date, type, base64, mimeType) {
     });
     if (error) throw error;
     // Teruglezen: een upload zonder readback is geen bewijs.
-    const { error: readErr } = await supabase.storage.from(BUCKET)
-      .list(`${prefix}/${date}`, { search: `${type}.${ext}` });
+    const { data: check, error: readErr } = await supabase.storage.from(BUCKET)
+      .list(`${prefix}/${date}/${type}`, { search: `${id}.${ext}` });
     if (readErr) throw readErr;
+    if (!check?.length) throw new Error('bestand niet terug te vinden na uploaden');
     mediaUploadDone(path, null);
-    return { ok: true, path };
+    return { ok: true, path, photoId: id };
   } catch (e) {
     const reason = e?.message || String(e);
     mediaUploadDone(path, reason, `foto ${type} van ${date}`);
@@ -75,15 +113,26 @@ async function uploadToCloud(date, type, base64, mimeType) {
   }
 }
 
+// Verwijderen moet alle drie de indelingen raken, anders blijft er een kopie
+// achter die bij de volgende herstelactie gewoon weer terugkomt.
 async function deleteFromCloud(date, type) {
   try {
     const prefix = await userPrefix();
     const exts = ['jpg', 'jpeg', 'png', 'webp'];
-    const paths = [
-      ...(prefix ? exts.map(e => `${prefix}/${date}/${type}.${e}`) : []),
-      ...exts.map(e => `${date}/${type}.${e}`),   // legacy pad
-    ];
-    await supabase.storage.from(BUCKET).remove(paths);
+    const paths = [];
+
+    if (prefix) {
+      // Nieuw: alles in {prefix}/{datum}/{type}/ — het aantal bestanden staat
+      // niet vast, dus eerst opvragen.
+      const { data } = await supabase.storage.from(BUCKET).list(`${prefix}/${date}/${type}`);
+      for (const f of data || []) if (f.id) paths.push(`${prefix}/${date}/${type}/${f.name}`);
+      // Vorige indeling.
+      for (const e of exts) paths.push(`${prefix}/${date}/${type}.${e}`);
+    }
+    // Allereerste indeling, in de bucketroot.
+    for (const e of exts) paths.push(`${date}/${type}.${e}`);
+
+    if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
   } catch (e) {
     console.warn('Foto delete fout:', e.message);
   }
@@ -105,10 +154,15 @@ export const photoStore = {
   // vandaan kwam en hoe hij bewerkt is.
   async save(date, type, base64, mimeType, meta = {}) {
     const db = await openDB();
+    // De sleutel in IndexedDB blijft {datum}_{type}: per fotomoment één beeld
+    // per aanzicht, dat is wat het scherm toont. photoId is de identiteit van
+    // het bestand in de cloud, en die is een ander ding.
+    const photoId = meta.photoId || newPhotoId();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put({
         id: `${date}_${type}`,
+        photoId,
         date, type, base64, mimeType,
         savedAt: new Date().toISOString(),
         ...meta,
@@ -118,7 +172,7 @@ export const photoStore = {
     });
     // Eerst lokaal (dan is hij nooit kwijt), daarna naar de cloud — en op
     // die cloud wachten we wél, zodat het scherm de waarheid kan tonen.
-    const res = await uploadToCloud(date, type, base64, mimeType);
+    const res = await uploadToCloud(date, type, base64, mimeType, photoId);
     if (res.ok) {
       const db2 = await openDB();
       await new Promise(done => {
@@ -126,7 +180,8 @@ export const photoStore = {
         const st = tx.objectStore(STORE);
         const req = st.get(`${date}_${type}`);
         req.onsuccess = () => {
-          if (req.result) st.put({ ...req.result, cloudOk: true, cloudPath: res.path });
+          if (req.result) st.put({ ...req.result, cloudOk: true, cloudPath: res.path,
+            photoId: res.photoId || req.result.photoId });
         };
         tx.oncomplete = done; tx.onerror = done;
       });
@@ -182,17 +237,52 @@ export const photoStore = {
     let uploaded = 0, failed = 0;
     for (const p of all) {
       if (p.cloudOk) continue;
-      const r = await uploadToCloud(p.date, p.type, p.base64, p.mimeType || 'image/jpeg');
+      const r = await uploadToCloud(p.date, p.type, p.base64, p.mimeType || 'image/jpeg', p.photoId);
       if (r.ok) {
         uploaded++;
         await new Promise(res => {
           const tx = db.transaction(STORE, 'readwrite');
-          tx.objectStore(STORE).put({ ...p, cloudOk: true, cloudPath: r.path });
+          tx.objectStore(STORE).put({ ...p, cloudOk: true, cloudPath: r.path,
+            photoId: r.photoId || p.photoId });
           tx.oncomplete = res; tx.onerror = res;
         });
       } else if (!r.skipped) failed++;
     }
     return { uploaded, failed };
+  },
+
+  // Foto's op een oude padindeling overzetten naar de nieuwe.
+  //
+  // Niet-destructief: het oude bestand blijft staan. Wat hier gebeurt is een
+  // kopie op het nieuwe pad, en pas als die aantoonbaar gelukt is verhuist de
+  // verwijzing mee. Wie het oude bestand meteen zou weghalen, wist een foto
+  // op grond van een upload die misschien niet is aangekomen.
+  async migratePaths() {
+    const prefix = await userPrefix();
+    if (!prefix) return { migrated: 0, skipped: true };
+    const db = await openDB();
+    const all = await new Promise((res, rej) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => res(req.result || []); req.onerror = () => rej(req.error);
+    });
+
+    let migrated = 0, failed = 0;
+    for (const p of all) {
+      if (isNewLayout(p.cloudPath)) continue;
+      if (!p.base64) continue;
+      const r = await uploadToCloud(p.date, p.type, p.base64, p.mimeType || 'image/jpeg',
+        p.photoId || null);
+      if (!r.ok) { if (!r.skipped) failed++; continue; }
+      await new Promise(done => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put({ ...p, cloudOk: true, cloudPath: r.path,
+          photoId: r.photoId, legacyPath: p.cloudPath || null });
+        tx.oncomplete = done; tx.onerror = done;
+      });
+      migrated++;
+    }
+    return { migrated, failed };
   },
 
   // Restore photos from cloud that are missing in IndexedDB
@@ -237,35 +327,71 @@ export const photoStore = {
       let restored = 0;
       for (const folder of folders) {
         const folderPath = folder.root ? `${folder.root}/${folder.name}` : folder.name;
-        const { data: photos } = await supabase.storage.from(BUCKET).list(folderPath);
-        if (!photos) continue;
-        for (const file of photos) {
-          const type = file.name.replace(/\.[^.]+$/, '');
-          const id = `${folder.name}_${type}`;
-          if (existing.has(id)) continue;
+        const { data: entries } = await supabase.storage.from(BUCKET).list(folderPath);
+        if (!entries) continue;
 
-          const { data: blob } = await supabase.storage.from(BUCKET).download(`${folderPath}/${file.name}`);
+        // Binnen een datummap staat óf een bestand per aanzicht (de oude
+        // indelingen), óf een map per aanzicht met daarin de bestanden (de
+        // nieuwe). Beide kunnen naast elkaar bestaan zolang niet alles is
+        // overgezet, dus we lopen ze allebei af.
+        const targets = [];
+        for (const entry of entries) {
+          if (entry.id) {
+            // Bestand direct in de datummap: {type}.{ext}
+            targets.push({
+              type: entry.name.replace(/\.[^.]+$/, ''),
+              path: `${folderPath}/${entry.name}`,
+              photoId: null,
+            });
+          } else if (PHOTO_TYPES.includes(entry.name)) {
+            // Map per aanzicht: {type}/{id}.{ext}. Bij meerdere bestanden
+            // wint de nieuwste — het scherm toont er één per aanzicht.
+            const { data: files } = await supabase.storage.from(BUCKET)
+              .list(`${folderPath}/${entry.name}`, {
+                limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
+            const newest = (files || []).find(f => f.id);
+            if (!newest) continue;
+            targets.push({
+              type: entry.name,
+              path: `${folderPath}/${entry.name}/${newest.name}`,
+              photoId: newest.name.replace(/\.[^.]+$/, ''),
+            });
+          }
+        }
+
+        for (const t of targets) {
+          const key = `${folder.name}_${t.type}`;
+          if (existing.has(key)) continue;
+
+          const { data: blob } = await supabase.storage.from(BUCKET).download(t.path);
           if (!blob) continue;
 
           const base64 = await new Promise(res => {
             const reader = new FileReader();
-            reader.onloadend = () => res(reader.result.split(',')[1]);
+            reader.onloadend = () => res(String(reader.result).split(',')[1]);
             reader.readAsDataURL(blob);
           });
 
           await new Promise((resolve, reject) => {
             const tx = db.transaction(STORE, 'readwrite');
             tx.objectStore(STORE).put({
-              id,
+              id: key,
+              photoId: t.photoId,
               date: folder.name,
-              type,
+              type: t.type,
               base64,
               mimeType: blob.type || 'image/jpeg',
               savedAt: new Date().toISOString(),
+              // Van deze foto is bewezen dat hij in de cloud staat: hij komt
+              // er net vandaan. Zo probeert pushMissingToCloud hem niet
+              // meteen weer omhoog te duwen.
+              cloudOk: true,
+              cloudPath: t.path,
             });
             tx.oncomplete = resolve;
             tx.onerror = () => reject(tx.error);
           });
+          existing.add(key);
           restored++;
         }
       }
