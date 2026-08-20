@@ -11,8 +11,32 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
   <title>Coach G · Griette</title>
-  <script type="module" crossorigin src="/griette-coach/assets/index-C_R8WxAx.js"></script>
+  <script type="module" crossorigin src="/griette-coach/assets/index-TPcPKZTw.js"></script>
   <link rel="stylesheet" crossorigin href="/griette-coach/assets/index-B1YwMVvB.css">
+  <meta name="gc-build" content="2026-08-20T21:00:29.370Z">
+  <script>(function () {
+  var HERE = "2026-08-20T21:00:29.370Z";
+  function check() {
+    try {
+      fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (v) {
+          if (!v || !v.build || v.build === HERE) return;
+          if (sessionStorage.getItem('gc_reloaded_for') === v.build) return;
+          sessionStorage.setItem('gc_reloaded_for', v.build);
+          location.reload();
+        })
+        .catch(function () {});
+    } catch (e) {}
+  }
+  if (document.readyState === 'complete') setTimeout(check, 800);
+  else window.addEventListener('load', function () { setTimeout(check, 800); });
+  // En opnieuw kijken zodra je de app terugpakt uit de achtergrond — dat is
+  // op een telefoon de meest voorkomende manier om hem te openen.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') check();
+  });
+})();</script>
 </head>
 <body>
   <div id="root"></div>
