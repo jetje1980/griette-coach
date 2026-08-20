@@ -6,6 +6,7 @@ import { calibrateHr, applyCalibration, CPET, HISTORICAL_RUNS, TOLERANCE_LABELS,
 import { fmtPace, loadWorkouts } from '../workouts';
 import { loadHrModel, intensityRelease } from '../hrModel';
 import { todayLocal } from '../datetime';
+import RaceGoalEditor from './RaceGoalEditor';
 
 // Progressie → Run, radicaal simpel.
 //
@@ -244,6 +245,8 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
           respons 24–48 uur later schoon was.
         </div>
       </div>
+
+      <RaceGoalEditor logs={logs} currentDate={currentDate} />
 
       {/* ── RACES ─────────────────────────────────────────────── */}
       <Label>Races</Label>

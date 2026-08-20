@@ -2,7 +2,7 @@
 // Warming-up, kern, HR/RPE-doel, waarom, cooling-down, stop-criteria en
 // "coach observeert vandaag" — zodat elke training ook een datapunt is.
 
-import { RUNS } from './runningSchema';
+import { RUNS , runDistance } from './runningSchema';
 import { loadHrSettings } from '../goals';
 
 function rpeTarget(run) {
@@ -56,7 +56,7 @@ export function sessionDetail(run) {
       : null,
     reps: run.reps,
     duration: run.duration,
-    km: run.km_estimate,
+    km: runDistance(run)?.label || null,
     hrZone: `Easy HR: ${loadHrSettings().easyLow}–${loadHrSettings().easyHigh} bpm`,
     hrTip: run.hrTip,
     rpe: rpeTarget(run),

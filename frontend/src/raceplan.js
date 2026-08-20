@@ -28,11 +28,11 @@ import { allBreakdowns } from './pace';
 import { exertionalResponse } from './symptoms';
 import { calibrateHr } from './runningHistory';
 import { hrPrescription, intensityRelease, loadHrModel } from './hrModel';
-import { runningState, RACES as DEFAULT_RACES } from './raceGoals';
+import { easyRunPace, prescribedPace } from './easyPace';
+import { runningState } from './raceGoals';
+import { loadRaceGoals, saveRaceGoal, resetRaceGoals, DEFAULT_GOALS } from './raceGoalModel';
 import { restDayDecision, MAX_WEEKLY_VOLUME_GROWTH } from './restday';
 import { RUNS } from './data/runningSchema';
-
-const RACE_KEY = 'gc_races';
 
 // ── Fasen, op de kalender ───────────────────────────────────────
 export const PHASE = {
@@ -93,32 +93,46 @@ const DEFAULT_META = {
   okt31: { priority: 2, enabled: true, confidence: 'LOW' },
 };
 
-function loadOverrides() {
-  try { return JSON.parse(localStorage.getItem(RACE_KEY) || '{}'); } catch { return {}; }
+// De racedoelen komen uit het RaceGoal-model: afstand + gewenste eindtijd +
+// datum, met het tempo als afgeleide. De oude `RACES`-constante had het
+// tempo hardgecodeerd naast de tijd, waardoor ze uit elkaar konden lopen.
+export function loadRaces() {
+  return loadRaceGoals().map(g => ({
+    ...g,
+    // De vorm die de rest van de planner al gebruikt.
+    targetMinutes: g.targetTimeSec / 60,
+    targetPace: g.targetPaceSecPerKm / 60,
+    confidence: DEFAULT_META[g.id]?.confidence || 'LOW',
+    conditions: STRETCH_CONDITIONS[g.id] || null,
+  })).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function loadRaces() {
-  const over = loadOverrides();
-  return DEFAULT_RACES.map((r, i) => {
-    const meta = DEFAULT_META[r.id] || { priority: i + 1, enabled: true, confidence: 'LOW' };
-    const merged = { ...meta, ...r, ...(over[r.id] || {}) };
-    // Doeltempo is afgeleid, niet ingevoerd.
-    merged.targetPace = targetPaceOf(merged);
-    return merged;
-  }).sort((a, b) => a.date.localeCompare(b.date));
-}
+// Voorwaarden bij een stretchdoel horen bij het doel, niet bij de
+// tempoberekening — daarom staan ze hier en niet in het model.
+const STRETCH_CONDITIONS = {
+  okt31: [
+    { id: 'fiveK', label: '5 km goed verdragen', test: (s) => s.longestTolerated >= 5 },
+    { id: 'volume', label: '7–8 km goed verdragen, later 8–9 km',
+      test: (s) => s.longestTolerated >= 7 },
+    { id: 'pace', label: 'Blokken van 6:30–6:45/km beheersbaar',
+      test: (s) => s.runPace != null && s.runPace <= 6.75 },
+    { id: 'pem', label: 'Geen relevante PEM-signalen', test: (s) => s.pemFreeWeeks >= 4 },
+  ],
+};
 
 export function saveRace(id, patch) {
-  const over = loadOverrides();
-  over[id] = { ...(over[id] || {}), ...patch };
-  // Doeltempo bewaren we bewust niet: het volgt uit tijd en afstand.
-  delete over[id].targetPace;
-  localStorage.setItem(RACE_KEY, JSON.stringify(over));
+  const next = { ...patch, id };
+  // Een doeltijd in minuten mag; het model rekent hem om naar seconden.
+  if (patch.targetMinutes != null && patch.targetTimeSec == null) {
+    next.targetTimeSec = Math.round(Number(patch.targetMinutes) * 60);
+    delete next.targetMinutes;
+  }
+  saveRaceGoal(next);
   return loadRaces();
 }
 
 export function resetRaces() {
-  localStorage.removeItem(RACE_KEY);
+  resetRaceGoals();
   return loadRaces();
 }
 
@@ -424,7 +438,12 @@ export function planNextSession({
   });
 
   const race = raceForPurpose(chosen, timeline);
-  const targetPace = paceFor(chosen, { runPace: st.runPace, race });
+
+  // Twee bronnen die niet door elkaar mogen lopen: je gemeten rustige
+  // looptempo, en het doeltempo dat uit afstand en eindtijd volgt.
+  const easy = easyRunPace({ logs, currentDate });
+  const prescribed = prescribedPace({ purpose: chosen, goal: race, easy, logs, currentDate });
+  const targetPace = prescribed.paceMin ?? paceFor(chosen, { runPace: st.runPace, race });
   const walkPace = st.runPace ? +(st.runPace + 1.25).toFixed(2) : null;
   // Eén hartslaginstructie per sessie, en die komt uit het hartslagmodel:
   // fysiologie (CPET), tolerantie (herstelrespons) en het doel van déze
@@ -443,7 +462,8 @@ export function planNextSession({
 
   return {
     purpose: chosen, race, timeline, run,
-    targetPace, hrZone, hr: hrx, mayBuild, derivedFrom,
+    targetPace, paceSource: prescribed.source, paceWhy: prescribed.why,
+    easyPace: easy, hrZone, hr: hrx, mayBuild, derivedFrom,
     reason: reasonFor({ chosen, mayBuild, lastResponse, st }),
     why: whyText({ chosen, race, timeline, st, proven, mayBuild, targetPace, currentDate }),
     gate: runGate, inputs, levers,

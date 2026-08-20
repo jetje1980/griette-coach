@@ -12,7 +12,7 @@
 // verzinnen — vandaar dat elke uitkomst een `confidence` en een
 // `dataNote` draagt.
 
-import { RUNS } from './data/runningSchema';
+import { RUNS, runDistanceKm } from './data/runningSchema';
 import {
   loadWorkouts, toleranceFor, paceToMin, fmtPace, cardiacDrift, paceAtHRTrend,
 } from './workouts';
@@ -354,7 +354,7 @@ export function upcomingRaces(currentDate) {
       nr: r.nr,
       date: r.fixedDate,
       name: r.description.replace(/^🏁\s*/, '').split('·')[0].trim(),
-      distanceKm: parseFloat(String(r.km_estimate).replace(/[^\d.]/g, '')) || null,
+      distanceKm: runDistanceKm(r),
       terrain: RACE_TERRAIN[r.nr] || 'road',
       strategy: { runMin: r.runMin, walkMin: r.walkMin },
       run: r,

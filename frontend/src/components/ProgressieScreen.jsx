@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { photoStore } from '../photoStore';
 import { dreamStore } from '../dreamStore';
 import { USER, PERSONAL_EVENTS } from '../config';
-import { RUNS } from '../data/runningSchema';
+import { RUNS , runDistance } from '../data/runningSchema';
 import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
 import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
 import { protectedHours } from './WeekScreen';
@@ -826,7 +826,7 @@ function TabHardlopen({ logs }) {
             </div>
             {nextRun.duration && (
               <div style={{ fontSize: 12, color: 'var(--ghost)' }}>
-                {nextRun.duration} min · {nextRun.hrZone} · {nextRun.km_estimate}
+                {nextRun.duration} min · {nextRun.hrZone}{runDistance(nextRun) ? ` · ${runDistance(nextRun).label}` : ''}
               </div>
             )}
           </div>
@@ -857,7 +857,7 @@ function TabHardlopen({ logs }) {
                 <div key={l.date} className="os-detail-row">
                   <span className="os-dk">T{l.run_session} · {l.date.slice(5)}</span>
                   <span className="os-dv" style={{ fontSize: 12 }}>
-                    {run?.km_estimate || '—'}
+                    {(run && runDistance(run)?.label) || '—'}
                   </span>
                 </div>
               );

@@ -1,4 +1,11 @@
-// Run-walk-run schema voor long COVID · Zone B: 106–132 bpm · 3×/week
+// Run-walk-run schema voor long COVID · 3×/week.
+//
+// Let op wat hier NIET meer staat: afstanden. Elke sessie had een
+// `km_estimate` die los van de tempo's was opgeschreven, en alle 31 klopten
+// niet — gemiddeld 25 tot 50 procent te hoog. T21 beweerde 10 km in 75
+// minuten terwijl de eigen getallen 6,4 tot 7,0 km opleveren. Afstand wordt
+// nu berekend uit loopminuten, wandelminuten en de werkelijke tempo's; zie
+// sessionMath.js. Niemand schrijft hier nog een afstand met de hand op.
 // Tempo hardlopen: ~10:00-11:00 min/km · Tempo wandelen: ~11:15-12:00 min/km
 // De wandeltempo's stonden hier eerder op 6:30-7:00/km. Dat is bijna
 // 9 km/u en dus sneller dan de loopblokken — fysiek onmogelijk als
@@ -17,7 +24,6 @@ export const RUNS = [
     hrTip: 'Boven 130 bpm → direct wandelen. Praatregel: je moet hele zinnen kunnen zeggen.',
     tempo: 'Looptempo: ~10:30 min/km · Wandeltempo: ~11:45-12:30 min/km',
     goal: 'Wennen aan de intervalvorm — niet op gevoel, maar op hartslag lopen',
-    km_estimate: '1.5 km',
   },
   {
     nr: 2, week: 1,
@@ -27,7 +33,6 @@ export const RUNS = [
     hrTip: 'Als HR na wandelminuut nog boven 110 is: verleng de wandelpauze tot < 105.',
     tempo: 'Looptempo: ~10:30 min/km · Wandeltempo: ~11:45-12:30 min/km',
     goal: 'Hartslag leren lezen — noteer je max HR per interval',
-    km_estimate: '2.0 km',
   },
   {
     nr: 3, week: 1,
@@ -37,7 +42,6 @@ export const RUNS = [
     hrTip: 'Eerste kleine opbouw. Als HR boven 128 bleef tijdens loopblok: terug naar 1 min.',
     tempo: 'Looptempo: ~10:00-10:30 min/km · Wandeltempo: ~11:45-12:30 min/km',
     goal: 'Probeer de hartslag tijdens lopen onder 128 te houden',
-    km_estimate: '2.5 km',
   },
 
   // ── Week 2 · Aug 25-29 · AMELAND! Strandlopen als bonus ──────────────────
@@ -51,7 +55,6 @@ export const RUNS = [
     goal: 'Ameland bonus: buitenlucht, zonlicht, zand — genieten én bewegen',
     vacation: true,
     vacationNote: '🏝️ Ameland — strandjog is prima vervanging, duinen optioneel',
-    km_estimate: '1.8 km',
   },
   {
     nr: 5, week: 2,
@@ -63,7 +66,6 @@ export const RUNS = [
     goal: '2 min aan een stuk in zone B — dit is de eerste echte mijlpaal',
     vacation: true,
     vacationNote: '🏝️ Ameland',
-    km_estimate: '2.3 km',
   },
   {
     nr: 6, week: 2,
@@ -73,7 +75,6 @@ export const RUNS = [
     hrTip: 'Totale looptijd: 12 min. Hartslag gemiddeld tijdens loopblokken? Noteer dit.',
     tempo: 'Looptempo: ~10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: 'Volume opbouwen terwijl hartslag laag blijft',
-    km_estimate: '2.8 km',
   },
 
   // ── Week 3 · Sep 1-5 · Na vakantie — opnieuw opbouwen ────────────────────
@@ -85,7 +86,6 @@ export const RUNS = [
     hrTip: 'Kortere wandelpauze = meer uitdaging voor hartslag. Bij twijfel: wandelpauze verlengen.',
     tempo: 'Looptempo: ~10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: 'Herstelefficiëntie testen — daalt je HR snel genoeg in 1,5 min wandelen?',
-    km_estimate: '2.7 km',
   },
   {
     nr: 8, week: 3,
@@ -95,7 +95,6 @@ export const RUNS = [
     hrTip: 'Eerste keer 3 min lopen. Pas als 2 min echt makkelijk voelt — anders terugstap naar run 7.',
     tempo: 'Looptempo: ~10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: '3 min zone B — mijlpaal. Na de training: hoe voel je je 2 uur later?',
-    km_estimate: '3.2 km',
   },
   {
     nr: 9, week: 3,
@@ -105,7 +104,6 @@ export const RUNS = [
     hrTip: 'Herhaal zelfde sessie. Let op: zit je nu al eerder in zone B? Dat is conditiewinst.',
     tempo: 'Looptempo: ~9:45-10:30 min/km · Wandeltempo: ~11:45-12:30 min/km',
     goal: 'Consistentie — dezelfde sessie voelt makkelijker dan vorige keer',
-    km_estimate: '3.2 km',
   },
 
   // ── Week 4 · Sep 8-12 · Langere loopblokken ──────────────────────────────
@@ -117,7 +115,6 @@ export const RUNS = [
     hrTip: '4 min vraagt om geduld met tempo. Begin de loopblokken rustig, niet sprint in!',
     tempo: 'Looptempo: ~9:30-10:30 min/km · Wandeltempo: ~11:45-12:30 min/km',
     goal: 'Totaal 16 min lopen (verdeeld) — meer dan week 1 helemaal',
-    km_estimate: '3.5 km',
   },
   {
     nr: 11, week: 4,
@@ -127,7 +124,6 @@ export const RUNS = [
     hrTip: 'Kortere herstelperiode. Als HR niet daalt onder 108 in wandelpauze: verleng naar 2 min.',
     tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: 'Hogere loopefficiëntie — meer lopen, minder wandelen',
-    km_estimate: '4.0 km',
   },
   {
     nr: 12, week: 4,
@@ -137,7 +133,6 @@ export const RUNS = [
     hrTip: 'Eerste keer 5 min! Neem de eerste minuut extra rustig — de 5e minuut wordt anders te zwaar.',
     tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: '5 min zone B = conditie begint mee te komen. Merk je verschil met week 1?',
-    km_estimate: '4.5 km',
     milestone: true,
   },
 
@@ -150,7 +145,6 @@ export const RUNS = [
     hrTip: 'Meer volume — totaal 25 min lopen. Hartslag leidend, tempo bijkomstig.',
     tempo: 'Looptempo: ~9:15-10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: 'Langste training tot nu toe. Na afloop: energie check — niet moe maar voldaan',
-    km_estimate: '5.5 km',
   },
   {
     nr: 14, week: 5,
@@ -160,7 +154,6 @@ export const RUNS = [
     hrTip: 'Korte wandelbreak van 1 min — werkt alleen als je HR snel herstelt. Test dit!',
     tempo: 'Looptempo: ~9:15-9:45 min/km · Wandeltempo: ~11:00-11:45 min/km',
     goal: 'Efficiëntie: meer lopen met kortere pauzes, hartslag stabiel',
-    km_estimate: '5.0 km',
   },
   {
     nr: 15, week: 5,
@@ -170,7 +163,6 @@ export const RUNS = [
     hrTip: '6 min — echt conditiegebied. Eerste 2 min op 11:00 min/km, daarna naar comfortabel.',
     tempo: 'Looptempo: ~9:15-10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: 'Langste loopblokken tot nu — voorbereiding voor Trail op 3 oktober',
-    km_estimate: '6.0 km',
   },
 
   // ── Week 6 · Sep 22-26 · Tapering Trail 10km (3 okt) ────────────────────
@@ -182,7 +174,6 @@ export const RUNS = [
     hrTip: 'Tapering: minder volume, zelfde tempo. Benen vers houden voor de race.',
     tempo: 'Looptempo: ~9:15-9:45 min/km · Wandeltempo: ~11:00-11:45 min/km',
     goal: 'Frisse benen sparen — prestatie wordt in herstel gebouwd',
-    km_estimate: '5.0 km',
   },
   {
     nr: 17, week: 6,
@@ -192,7 +183,6 @@ export const RUNS = [
     hrTip: 'Licht en fris blijven. Geen heroïsche sessie nu — sparen voor de race.',
     tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: 'Activering — benen voelen, niet belasten',
-    km_estimate: '2.5 km',
   },
   {
     nr: 18, week: 6,
@@ -202,7 +192,6 @@ export const RUNS = [
     hrTip: 'Race is over 5 dagen! Vandaag alleen losse benen. Stoppen bij 120 bpm.',
     tempo: 'Looptempo: ~10:30-11:30 min/km · Wandeltempo: ~12:45-13:30 min/km',
     goal: 'Mentale voorbereiding: ritme voelen, benen vrij houden',
-    km_estimate: '1.8 km',
   },
 
   // ── Week 7 · Sep 29 – Okt 3 · 🏁 TRAIL 10 KM ───────────────────────────
@@ -214,7 +203,6 @@ export const RUNS = [
     hrTip: 'Race is bijna! Niet boven 120. Dit is alleen even bewegen.',
     tempo: 'Heel rustig — wandeltempo met een lichte trot',
     goal: 'Activering, niet training. Zo fris mogelijk naar de start.',
-    km_estimate: '1.5 km',
   },
   {
     nr: 20, week: 7,
@@ -224,19 +212,18 @@ export const RUNS = [
     hrTip: 'Dag voor de race: wandelen, stretchen, goed slapen. Geen extra belasting.',
     tempo: 'Wandeltempo: ~9:30-10:15 min/km',
     goal: 'Actief rusten — bloed laten circuleren, niet belasten',
-    km_estimate: '2.5 km',
     restDay: true,
   },
   {
     nr: 21, week: 7,
-    runMin: 5, walkMin: 3, reps: null, duration: 75,
+    runMin: 5, walkMin: 3, reps: null, duration: 42,
     fixedDate: '2026-10-03',
-    description: '🏁 TRAIL 10 KM · Run-walk strategie: 5 min lopen / 3 min wandelen',
+    raceGoalId: 'okt3',
+    description: '🏁 TRAIL 5 KM · Run-walk strategie: 5 min lopen / 3 min wandelen',
     hrZone: 'Wedstrijd: hartslagadvies per afstand — zie het raceplan',
     hrTip: 'Race-strategie: bij 130+ DIRECT wandelen. Liever 10 min langzamer dan PEM riskeren. Wandelen op heuvels/klimmen altijd.',
-    tempo: 'Looptempo: ~10:00-11:00 min/km · Wandeltempo: ~12:15-13:00 min/km · Doeltijd: ~75-85 min',
-    goal: 'UITLOPEN, niet sprinten. Finishen in zone B = succes. Eerste race = ervaring opdoen.',
-    km_estimate: '10 km',
+    tempo: null,
+    goal: 'Checkpoint van 5 km. Tempo en hartslag komen uit je racedoel en je actuele data, niet uit dit schema.',
     milestone: true,
     race: true,
   },
@@ -250,7 +237,6 @@ export const RUNS = [
     hrTip: 'Na race: benen zijn moe. Bij spierpijn of moeheid → rustdag. Geen schuldgevoel.',
     tempo: 'Looptempo: ~10:30 min/km · Wandeltempo: ~11:45-12:30 min/km',
     goal: 'Herstel activeren — bloed laten stromen, niet presteren',
-    km_estimate: '2.5 km',
   },
   {
     nr: 23, week: 8,
@@ -260,7 +246,6 @@ export const RUNS = [
     hrTip: 'Als race-herstel compleet voelt: normaal tempo. Twijfel? Één level terug.',
     tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: 'Terug op schema — Bereloop is over 3 weken',
-    km_estimate: '4.5 km',
   },
   {
     nr: 24, week: 8,
@@ -270,7 +255,6 @@ export const RUNS = [
     hrTip: 'Langste training na de race. Voel je de conditiewinst van de race?',
     tempo: 'Looptempo: ~9:15-9:45 min/km · Wandeltempo: ~11:00-11:45 min/km',
     goal: 'Bereloop voorbereiding — 10 km opnieuw aanlopen',
-    km_estimate: '6.0 km',
   },
 
   // ── Week 9 · Okt 13-17 · Piek voor Bereloop ─────────────────────────────
@@ -282,7 +266,6 @@ export const RUNS = [
     hrTip: '7 min is echt conditiegebied. Eerste minuut heel rustig — je hebt 7 nodig.',
     tempo: 'Looptempo: ~9:00-9:30 min/km · Wandeltempo: ~10:45-11:30 min/km',
     goal: 'Langste loopblokken tot nu toe — voorbereiding Bereloop',
-    km_estimate: '7.0 km',
   },
   {
     nr: 26, week: 9,
@@ -292,7 +275,6 @@ export const RUNS = [
     hrTip: 'Korte wandelpauze = testen of hartslag snel herstelt. Goed teken van conditie.',
     tempo: 'Looptempo: ~9:00-9:30 min/km · Wandeltempo: ~10:45-11:30 min/km',
     goal: 'Efficiëntie — veel lopen, weinig wandelen, HR stabiel',
-    km_estimate: '6.5 km',
   },
   {
     nr: 27, week: 9,
@@ -302,7 +284,6 @@ export const RUNS = [
     hrTip: '8 min — dit is je langste loopblok ooit. Tempo is bijzaak, hartslag is alles.',
     tempo: 'Looptempo: ~9:00-10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: 'Peak training — 32 min totaal lopen. Bereloop is volgende week!',
-    km_estimate: '8.0 km',
     milestone: true,
   },
 
@@ -315,7 +296,6 @@ export const RUNS = [
     hrTip: 'Minder volume dan vorige week — benen vers houden. Kwaliteit boven kwantiteit.',
     tempo: 'Looptempo: ~9:15-9:45 min/km · Wandeltempo: ~11:00-11:45 min/km',
     goal: 'Fris blijven — Bereloop is over 10 dagen',
-    km_estimate: '5.5 km',
   },
   {
     nr: 29, week: 10,
@@ -325,7 +305,6 @@ export const RUNS = [
     hrTip: 'Tapering: bewust HR lager houden. Sparen voor race.',
     tempo: 'Looptempo: ~9:45-10:30 min/km · Wandeltempo: ~11:45-12:30 min/km',
     goal: 'Activering, niet training — benen voelen, bewust ontspannen',
-    km_estimate: '3.5 km',
   },
   {
     nr: 30, week: 10,
@@ -335,7 +314,6 @@ export const RUNS = [
     hrTip: 'Dag voor de race bijna: heel licht bewegen. Stoppen bij 120 bpm.',
     tempo: 'Looptempo: ~10:30 min/km · Wandeltempo: ~11:45-12:30 min/km',
     goal: 'Mentaal klaar voor Bereloop — alles is klaar, nu alleen vertrouwen',
-    km_estimate: '1.8 km',
   },
 
   // ── Week 11 · Okt 27-31 · 🏁 BERELOOP TERSCHELLING ──────────────────────
@@ -347,7 +325,6 @@ export const RUNS = [
     hrTip: 'Race is over 3 dagen. Heel licht — geen km\'s meer opbouwen nu.',
     tempo: 'Zeer rustig — bewegend mediteren',
     goal: 'Lichaam activeren zonder te belasten',
-    km_estimate: '1.5 km',
   },
   {
     nr: 32, week: 11,
@@ -357,19 +334,18 @@ export const RUNS = [
     hrTip: 'Dag voor Bereloop: wandelen + stretchen + goed eten + vroeg slapen.',
     tempo: 'Wandeltempo: ~9:30-10:15 min/km',
     goal: 'Uitgerust en zeker aan de start verschijnen',
-    km_estimate: '2.5 km',
     restDay: true,
   },
   {
     nr: 33, week: 11,
-    runMin: 7, walkMin: 3, reps: null, duration: 80,
-    fixedDate: '2026-10-30',
+    runMin: 7, walkMin: 3, reps: null, duration: 65,
+    fixedDate: '2026-10-31',
+    raceGoalId: 'okt31',
     description: '🏁 BERELOOP 10 KM TERSCHELLING · Run-walk: 7 min lopen / 3 min wandelen',
     hrZone: 'Wedstrijd: hartslagadvies per afstand — zie het raceplan',
     hrTip: 'Race-strategie: zand en duin = meer weerstand. Bij 130+ DIRECT wandelen. Terschelling is pittiger dan weg — verwacht 5-10% lagere snelheid. Liever slenteren dan PEM.',
-    tempo: 'Looptempo: ~10:00-11:30 min/km op strand · Wandeltempo: ~12:45-13:30 min/km · Doeltijd: ~75-90 min',
-    goal: 'TERSCHELLING BERELOOP — finishen is winnen. Zone B door de hele race. Genieten van het eiland.',
-    km_estimate: '10 km',
+    tempo: null,
+    goal: 'Bereloop 10 km. Tempo en hartslag komen uit je racedoel en je actuele data, niet uit dit schema.',
     milestone: true,
     race: true,
   },
@@ -383,7 +359,6 @@ export const RUNS = [
     hrTip: 'Na twee races in 4 weken: luister naar je lichaam. Moe = rustdag. Kracht = doorlopen.',
     tempo: 'Looptempo: ~9:30-10:00 min/km · Wandeltempo: ~11:15-12:00 min/km',
     goal: 'Herstellen én conditie vasthouden voor Ameland 5 km (13 dec)',
-    km_estimate: '4.5 km',
   },
   {
     nr: 35, week: 12,
@@ -393,7 +368,54 @@ export const RUNS = [
     hrTip: 'Je bent in 12 weken van "1 min lopen" naar hier. Dit is échte progressie.',
     tempo: 'Looptempo: ~9:00-9:30 min/km · Wandeltempo: ~10:45-11:30 min/km · Doeltijd 5 km: ~50-55 min',
     goal: 'Ameland 5 km (13 dec) droge test — voorbereiding voor het echte werk',
-    km_estimate: '5 km',
     milestone: true,
   },
 ];
+
+// ── Afstand is afgeleid, nooit opgeschreven ─────────────────────
+// Uit de structuur van de sessie en het tempo dat er werkelijk bij hoort.
+// Zonder tempo is er geen afstand — en dat is eerlijker dan een getal
+// verzinnen. Wie het actuele looptempo meegeeft, krijgt een afstand die
+// bij háár data past in plaats van bij een schemagemiddelde.
+import { sessionMath, sessionRange } from '../sessionMath';
+
+export function schemaPaces(run) {
+  const parse = (t) => { const m = String(t).match(/(\d+):(\d+)/); return m ? +m[1] + +m[2] / 60 : null; };
+  const tempo = run?.tempo || '';
+  const runPart = tempo.match(/Looptempo:[^·]*/)?.[0] || '';
+  const walkPart = tempo.match(/Wandeltempo:[^·]*/)?.[0] || '';
+  const runPaces = [...runPart.matchAll(/(\d+:\d+)/g)].map(x => parse(x[1])).filter(Boolean);
+  const walkPaces = [...walkPart.matchAll(/(\d+:\d+)/g)].map(x => parse(x[1])).filter(Boolean);
+  if (!runPaces.length) return null;
+  return {
+    runFast: Math.min(...runPaces), runSlow: Math.max(...runPaces),
+    walkFast: walkPaces.length ? Math.min(...walkPaces) : null,
+    walkSlow: walkPaces.length ? Math.max(...walkPaces) : null,
+  };
+}
+
+// Eén sessie doorrekenen. `paces` overschrijft het schema, zodat de coach
+// met jouw actuele tempo kan rekenen in plaats van met het plangemiddelde.
+export function runDistance(run, paces = null) {
+  if (!run) return null;
+  const p = paces || schemaPaces(run);
+  if (!p) return null;
+  const range = sessionRange({
+    runMin: run.runMin, walkMin: run.walkMin, reps: run.reps, duration: run.duration,
+    runPaceFast: p.runFast, runPaceSlow: p.runSlow,
+    walkPaceFast: p.walkFast, walkPaceSlow: p.walkSlow,
+  });
+  if (!range) return null;
+  return {
+    ...range,
+    label: range.low.toFixed(1) === range.high.toFixed(1)
+      ? `${range.low.toFixed(1)} km`
+      : `${range.low.toFixed(1)}–${range.high.toFixed(1)} km`,
+  };
+}
+
+// Voor plekken die één getal willen.
+export function runDistanceKm(run, paces = null) {
+  const d = runDistance(run, paces);
+  return d ? d.mid : null;
+}

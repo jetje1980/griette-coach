@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RUNS } from '../data/runningSchema';
+import { RUNS , runDistance } from '../data/runningSchema';
 import { sessionDetail } from '../data/sessionDetail';
 import {
   sessionStatus, workoutsForSession, adaptiveHistoryForSession,
@@ -59,7 +59,7 @@ function SessionCard({ run, status, refresh, logs, onEditWorkout }) {
             {run.race ? '🏁 ' : ''}{run.description}
           </div>
           <div style={{ fontSize: 11, color: 'var(--ghost)' }}>
-            {run.duration} min · {detail.block}{run.km_estimate ? ` · ~${run.km_estimate}` : ''}
+            {run.duration} min · {detail.block}{runDistance(run) ? ` · ~${runDistance(run).label}` : ''}
           </div>
         </div>
         <span style={{ fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0 }}>

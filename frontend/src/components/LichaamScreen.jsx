@@ -1068,7 +1068,9 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
                     </div>
                   )}
                   <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 4 }}>
-                    {nextSession.run.duration} min · {nextSession.run.hrZone}
+                    {nextSession.run.duration} min
+                    {nextSession.run.km_estimate ? ` · ${nextSession.run.km_estimate}` : ''}
+                    {' · '}{nextSession.run.hrZone}
                   </div>
                   {(nextSession.run.hrDetail || nextSession.run.hrTip) && (
                     <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 4,

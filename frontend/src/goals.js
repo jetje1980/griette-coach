@@ -31,7 +31,10 @@ export const GOAL_METRICS = {
     { id: 'continuous_min',   label: 'Aaneengesloten lopen',       unit: 'min' },
     { id: 'distance_km',      label: 'Afstand uitlopen',           unit: 'km' },
     { id: 'time_5k',          label: '5 km tijd',                  unit: 'min' },
-    { id: 'pace_easy',        label: 'Easy tempo',                 unit: 'min/km' },
+    // 'pace_easy' is hier bewust weg. Easy tempo is een méting uit je
+    // eigen data (zie easyPace.js), geen doel om naartoe te werken. Het
+    // stond hier als drager van "5 km in 35:00" — een racedoel vermomd als
+    // rustig trainingstempo. Racedoelen horen in het RaceGoal-model.
     { id: 'run_days_week',    label: 'Max hardloopdagen per week', unit: 'dagen' },
     { id: 'max_session_min',  label: 'Max duur per sessie',        unit: 'min' },
   ],
@@ -186,7 +189,22 @@ export function feasibilityCheck(goal, logs = {}) {
     return { verdict: 'te kort', reason: 'De streefdatum is (bijna) verstreken.' };
   }
 
-  // Huidige capaciteit uit echte workoutdata
+  // Huidige capaciteit uit echte workoutdata.
+  //
+  // Let op de metric. Deze functie rekende voor élke niet-afstandsmetric met
+  // de langste sessieduur. Voor een tempodoel zette hij daarmee 37,7 minuten
+  // naast 7 min/km — minuten naast minuten-per-kilometer — en concludeerde
+  // uit dat verschil "haalbaar". Tijd- en tempodoelen horen hier niet: die
+  // gaan via het RaceGoal-model en raceFeasibility, waar dezelfde eenheid
+  // aan beide kanten staat.
+  const TIME_METRICS = ['time_5k', 'pace_easy'];
+  if (TIME_METRICS.includes(goal.metric)) {
+    return { verdict: 'onbekend',
+      reason: 'Tijd- en tempodoelen worden beoordeeld via je racedoelen, waar de voorspelde ' +
+        'finishtijd naast je doeltijd staat. Zet dit doel om naar een racedoel met een afstand ' +
+        'en een gewenste eindtijd.' };
+  }
+
   const runs = loadWorkouts().filter(w => (w.activityType === 'run' || w.activityType == null));
   const isDistance = goal.metric === 'distance_km';
   const current = isDistance

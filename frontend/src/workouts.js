@@ -13,7 +13,7 @@
 //   createdAt, updatedAt
 // }
 
-import { RUNS } from './data/runningSchema';
+import { RUNS, runDistanceKm } from './data/runningSchema';
 import { addDays } from './datetime';
 
 const KEY = 'gc_workouts';
@@ -292,7 +292,7 @@ export function actualTotals(logs) {
     .filter(l => l.run_done && l.run_session && !wsNrs.has(Number(l.run_session)));
   const estKm = planOnly.reduce((s, l) => {
     const run = RUNS.find(r => r.nr === Number(l.run_session));
-    return s + (run ? parseFloat(run.km_estimate) || 0 : 0);
+    return s + (run ? runDistanceKm(run) || 0 : 0);
   }, 0);
   return {
     actualKm: +actualKm.toFixed(1), actualMin: Math.round(actualMin),
