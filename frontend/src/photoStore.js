@@ -200,17 +200,31 @@ export const photoStore = {
     try {
       const prefix = await userPrefix();
       if (!prefix) return 0;               // niet ingelogd: niets ophalen
-      // Nieuwe locatie eerst, daarna het legacy pad in de bucketroot
-      const roots = [prefix, ''];
-      let files = [];
-      let root = prefix;
-      for (const r of roots) {
-        const { data, error } = await supabase.storage.from(BUCKET).list(r, {
+
+      // Beide locaties, allebei helemaal.
+      //
+      // Hier zat een fout die pas zichtbaar werd toen ik in de echte opslag
+      // keek: de lus stopte bij het eerste pad dat iets opleverde. Omdat er
+      // onder {user_id}/progress altijd wel iets staat, werd de bucketroot
+      // nooit meer bekeken — en daar staan haar eerste series nog, van 6 en
+      // 25 juni, uit de tijd dat de paden nog geen gebruikers-id hadden.
+      // Zes foto's die na een wipe niet terug zouden komen.
+      const folders = [];
+      for (const root of [prefix, '']) {
+        const { data, error } = await supabase.storage.from(BUCKET).list(root, {
           limit: 500, sortBy: { column: 'name', order: 'desc' },
         });
-        if (!error && data?.length) { files = data; root = r; break; }
+        if (error || !data?.length) continue;
+        for (const entry of data) {
+          // Alleen datummappen (id === null); losse bestanden overslaan.
+          if (entry.id) continue;
+          // In de bucketroot staan ook de mappen van de ingelogde gebruiker
+          // zelf; die zijn via het volledige pad al gezien.
+          if (!root && !/^\d{4}-\d{2}-\d{2}$/.test(entry.name)) continue;
+          folders.push({ root, name: entry.name });
+        }
       }
-      if (!files.length) return 0;
+      if (!folders.length) return 0;
 
       const db = await openDB();
       const existing = await new Promise((resolve, reject) => {
@@ -221,9 +235,8 @@ export const photoStore = {
       });
 
       let restored = 0;
-      for (const folder of files) {
-        if (folder.id) continue; // skip files at root, only process date-folders (id === null)
-        const folderPath = root ? `${root}/${folder.name}` : folder.name;
+      for (const folder of folders) {
+        const folderPath = folder.root ? `${folder.root}/${folder.name}` : folder.name;
         const { data: photos } = await supabase.storage.from(BUCKET).list(folderPath);
         if (!photos) continue;
         for (const file of photos) {
