@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { headCoachDecision, explainConflicts } from '../headCoach';
+import { recordPrediction } from '../predictionLog';
 import { recordFeedback } from '../aliveness';
 import { logAction } from '../leverage';
 import { todayLocal } from '../datetime';
@@ -37,6 +38,20 @@ export default function CockpitCard({
     () => (hasData && !isFuture)
       ? headCoachDecision({ log: log || {}, logs, currentDate }) : null,
     [log, logs, currentDate, hasData, isFuture]);
+
+  // De voorspelling van vandaag bevriezen.
+  //
+  // Eén keer per dag, en daarna niet meer — recordPrediction laat een bestaand
+  // record staan. Dat is het hele punt: zodra je een run afvinkt verandert het
+  // budget, en een voorspelling die met de uitkomst meebeweegt voorspelt niets.
+  //
+  // Het gebeurt in een effect en niet in de berekening hierboven, omdat een
+  // useMemo geen schrijfacties hoort te doen: die kan meerdere keren lopen.
+  useEffect(() => {
+    if (!result || isFuture) return;
+    if (currentDate !== todayLocal()) return;   // alleen vandaag, niet bij terugbladeren
+    try { recordPrediction(result, { currentDate }); } catch { /* opslag vol of geblokkeerd */ }
+  }, [result, currentDate, isFuture]);
 
   if (isFuture) {
     return (

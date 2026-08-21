@@ -5,6 +5,7 @@ import { restoreFromCloud } from './sync';
 import { photoStore } from './photoStore';
 import { dreamStore } from './dreamStore';
 import { workoutImages } from './workoutImages';
+import { backfillFromHistory, scorePredictions } from './predictionLog';
 
 import VandaagScreen   from './components/VandaagScreen';
 import WeekScreen      from './components/WeekScreen';
@@ -103,6 +104,15 @@ export default function App() {
           showFlash?.('📈', `Loopblokken afgeleid uit ${der.derived} sessie${der.derived > 1 ? 's' : ''}`);
         }
       } catch { /* zonder koppeling gebeurt er simpelweg niets */ }
+
+      // De voorspellingen bijwerken. Eerst de uitkomsten aanvullen bij wat er
+      // al ligt, daarna de geschiedenis reconstrueren voor dagen die er nog
+      // niet in staan. Bestaande records worden nooit overschreven, dus dit is
+      // veilig om elke keer te draaien.
+      try {
+        scorePredictions({ logs: map });
+        backfillFromHistory({ logs: map });
+      } catch { /* calibratie mag nooit het opstarten breken */ }
     })();
 
     // Ophalen, dan wat nog niet in de cloud staat alsnog omhoog, dan wat op
