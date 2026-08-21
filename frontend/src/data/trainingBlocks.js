@@ -11,7 +11,7 @@ export const TRAINING_BLOCKS = [
   {
     id: 'aerobic', name: 'AEROBIC BASE', emoji: '🫁',
     start: '2026-09-01', end: '2026-10-03',
-    adaptation: 'Aerobe basis: zone B-volume, run/walk verlengen. Eindigt met Trail 10 km (3 okt).',
+    adaptation: 'Aerobe basis: zone B-volume, run/walk verlengen. Eindigt met de trailrace van 3 oktober (5 km).',
     not: 'Geen snelheid, geen intervallen boven zone B.',
   },
   {

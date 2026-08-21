@@ -106,6 +106,18 @@ export function loadHrModel() {
   } catch { return normalize(defaults()); }
 }
 
+// De easy-band als één regel, uit het actuele model.
+//
+// Schermen die een sessie uit de sessiebibliotheek tonen hadden hun
+// hartslagregel uit die bibliotheek zelf — een vaste band, hard
+// ingetypt naast elke sessie. Dat is een tweede waarheid — verandert je band,
+// dan verandert die tekst niet mee. Dit is de enige plek waar hij vandaan
+// hoort te komen.
+export function easyHrLine(model = null) {
+  const m = model || loadHrModel();
+  return `Easy HR: ${m.easyTargetLow}\u2013${m.easyTargetHigh} bpm`;
+}
+
 export function saveHrModel(patch) {
   const next = normalize({ ...loadHrModel(), ...patch });
   localStorage.setItem(MODEL_KEY, JSON.stringify(next));

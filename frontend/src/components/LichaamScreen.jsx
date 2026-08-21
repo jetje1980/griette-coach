@@ -23,6 +23,7 @@ import { ingestStravaWorkouts } from '../stravaIngest';
 import ExerciseTechnique from './ExerciseTechnique';
 import ActivityList from './ActivityList';
 
+import { easyHrLine } from '../hrModel';
 // ── Constants ────────────────────────────────────────────────────
 const SYMPTOMS_LIST = [
   { id: 'symptom_pem',        label: 'PEM-crash' },
@@ -661,7 +662,7 @@ function RunRoadmap({ logs, currentDate, nextSession }) {
                   )}
                   <div><span style={{ fontWeight: 700 }}>Sessie:</span> T{offerRun.nr} — {offerRun.description}</div>
                   <div><span style={{ fontWeight: 700 }}>Doel:</span> {offerRun.goal}</div>
-                  <div>{offerRun.duration} min · run/walk · {offerRun.hrZone}</div>
+                  <div>{offerRun.duration} min · run/walk · {easyHrLine()}</div>
                 </div>
               )}
               {isOffer && !offerRun && nextSession && (

@@ -6,6 +6,7 @@ import { lastRunWorkout, workoutWasHeavy, toleranceFor, workoutsForSession } fro
 import { restDayDecision } from '../restday';
 import { todayLocal, addDays } from '../datetime';
 
+import { easyHrLine } from '../hrModel';
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 const prevDate = (dateStr, n = 1) => addDays(dateStr, -n);
@@ -125,12 +126,12 @@ export function computeHeadCoach(log, logs, currentDate) {
   if (decision === 'GREEN') {
     sessionLabel = `Training T${nextNr}/35`;
     trainingDesc = nextRun
-      ? `${nextRun.description} — ${nextRun.duration} min | ${nextRun.hrZone}`
+      ? `${nextRun.description} — ${nextRun.duration} min | ${easyHrLine()}`
       : 'Geplande loopsessie — Zone B strikt';
   } else if (decision === 'AMBER') {
     sessionLabel = 'Aangepaste sessie';
     trainingDesc = nextRun
-      ? `Korter: ${Math.round((nextRun.runMin || 1) * 0.7)} min lopen / ${nextRun.walkMin || 2} min wandelen × ${Math.max(3, Math.round((nextRun.reps || 5) * 0.7))} — ${nextRun.hrZone}`
+      ? `Korter: ${Math.round((nextRun.runMin || 1) * 0.7)} min lopen / ${nextRun.walkMin || 2} min wandelen × ${Math.max(3, Math.round((nextRun.reps || 5) * 0.7))} — ${easyHrLine()}`
       : 'Lichte wandeling 20-30 min — geen hardlopen';
   } else if (decision === 'BLUE') {
     sessionLabel = 'Hersteldag';

@@ -7,6 +7,8 @@ import { USER } from './config';
 import { SUPABASE_URL, getAccessToken } from './supabase';
 import { todayLocal } from './datetime';
 
+import { easyHrLine } from './hrModel';
+import { loadRaceGoals } from './raceGoalModel';
 const MODEL = 'claude-sonnet-4-6';
 const EDGE_FN = `${SUPABASE_URL}/functions/v1/coach-ai`;
 
@@ -432,20 +434,27 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
     const estDistanceKm = finishes5k
       ? Math.min(10, +(5 * Math.pow(1.08, Math.min(weeksAfter5k, 10))).toFixed(1))
       : null;
-    // Time estimate at zone B (8:30 min/km for 10km on trail/sand = harder surface +10%)
-    const paceMinKm = 9.0; // trail/strand pace zone B
-    const estTimeMin = estDistanceKm ? Math.round(estDistanceKm * paceMinKm) : null;
-    const estTimeStr = estTimeMin ? `${Math.floor(estTimeMin / 60)}u${(estTimeMin % 60).toString().padStart(2, '0')}` : null;
+    // Tempo en streeftijd komen niet meer uit dit bestand.
+    //
+    // Hier stond een vast tempo in een constante, met de opmerking dat dat het
+    // strandtempo was. Een derde coachstem, naast het schema en de engines,
+    // met een getal dat nergens op sloeg behalve op een aanname uit augustus.
+    // Wat een race gaat kosten weet racePerformance, met terreintoeslag en
+    // een zekerheidsniveau erbij — en dat wordt hieronder ingegeven.
+    const raceDoel = loadRaceGoals().find(g => g.date === '2026-10-31') || null;
 
     return [
-      `TERSCHELLING BERELOOP (30 okt–2 nov 2026) — LOOPPROJECTIE:`,
+      `BERELOOP TERSCHELLING (31 okt 2026) — LOOPPROJECTIE:`,
       `Huidig schema: T${currentRun}/35 | Schema klaar (5 km): ${finishes5k ? 'JA — vóór de zomervakantie' : `nog ${remaining} sessies nodig`}`,
       finishes5k && estDistanceKm
-        ? `Haalbare afstand op 30 okt: ~${estDistanceKm} km (zone B opbouw na 5km-mijlpaal)`
+        ? `Haalbare afstand op 31 okt: ~${estDistanceKm} km (opbouw na de 5km-mijlpaal)`
         : `Aanbeveling: focus na vakantie direct op 5km afmaken, daarna opbouw naar 10km`,
-      estTimeStr ? `Streeftijd 10 km op strand/duin (zone B, ~9 min/km): ~${estTimeStr} (hardere ondergrond, zone B altijd leidend)` : '',
-      `Bereloop strategie: 10 km als doel, 5 km als veilig alternatief | Eerste officiële loopwedstrijd → finishen = winnen`,
-      `Gewicht bij Bereloop: lichter lichaam = sneller + minder belasting op gewrichten — direct voordeel van Mounjaro-traject`,
+      raceDoel
+        ? `Racedoel: ${raceDoel.distanceKm} km in ${raceDoel.targetTimeLabel} (${raceDoel.targetPaceLabel}/km) — ${raceDoel.type}`
+        : '',
+      `Voorspelde finishtijd en hartslagstrategie: NIET zelf schatten. Die komen uit racePerformance en hrModel, inclusief terreintoeslag en zekerheidsniveau.`,
+      `Strategie: 10 km als doel, 5 km als veilig alternatief | Eerste officiële loopwedstrijd → finishen = winnen`,
+      `Gewicht bij de race: lichter lichaam = minder belasting op gewrichten — indirect voordeel van het Mounjaro-traject`,
     ].filter(Boolean).join('\n');
   })();
 
@@ -655,7 +664,7 @@ ZOJUIST BEVESTIGDE TRAINING:
 ${JSON.stringify(workout, null, 2)}
 
 GEPLANDE SESSIE:
-${plannedRun ? `T${plannedRun.nr}: ${plannedRun.description} — ${plannedRun.duration} min — ${plannedRun.hrZone} — doel: ${plannedRun.goal}` : 'geen geplande sessie gekozen'}
+${plannedRun ? `T${plannedRun.nr}: ${plannedRun.description} — ${plannedRun.duration} min — ${easyHrLine()} — doel: ${plannedRun.goal}` : 'geen geplande sessie gekozen'}
 
 Geef een kort coach-oordeel (max 110 woorden, Nederlands):
 1. Voldeed de sessie aan het aerobe doel? Gebruik ALLEEN werkelijk aanwezige data (HR, pace, duur, RPE). Geen schijnprecisie over data die er niet is.

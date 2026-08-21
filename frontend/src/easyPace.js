@@ -141,6 +141,38 @@ export function easyRunPace({ logs = {}, currentDate = todayLocal() } = {}) {
 // Voor de sessieplanner: welk tempo hoort bij welk doel?
 // Easy en durability volgen je gemeten easy pace. Racespecifiek werk volgt
 // het doeltempo. Quality-lite zit er bewust tussenin.
+// De gemeten tempo's in de vorm die sessionMath verwacht.
+//
+// Hier zat vroeger een schemastring achter: elke sessie in de bibliotheek had
+// "Looptempo: ~9:15-9:45 min/km" naast zich staan, en daar werd de afstand
+// uit geparsed. Dat gaf een afstand die klopte bij wat iemand in augustus
+// dacht, niet bij wat jij loopt. Nu komt de bandbreedte uit je eigen
+// verdragen sessies — of er komt niets, en dan staat er ook geen afstand.
+export function measuredPaces({ logs = {}, currentDate = todayLocal() } = {}) {
+  const easy = easyRunPace({ logs, currentDate });
+  if (!easy.available) return null;
+
+  // Het wandeltempo wordt hier afgeleid, niet opgehaald. Het gemeten
+  // wandeltempo binnen runs zit in racePerformance.raceWalkPace() — maar dat
+  // bestand importeert dít bestand al, en een kringetje tussen twee modules
+  // levert bij het opstarten ondefinieerde waarden op. Voor een
+  // afstandsschatting op het planoverzicht is de afleiding genoeg; waar het
+  // gemeten wandeltempo écht telt (de racevoorspelling) wordt het wél
+  // gebruikt.
+  //
+  // De regel: een wandelpauze is langzamer dan het blok ervoor. Vijftien tot
+  // vijfentwintig procent, wat overeenkomt met wat er in haar eigen
+  // afgeleide segmenten terugkomt.
+  return {
+    runFast: easy.range.fast,
+    runSlow: easy.range.slow,
+    walkFast: +(easy.range.slow * 1.15).toFixed(2),
+    walkSlow: +(easy.range.slow * 1.25).toFixed(2),
+    source: 'gemeten looptempo; wandeltempo afgeleid',
+    confidence: easy.confidence,
+  };
+}
+
 export function prescribedPace({ purpose, goal = null, easy = null,
   logs = {}, currentDate = todayLocal() }) {
   const e = easy || easyRunPace({ logs, currentDate });

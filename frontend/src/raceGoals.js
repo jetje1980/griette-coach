@@ -16,7 +16,11 @@ import { calibrateHr, earlyWarnings } from './runningHistory';
 
 export const RACES = [
   {
-    id: 'okt3', date: '2026-10-03', name: 'Trail 10 km — 5 km doel',
+    // De naam noemde jarenlang een tienkilometer terwijl het doel vijf is. Het
+    // parcours mag heten wat het wil; wat jij loopt is vijf kilometer, en dat
+    // is wat er op elk scherm hoort te staan. Het gezaghebbende doel staat in
+    // raceGoalModel.
+    id: 'okt3', date: '2026-10-03', name: 'Trail 5 km',
     distanceKm: 5, targetMinutes: 35, targetPace: 7.0,
     kind: 'checkpoint', terrain: 'trail',
     note: 'Checkpoint, geen eindexamen. Uitlopen binnen je hartslagband telt als geslaagd.',

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { RUNS , runDistance } from '../data/runningSchema';
 import { sessionDetail } from '../data/sessionDetail';
+import { measuredPaces } from '../easyPace';
 import {
   sessionStatus, workoutsForSession, adaptiveHistoryForSession,
   computePace, deleteWorkout,
@@ -36,10 +37,10 @@ function DetailRow({ k, v }) {
   );
 }
 
-function SessionCard({ run, status, refresh, logs, onEditWorkout }) {
+function SessionCard({ run, status, refresh, logs, onEditWorkout, paces }) {
   const [open, setOpen] = useState(false);
   const meta = STATUS_META[status] || STATUS_META.todo;
-  const detail = sessionDetail(run);
+  const detail = sessionDetail(run, paces);
   const workouts = workoutsForSession(run.nr);
   const history = adaptiveHistoryForSession(run.nr);
 
@@ -59,7 +60,7 @@ function SessionCard({ run, status, refresh, logs, onEditWorkout }) {
             {run.race ? '🏁 ' : ''}{run.description}
           </div>
           <div style={{ fontSize: 11, color: 'var(--ghost)' }}>
-            {run.duration} min · {detail.block}{runDistance(run) ? ` · ~${runDistance(run).label}` : ''}
+            {run.duration} min · {detail.block}{runDistance(run, paces) ? ` · ~${runDistance(run, paces).label}` : ''}
           </div>
         </div>
         <span style={{ fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0 }}>
@@ -157,6 +158,9 @@ function SessionCard({ run, status, refresh, logs, onEditWorkout }) {
 
 export default function TrainingPlan({ logs, currentNr, refresh, onEditWorkout }) {
   const [showAll, setShowAll] = useState(false);
+  // Eén keer per render: je gemeten tempo's. Zonder die meting staat er geen
+  // afstand bij een sessie, in plaats van een schatting uit het oude schema.
+  const paces = useMemo(() => measuredPaces({ logs }), [logs]);
 
   const statuses = RUNS.map(r => sessionStatus(r.nr, logs, currentNr));
   const doneCount = statuses.filter(s => s === 'done' || s === 'repeated-done' || s === 'modified').length;
@@ -181,7 +185,7 @@ export default function TrainingPlan({ logs, currentNr, refresh, onEditWorkout }
       {visible.map(run => (
         <SessionCard key={run.nr} run={run}
           status={statuses[RUNS.indexOf(run)]}
-          logs={logs} refresh={refresh} onEditWorkout={onEditWorkout} />
+          logs={logs} refresh={refresh} onEditWorkout={onEditWorkout} paces={paces} />
       ))}
       <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 4 }}
         onClick={() => setShowAll(s => !s)}>

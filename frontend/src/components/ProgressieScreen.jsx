@@ -12,6 +12,9 @@ import RunForecastPanel from './RunForecastPanel';
 import RunDashboard from './RunDashboard';
 import StrengthPanel from './StrengthPanel';
 import MyChangePanel from './MyChangePanel';
+import { loadRaceGoals } from '../raceGoalModel';
+import { easyHrLine } from '../hrModel';
+import { measuredPaces } from '../easyPace';
 import { todayLocal } from '../datetime';
 
 // Zeven domeinen: Body · Run · Strength · Fresh · Money · Freedom · Routines
@@ -590,6 +593,14 @@ function TabHardlopen({ logs }) {
 
   const runWeekStreak = getRunWeekStreak(logs);
   const trailDays = daysBetween(tod, TRAIL_DATE);
+  // Naam en afstand uit het racedoel zelf. Stond hier eerder hard: "Trail
+  // 10 km", terwijl je doel vijf kilometer is.
+  // Gemeten tempo's, één keer. Bepalen of er een afstand bij een sessie staat.
+  const paces = measuredPaces({ logs });
+  const raceLabel = (() => {
+    const g = loadRaceGoals().find(r => r.date === TRAIL_DATE);
+    return g ? `${g.name} · ${g.distanceKm} km` : 'Eerstvolgende race';
+  })();
   const trailPct = (() => {
     const totalDays = daysBetween(USER.startDate, TRAIL_DATE);
     const elapsed = daysBetween(USER.startDate, tod);
@@ -826,15 +837,18 @@ function TabHardlopen({ logs }) {
             </div>
             {nextRun.duration && (
               <div style={{ fontSize: 12, color: 'var(--ghost)' }}>
-                {nextRun.duration} min · {nextRun.hrZone}{runDistance(nextRun) ? ` · ${runDistance(nextRun).label}` : ''}
+                {nextRun.duration} min · {easyHrLine()}{runDistance(nextRun, paces) ? ` · ${runDistance(nextRun, paces).label}` : ''}
               </div>
             )}
           </div>
         </>
       )}
 
-      {/* Trail countdown */}
-      <div className="os-section-label">Trail 10 km — {TRAIL_DATE}</div>
+      {/* Aftellen naar de eerste race. De naam en de afstand komen uit het
+          racedoel, niet uit een label hier — die liepen uit elkaar. */}
+      <div className="os-section-label">
+        {raceLabel} — {TRAIL_DATE}
+      </div>
       <div className="os-card">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
           <div style={{ fontSize: 36, fontWeight: 900, fontFamily: 'var(--font-serif)',
@@ -857,7 +871,7 @@ function TabHardlopen({ logs }) {
                 <div key={l.date} className="os-detail-row">
                   <span className="os-dk">T{l.run_session} · {l.date.slice(5)}</span>
                   <span className="os-dv" style={{ fontSize: 12 }}>
-                    {(run && runDistance(run)?.label) || '—'}
+                    {(run && runDistance(run, paces)?.label) || '—'}
                   </span>
                 </div>
               );
