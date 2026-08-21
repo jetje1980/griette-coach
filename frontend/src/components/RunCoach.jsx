@@ -9,6 +9,7 @@ import {
 } from '../runGoalStatus';
 import { sessionMath, fmtPaceSec, paceToSec, fmtSec } from '../sessionMath';
 import { hrPrescription } from '../hrModel';
+import { easyRunPace } from '../easyPace';
 import { todayLocal } from '../datetime';
 import RunGoalEditor from './RunGoalEditor';
 
@@ -72,7 +73,7 @@ function Row({ k, v, sub }) {
 }
 
 // ── De sessie van vandaag ───────────────────────────────────────
-function NextSession({ plan, budget, statuses, limiter }) {
+function NextSession({ plan, budget, statuses, limiter, easy }) {
   const [why, setWhy] = useState(false);
   const run = plan?.run;
 
@@ -120,7 +121,7 @@ function NextSession({ plan, budget, statuses, limiter }) {
       </div>
 
       <Row k="Looptempo" v={plan.targetPace ? `${fmtPaceSec(paceToSec(plan.targetPace))}/km` : '—'}
-        sub={plan.paceSource ? bronTekst(plan.paceSource) : null} />
+        sub={plan.paceSource ? bronTekst(plan.paceSource, easy) : null} />
       <Row k="Wandeltempo"
         v={plan.walkPace ? `${fmtPaceSec(paceToSec(plan.walkPace))}/km` : 'rustig, langzamer dan je loopblok'} />
       <Row k="Hartslag" v={plan.hrZone} />
@@ -129,6 +130,10 @@ function NextSession({ plan, budget, statuses, limiter }) {
       <Row k="Verwachte loopafstand" v={math?.runKm ? `${math.runKm.toFixed(1)} km` : null} />
       <Row k="Verwachte totale afstand" v={math?.km ? `${math.km.toFixed(1)} km` : null} />
       <Row k="Hefboom" v={(plan.levers || []).join(' · ') || 'niveau vasthouden'} />
+      {/* RPE alleen als je hem werkelijk hebt ingevuld — een verwachte
+          inspanning verzinnen zegt niets. */}
+      <Row k="Verwachte RPE" v={easy?.avgRpe != null ? `~${easy.avgRpe}` : null}
+        sub={easy?.avgRpe != null ? 'gemiddelde van je eigen sessies op dit tempo' : null} />
 
       {bewijs && (
         <div style={{ background: 'var(--card)', border: '1px dashed var(--border)',
@@ -188,12 +193,26 @@ function NextSession({ plan, budget, statuses, limiter }) {
   );
 }
 
-function bronTekst(source) {
+// Waar dit tempo vandaan komt — met het aantal sessies erbij.
+//
+// "uit je goed verdragen sessies" is te vaag om te kunnen wegen. Of er drie
+// metingen onder liggen of tien maakt uit voor hoeveel je aan dit getal moet
+// hechten, dus dat aantal hoort erbij te staan.
+function bronTekst(source, easy) {
+  const n = easy?.available ? easy.usable : null;
+  const uitMeting = n
+    ? `uit ${n} goed verdragen ${n === 1 ? 'sessie' : 'sessies'} met te scheiden loopblokken`
+    : 'uit je goed verdragen sessies';
   const map = {
-    measured: 'uit je goed verdragen sessies',
+    measured: uitMeting,
+    easy: uitMeting,
+    capability: uitMeting,
     goal: 'uit je racedoel',
+    race_goal: 'uit je racedoel',
     between: 'tussen easy en racetempo in',
     fallback: 'voorlopig, nog geen meting',
+    schema: 'voorlopig, nog geen meting',
+    unknown: 'nog geen gemeten easy tempo',
   };
   return map[source] || source;
 }
@@ -293,18 +312,21 @@ export default function RunCoach({ log = {}, logs = {}, currentDate = todayLocal
   const [tick, setTick] = useState(0);
   const [editing, setEditing] = useState(null);
 
-  const { plan, budget, statuses, limiter } = useMemo(() => {
+  const { plan, budget, statuses, limiter, easy } = useMemo(() => {
     const runGate = restDayDecision({ log, logs, currentDate, coach: {} });
     const b = recoveryBudget({ log, logs, currentDate, runGate });
     const p = planNextSession({ log, logs, currentDate });
     const goals = activeRunGoals({ currentDate });
     const { rows, driving } = allRunGoalStatuses({ goals, logs, currentDate, budget: b });
-    return { plan: p, budget: b, statuses: rows, limiter: driving?.limiter || null };
+    // Het gemeten easy-tempo: nodig om te tonen op hoeveel sessies het
+    // voorgeschreven tempo rust, en wat je er zelf voor RPE bij gaf.
+    const e = easyRunPace({ logs, currentDate });
+    return { plan: p, budget: b, statuses: rows, limiter: driving?.limiter || null, easy: e };
   }, [log, logs, currentDate, tick]);
 
   return (
     <div>
-      <NextSession plan={plan} budget={budget} statuses={statuses} limiter={limiter} />
+      <NextSession plan={plan} budget={budget} statuses={statuses} limiter={limiter} easy={easy} />
 
       <div className="os-card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55 }}>
