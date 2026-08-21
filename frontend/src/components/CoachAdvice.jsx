@@ -124,7 +124,8 @@ export function computeHeadCoach(log, logs, currentDate) {
   let trainingDesc, sessionLabel;
 
   if (decision === 'GREEN') {
-    sessionLabel = `Training T${nextNr}/35`;
+    // Geen sessienummer meer: dat suggereerde een volgorde die er niet is.
+    sessionLabel = 'Looptraining';
     trainingDesc = nextRun
       ? `${nextRun.description} — ${nextRun.duration} min | ${easyHrLine()}`
       : 'Geplande loopsessie — Zone B strikt';

@@ -8,7 +8,9 @@ import { SUPABASE_URL, getAccessToken } from './supabase';
 import { todayLocal } from './datetime';
 
 import { easyHrLine } from './hrModel';
-import { loadRaceGoals } from './raceGoalModel';
+import { activeRunGoals } from './runGoalModel';
+import { allRunGoalStatuses, STATUS_META } from './runGoalStatus';
+import { planNextSession } from './raceplan';
 const MODEL = 'claude-sonnet-4-6';
 const EDGE_FN = `${SUPABASE_URL}/functions/v1/coach-ai`;
 
@@ -412,50 +414,40 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
     return lines.length ? `GEWICHTSPROJECTIE OP MIJLPALEN (huidig tempo):\n${lines.join('\n')}` : '';
   })();
 
-  // Bereloop loopprogressie projectie
-  const bereloopRunProjection = (() => {
-    const currentRun = parseInt(localStorage.getItem('gc_current_run') || '10', 10);
-    // Schema: T35 = 5 km (week 12). Remaining sessions from current point:
-    const remaining = Math.max(0, 35 - currentRun);
-    // ~3 runs/week, but with ~3 weeks vacation interruption (no running) and regression after
-    // Vacation Jul 27 - Aug 14 = 2.5 weeks off → estimated setback ~4-6 sessions
-    // Days from today to Oct 30:
-    const daysToEvent = Math.floor((new Date('2026-10-30') - new Date(today)) / 86400000);
-    if (daysToEvent <= 0) return '';
-    const weeksToEvent = daysToEvent / 7;
-    // Available training weeks (minus ~4 weeks vacation/recovery): ~weeksToEvent - 4
-    const effectiveWeeks = Math.max(0, weeksToEvent - 4);
-    // Sessions available at 2.5 avg runs/week (conservative for long covid):
-    const sessionsAvailable = Math.floor(effectiveWeeks * 2.5);
-    // After T35 (5km), expect 8-10 more weeks to build to 10km at zone B
-    const finishes5k = remaining <= sessionsAvailable;
-    // After 5km, building to 10km: ~8 weeks of zone B runs adding 10% volume/week
-    const weeksAfter5k = finishes5k ? Math.floor((sessionsAvailable - remaining) / 2.5) : 0;
-    const estDistanceKm = finishes5k
-      ? Math.min(10, +(5 * Math.pow(1.08, Math.min(weeksAfter5k, 10))).toFixed(1))
-      : null;
-    // Tempo en streeftijd komen niet meer uit dit bestand.
-    //
-    // Hier stond een vast tempo in een constante, met de opmerking dat dat het
-    // strandtempo was. Een derde coachstem, naast het schema en de engines,
-    // met een getal dat nergens op sloeg behalve op een aanname uit augustus.
-    // Wat een race gaat kosten weet racePerformance, met terreintoeslag en
-    // een zekerheidsniveau erbij — en dat wordt hieronder ingegeven.
-    const raceDoel = loadRaceGoals().find(g => g.date === '2026-10-31') || null;
+  // Loopdoelen: de stand zoals de doelenmotor hem berekent.
+  //
+  // Hier stond een projectie op basis van een sessieteller: T-zoveel van de 35,
+  // 2,5 runs per week, en een afstand die met 8% per week werd doorgetrokken.
+  // Drie aannames uit augustus die nergens gecontroleerd werden, en die de AI
+  // als feit doorgaf naast wat de motoren zeiden. Dat is precies de tweede
+  // coachstem die weg moest.
+  //
+  // Wat er nu staat komt uit runGoalStatus: de huidige schatting, hoe zeker
+  // die is, en wat de beperkende factor is. Geen getal dat hier ontstaat.
+  const runGoalProjection = (() => {
+    const goals = activeRunGoals({ currentDate: today });
+    if (!goals.length) return '';
+    const { rows } = allRunGoalStatuses({ goals, logs, currentDate: today });
+    if (!rows.length) return '';
+
+    const regels = rows.map(r => {
+      const d = [
+        `${r.goal.name} (${r.goal.kindLabel}${r.goal.windowLabel ? `, ${r.goal.windowLabel}` : ''})`,
+        `status: ${STATUS_META[r.status]?.label || r.status}`,
+        r.currentLabel ? `huidige schatting: ${r.currentLabel}` : null,
+        r.confidence ? `zekerheid: ${r.confidence}` : null,
+        r.limiter?.label ? `beperkende factor: ${r.limiter.label}` : null,
+      ].filter(Boolean);
+      return `· ${d.join(' | ')}`;
+    });
 
     return [
-      `BERELOOP TERSCHELLING (31 okt 2026) — LOOPPROJECTIE:`,
-      `Huidig schema: T${currentRun}/35 | Schema klaar (5 km): ${finishes5k ? 'JA — vóór de zomervakantie' : `nog ${remaining} sessies nodig`}`,
-      finishes5k && estDistanceKm
-        ? `Haalbare afstand op 31 okt: ~${estDistanceKm} km (opbouw na de 5km-mijlpaal)`
-        : `Aanbeveling: focus na vakantie direct op 5km afmaken, daarna opbouw naar 10km`,
-      raceDoel
-        ? `Racedoel: ${raceDoel.distanceKm} km in ${raceDoel.targetTimeLabel} (${raceDoel.targetPaceLabel}/km) — ${raceDoel.type}`
-        : '',
-      `Voorspelde finishtijd en hartslagstrategie: NIET zelf schatten. Die komen uit racePerformance en hrModel, inclusief terreintoeslag en zekerheidsniveau.`,
-      `Strategie: 10 km als doel, 5 km als veilig alternatief | Eerste officiële loopwedstrijd → finishen = winnen`,
-      `Gewicht bij de race: lichter lichaam = minder belasting op gewrichten — indirect voordeel van het Mounjaro-traject`,
-    ].filter(Boolean).join('\n');
+      `LOOPDOELEN — STAND VOLGENS DE DOELENMOTOR:`,
+      ...regels,
+      `Deze regels zijn de uitkomst van runGoalStatus, racePerformance en hrModel.`,
+      `NIET zelf een finishtijd, tempo, hartslag of haalbare afstand schatten en niet deze getallen overrulen.`,
+      `Er bestaat geen vaste sessievolgorde meer: welke training volgt komt uit planNextSession, niet uit een nummer.`,
+    ].join('\n');
   })();
 
   return `
@@ -515,7 +507,7 @@ RECENTE BELEMMERING (herstel operatie):
 PERSOONLIJKE MIJLPALEN (komende weken — coach hierop inspelen):
 ${eventsContext}
 ${milestoneProjection ? `\n${milestoneProjection}` : ''}
-${bereloopRunProjection ? `\n${bereloopRunProjection}` : ''}
+${runGoalProjection ? `\n${runGoalProjection}` : ''}
 
 VAKANTIE- EN MIJLPALENPLANNING:
 
@@ -778,10 +770,27 @@ Op basis van vetdistributie en Mounjaro: eiwitdoelen, timing, specifieke kansen.
       return v.length ? (v.reduce((s, l) => s + l.energy, 0) / v.length).toFixed(1) : null;
     })();
 
-    const lastRunNr = (() => {
-      // Lees currentRun uit config — hardcoded 10 als fallback
-      return parseInt(localStorage.getItem('gc_current_run') || '10', 10);
+    // De eerstvolgende looptraining komt van de planner, niet van een teller.
+    //
+    // Hier stond "schema nr N van 35" met een sleutel die niemand bijhield en
+    // een vaste 10 als terugval. Daarmee gaf de AI een plek in een reeks door
+    // die niet meer bestaat. planNextSession() weet wat er werkelijk volgt en
+    // waarom — en die reden hoort in het plan te staan.
+    const volgende = (() => {
+      try {
+        const p = planNextSession({ log: logs[todayLocal()] || {}, logs, currentDate: todayLocal() });
+        if (!p?.run) return null;
+        return {
+          vorm: p.run.description,
+          duur: p.run.duration,
+          doel: p.run.goal || null,
+          reden: p.reason || null,
+        };
+      } catch { return null; }
     })();
+    const loopRegel = volgende
+      ? `EERSTVOLGENDE LOOPTRAINING VOLGENS DE PLANNER: ${volgende.vorm} (${volgende.duur} min)${volgende.doel ? ` — doel: ${volgende.doel}` : ''}${volgende.reden ? `\nWaarom die: ${volgende.reden}` : ''}`
+      : 'EERSTVOLGENDE LOOPTRAINING: de planner geeft vandaag geen looptraining vrij.';
 
     const prompt = `${context}
 
@@ -790,7 +799,7 @@ ${coachReport ? coachReport.slice(0, 500) : 'nog geen coach-check'}
 
 ${photoInsight ? `MEEST RECENTE FOTO-ANALYSE:\n${photoInsight.slice(0, 400)}` : ''}
 
-HUIDIGE LOOPTRAINING: schema nr ${lastRunNr} van 35
+${loopRegel}
 GEMIDDELDE ENERGIE AFGELOPEN WEEK: ${avgEnergy ?? '?'}/3
 
 Maak een CONCREET WEEKPLAN als personal trainer. Baseer het op de FEITELIJKE data — niet op wat gemiddeld veilig is, maar op wat haar data laat zien dat voor háár werkt.
@@ -801,7 +810,7 @@ Houd rekening met de aankomende events (fietsweekend 12-13 jun = grote fysieke u
 Antwoord in exact dit formaat (geen extra tekst er omheen):
 
 WEEKPLAN:
-Ma: [activiteit — bijv. Hardlopen T${lastRunNr} zone B / Zwemmen 25min / Rust / Core 15min]
+Ma: [activiteit — bijv. Hardlopen (de vorm hierboven) / Zwemmen 25min / Rust / Core 15min]
 Di: [activiteit]
 Wo: [activiteit]
 Do: [activiteit]
@@ -809,7 +818,7 @@ Vr: [activiteit]
 Za: [activiteit]
 Zo: [activiteit]
 
-LOOPSCHEMA: [blijf op T${lastRunNr} / ga naar T${Math.min(35, lastRunNr + 1)} / ga terug naar T${Math.max(1, lastRunNr - 1)} — met korte reden op basis van haar energiedata]
+LOOPADVIES: [houd de vorm hierboven aan / maak hem korter / sla hem over — met korte reden op basis van haar energiedata. Verzin GEEN sessienummer en GEEN volgorde: die bestaan niet.]
 FOCUS DEZE WEEK: [1 zin: wat is de trainingsthema — specifiek voor háár data deze week]
 DATA-INZICHT: [1 zin: welk patroon uit haar logdata stuurt dit plan]
 

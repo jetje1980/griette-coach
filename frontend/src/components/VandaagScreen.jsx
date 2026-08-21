@@ -22,14 +22,14 @@ import { todayLocal } from '../datetime';
 // data een streepje in plaats van een verzonnen getal.
 function PerformanceStrip({ log, logs, currentDate }) {
   const rec   = recoveryScore(logs, currentDate);
-  const build = runBuildScore(logs);
+  const build = runBuildScore(logs, currentDate);
   const shape = shapeScore(logs);
   const cap   = capacityLevel(log, logs, currentDate);
 
   const cells = [
     { label: 'Herstel',   value: rec.value != null ? `${rec.value}%` : '—',
       pct: rec.value, color: 'var(--sage)', sub: rec.value == null ? rec.reason : `${rec.n} dagen` },
-    { label: 'Run build', value: `${build.value}%`, pct: build.value,
+    { label: 'Doelafstand', value: `${build.value}%`, pct: build.value,
       color: 'var(--blue)', sub: build.label },
     { label: 'Shape',     value: shape.value != null ? `${shape.value}%` : '—',
       pct: shape.value, color: 'var(--rust)', sub: shape.value == null ? shape.reason : shape.label },
@@ -185,7 +185,7 @@ function computeWatNu({ log, coach, nextSession, currentDate, hasData }) {
 
   // Training als die vandaag past en nog niet gedaan is
   if (!trained && (decision === 'GREEN' || decision === 'AMBER') && hour < 19) {
-    const label = nextSession?.purposeLabel || (nextSession?.run ? `T${nextSession.nr}` : 'je sessie');
+    const label = nextSession?.purposeLabel || (nextSession?.run ? 'je looptraining' : 'je sessie');
     return {
       emoji: decision === 'GREEN' ? '🏃' : '🚶',
       action: decision === 'GREEN' ? `Training ${label} doen` : 'Aangepaste sessie of wandeling',
@@ -309,7 +309,7 @@ function DecisionCockpit({ coach, nextSession, hasData, isFuture }) {
     : nextSession?.state === 'SWAP'
       ? 'Wandelen of zwemmen — geen hardlopen'
       : nextSession?.run
-        ? `${nextSession.purposeLabel || `T${nextSession.nr}`} — ${nextSession.run.description}`
+        ? `${nextSession.purposeLabel || 'Looptraining'} — ${nextSession.run.description}`
         : coach.trainingDesc;
 
   return (
@@ -390,7 +390,7 @@ function ForecastMini({ log, logs, currentDate, coach, nextSession }) {
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
           textTransform: 'uppercase', letterSpacing: '0.5px', flex: 1 }}>
           {f.deferred
-            ? `Verwachting — T${f.run.nr}, vanaf ${f.earliestDate.slice(5)}`
+            ? `Verwachting — vanaf ${f.earliestDate.slice(5)}`
             : 'Verwachting deze sessie'}
         </div>
         <span style={{ fontSize: 10, fontWeight: 700, color: CONF.color,
@@ -555,7 +555,7 @@ function DagPlanning({ currentDate, log, nextSession, goToTab }) {
   if (plan.training && plan.training !== 'rest' && plan.training !== 'free') {
     rows.push({ icon: TRAIN_LABELS[plan.training]?.slice(0, 2) || '🏃',
       label: TRAIN_LABELS[plan.training]?.slice(2) || 'Training',
-      note: trainDone ? 'gedaan' : nextSession?.run ? `T${nextSession.nr} · ${nextSession.run.duration} min` : 'gepland',
+      note: trainDone ? 'gedaan' : nextSession?.run ? `${nextSession.run.duration} min` : 'gepland',
       done: !!trainDone });
   }
   if (plan.kracht) {

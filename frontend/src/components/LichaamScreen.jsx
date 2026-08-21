@@ -9,7 +9,8 @@ import {
   saveStrengthSessions,
 } from '../data/strengthSchema';
 import { TRAINING_BLOCKS, getCurrentBlock, upcomingWeekFoci, blockExpectation } from '../data/trainingBlocks';
-import TrainingPlan from './TrainingPlan';
+import RunCoach from './RunCoach';
+import SessionLibrary from './SessionLibrary';
 import WorkoutForm from './WorkoutForm';
 import StrengthModes from './StrengthModes';
 import RecoveryCheck from './RecoveryCheck';
@@ -1042,10 +1043,10 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
             <div style={{ fontSize: 26 }}>{nextSession.state === 'SWAP' ? '🔀' : '🏃'}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+                {/* Nooit meer een sessienummer: dat suggereerde een volgorde
+                    die er niet meer is. Wat er staat is wat de sessie dóét. */}
                 {nextSession.state === 'SWAP' ? 'Vandaag — wissel sport'
-                  : nextSession.purposeLabel
-                    ? `Volgende sessie — ${nextSession.purposeLabel}`
-                    : `Volgende sessie — T${nextRunNr}/35`}
+                  : `Volgende sessie${nextSession.purposeLabel ? ` — ${nextSession.purposeLabel}` : ''}`}
               </div>
               {nextSession.race && (
                 <div style={{ fontSize: 10.5, color: 'var(--sage)', fontWeight: 700,
@@ -1105,7 +1106,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
                 <div style={{ background: 'var(--card)', border: '1px solid var(--green)', borderRadius: 10,
                   padding: '10px 14px', marginBottom: 10 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)', marginBottom: 2 }}>
-                    ✓ Training geregistreerd{todayW.plannedSessionId ? ` — T${todayW.plannedSessionId}` : ''}
+                    ✓ Training geregistreerd
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--sub)' }}>
                     {[todayW.distance ? `${todayW.distance} km` : null,
@@ -1205,8 +1206,18 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
           onEdit={(w) => { setEditingWorkout(w); setShowWorkoutForm(true); }}
           onChanged={() => { setPlanRefresh(k => k + 1); saveFields?.({}); }} />
 
-        {/* Volledig trainingsplan T1–T35 */}
-        <TrainingPlan key={planRefresh} logs={logs} currentNr={nextRunNr}
+        {/* De dynamische hardloopcoach.
+            Hier stond de oude plankop met een sessieteller en een verplichte
+            volgorde. Dat gaf de indruk dat training zes automatisch na vijf
+            komt, en dat is al een tijd niet meer waar: de sessie komt uit
+            planNextSession(), die naar de poort, je herstel en je doelen
+            kijkt. De nummers bestaan intern nog als sjabloon, maar bepalen
+            niets — en horen dus niet op het scherm. */}
+        <RunCoach key={planRefresh} log={log || {}} logs={logs} currentDate={currentDate} />
+
+        {/* De sessiebibliotheek als naslag, achter een klik en zonder
+            volgordebelofte. */}
+        <SessionLibrary logs={logs}
           refresh={() => setPlanRefresh(k => k + 1)}
           onEditWorkout={(w) => { setEditingWorkout(w); setShowWorkoutForm(true); }} />
 

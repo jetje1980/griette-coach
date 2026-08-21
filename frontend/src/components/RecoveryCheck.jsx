@@ -129,7 +129,7 @@ export default function RecoveryCheck({ log, logs, currentDate, saveField }) {
     <div style={{ background: 'var(--card)', border: `1px solid ${answered ? 'var(--border)' : 'var(--gold)'}`,
       borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
       <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 3 }}>
-        Hoe reageerde je lichaam op gisteren{sessionNr ? ` (T${sessionNr})` : ''}?
+        Hoe reageerde je lichaam op {sessionNr ? 'de training van gisteren' : 'gisteren'}?
       </div>
       <div style={{ fontSize: 11, color: 'var(--sub)', marginBottom: 9, lineHeight: 1.45 }}>
         Hoofdpijn na inspanning is jouw vroegste waarschuwing. Alleen dit eerste

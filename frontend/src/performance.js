@@ -2,11 +2,13 @@
 // Regel: alleen een percentage tonen als er een verdedigbare berekening
 // achter zit én genoeg data. Anders null → de UI toont een streepje.
 
-import { RUNS } from './data/runningSchema';
 import { loadWorkouts, toleranceFor } from './workouts';
 import { loadStrengthSessions } from './data/strengthSchema';
 import { goalTarget } from './goals';
 import { USER } from './config';
+import { todayLocal } from './datetime';
+import { activeRunGoals } from './runGoalModel';
+import { allRunGoalStatuses } from './runGoalStatus';
 
 function pastDates(currentDate, n) {
   const out = [];
@@ -41,14 +43,29 @@ export function recoveryScore(logs, currentDate) {
 }
 
 // ── RUN BUILD ───────────────────────────────────────────────────
-// Voortgang door de canonieke T1–T35-reeks: hoogste voltooide sessie.
-export function runBuildScore(logs) {
-  const done = Object.values(logs || {})
-    .filter(l => l.run_done && l.run_session)
-    .map(l => Number(l.run_session));
-  if (!done.length) return { value: 0, label: 'nog niet gestart' };
-  const highest = Math.max(...done);
-  return { value: Math.round((highest / RUNS.length) * 100), label: `T${highest}/${RUNS.length}` };
+// Hoe ver ben je richting je loopdoel?
+//
+// Hier stond het hoogste afgevinkte sessienummer gedeeld door 35. Dat mat
+// niet je opbouw maar je positie in een lijstje: één sessie overslaan zette
+// de balk stil, en een sessie van tien minuten telde even zwaar als een van
+// veertig. Erger nog, het suggereerde dat er een eindpunt op nummer 35 lag.
+//
+// Wat er nu staat is de afstandsdekking uit distanceCoverage: hoeveel van de
+// doelafstand je al goed verdragen hebt uitgelopen. Dat beweegt alleen als je
+// werkelijk verder komt, en het hoort bij een doel dat jij hebt gesteld.
+export function runBuildScore(logs, currentDate = todayLocal()) {
+  const goals = activeRunGoals({ currentDate });
+  if (!goals.length) return { value: 0, label: 'nog geen loopdoel' };
+
+  const { driving } = allRunGoalStatuses({ goals, logs: logs || {}, currentDate });
+  const cov = driving?.coverage;
+  if (!cov?.available) {
+    return { value: 0, label: driving?.goal?.name || 'nog geen gemeten run' };
+  }
+  return {
+    value: Math.min(100, cov.pct),
+    label: `${cov.tolerated} van ${driving.goal.distanceKm} km`,
+  };
 }
 
 // ── SHAPE ───────────────────────────────────────────────────────

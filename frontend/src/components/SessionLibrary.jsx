@@ -1,14 +1,22 @@
 import React, { useState, useMemo } from 'react';
-import { RUNS , runDistance } from '../data/runningSchema';
+import { RUNS, runDistance } from '../data/runningSchema';
 import { sessionDetail } from '../data/sessionDetail';
 import { measuredPaces } from '../easyPace';
 import {
-  sessionStatus, workoutsForSession, adaptiveHistoryForSession,
-  computePace, deleteWorkout,
+  workoutsForSession, adaptiveHistoryForSession, computePace, deleteWorkout,
 } from '../workouts';
 
-// Volledig trainingsplan: alle sessies compact, uitklapbaar met volledige
-// instructie, ACTUAL-data van geregistreerde workouts en de adaptieve historie.
+// De sessiebibliotheek — naslag, geen plan.
+//
+// Dit was de genummerde planlijst met een teller en een "Volgende".
+// Die volgorde bestond niet meer: welke sessie je doet komt uit
+// planNextSession(), die kijkt naar de poort, je herstel, de fase en je
+// doelen. Een lijst met genummerde stappen ernaast leest als een
+// verplichting, en dat is precies de verwarring die eruit moest.
+//
+// Wat overblijft is bruikbaar: een verzameling vormen om uit te putten, en
+// de geregistreerde sessies die eraan hangen. Geen teller, geen "volgende",
+// geen suggestie dat er een route doorheen loopt.
 
 const STATUS_META = {
   'done':          { label: 'Gedaan',            color: 'var(--green)', emoji: '✓' },
@@ -156,41 +164,54 @@ function SessionCard({ run, status, refresh, logs, onEditWorkout, paces }) {
   );
 }
 
-export default function TrainingPlan({ logs, currentNr, refresh, onEditWorkout }) {
+export default function SessionLibrary({ logs, refresh, onEditWorkout }) {
+  const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   // Eén keer per render: je gemeten tempo's. Zonder die meting staat er geen
   // afstand bij een sessie, in plaats van een schatting uit het oude schema.
   const paces = useMemo(() => measuredPaces({ logs }), [logs]);
 
-  const statuses = RUNS.map(r => sessionStatus(r.nr, logs, currentNr));
-  const doneCount = statuses.filter(s => s === 'done' || s === 'repeated-done' || s === 'modified').length;
-
-  // Standaard: recent gedane + huidige + eerstvolgende 5; uitklapbaar naar alles
-  const currentIdx = RUNS.findIndex(r => r.nr === currentNr);
-  const visible = showAll
-    ? RUNS
-    : RUNS.filter((r, i) => i >= Math.max(0, currentIdx - 2) && i <= currentIdx + 4);
+  // Geen status per sessie meer, en geen "huidige".
+  //
+  // De oude versie berekende welke sessie je "hoorde" te doen uit het hoogste
+  // afgevinkte nummer, en toonde die als het midden van een route. Dat is de
+  // aanname die weg moest: de volgende sessie komt niet uit dit lijstje maar
+  // uit planNextSession(). Wat hier staat zijn vormen om uit te putten,
+  // gesorteerd van kort naar lang, met de sessies die je er al aan hebt
+  // gehangen.
+  const geordend = useMemo(
+    () => [...RUNS].filter(r => !r.restDay).sort((a, b) => a.duration - b.duration),
+    []);
+  const zichtbaar = showAll ? geordend : geordend.slice(0, 6);
 
   return (
     <div style={{ marginTop: 16 }}>
-      <div className="os-section-label" style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between' }}>
-        <span>Trainingsplan — {doneCount}/{RUNS.length}</span>
+      <div onClick={() => setOpen(o => !o)}
+        style={{ fontSize: 11.5, color: 'var(--muted)', cursor: 'pointer',
+          display: 'flex', justifyContent: 'space-between', padding: '10px 0' }}>
+        <span>Sessiebibliotheek — vormen om uit te putten</span>
+        <span>{open ? '▲' : '▼'}</span>
       </div>
-      {!showAll && currentIdx > 2 && (
-        <button className="os-toggle-chip" style={{ fontSize: 11, marginBottom: 6 }}
-          onClick={() => setShowAll(true)}>
-          ↑ Toon eerdere sessies (T1–T{RUNS[Math.max(0, currentIdx - 2)].nr - 1})
-        </button>
+
+      {open && (
+        <>
+          <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55,
+            marginBottom: 8 }}>
+            Geen volgorde en geen verplichting. Welke sessie je vandaag doet staat
+            hierboven en komt uit je herstel, je fase en je doelen — niet uit deze lijst.
+            Dit zijn de vormen waar de coach uit put als er nog geen bewezen
+            structuur van jezelf is.
+          </div>
+          {zichtbaar.map(run => (
+            <SessionCard key={run.nr} run={run} status="todo"
+              logs={logs} refresh={refresh} onEditWorkout={onEditWorkout} paces={paces} />
+          ))}
+          <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 4 }}
+            onClick={() => setShowAll(s => !s)}>
+            {showAll ? 'Toon minder' : `Toon alle ${geordend.length} vormen`}
+          </button>
+        </>
       )}
-      {visible.map(run => (
-        <SessionCard key={run.nr} run={run}
-          status={statuses[RUNS.indexOf(run)]}
-          logs={logs} refresh={refresh} onEditWorkout={onEditWorkout} paces={paces} />
-      ))}
-      <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 4 }}
-        onClick={() => setShowAll(s => !s)}>
-        {showAll ? 'Toon compact' : `Toon alle ${RUNS.length} sessies`}
-      </button>
     </div>
   );
 }

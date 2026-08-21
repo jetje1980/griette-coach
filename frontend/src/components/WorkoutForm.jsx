@@ -437,7 +437,9 @@ export default function WorkoutForm({ defaultDate, defaultSessionNr, logs, saveF
 
             {comparison && (
               <>
-                <div className="os-section-label">Vergelijking met vorige {plannedRun ? `T${plannedRun.nr}` : 'sessie'}</div>
+                {/* Geen sessienummer meer: dat las als plek in een reeks. Wat
+                    hier telt is dat het dezelfde vorm was, niet welk nummer. */}
+                <div className="os-section-label">Vergelijking met de vorige keer{plannedRun?.description ? ` — ${plannedRun.description}` : ''}</div>
                 <div className="os-card" style={{ marginBottom: 12 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
                     {[
