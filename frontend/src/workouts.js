@@ -14,7 +14,7 @@
 // }
 
 import { RUNS, runDistanceKm } from './data/runningSchema';
-import { addDays } from './datetime';
+import { addDays, todayLocal } from './datetime';
 
 const KEY = 'gc_workouts';
 const ADAPTIVE_LOG_KEY = 'gc_adaptive_log';
@@ -94,15 +94,44 @@ export function fmtPace(minPerKm) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// De dagen waarop de gebruiker bewust tegen het coachadvies in heeft gelopen.
+//
+// Wordt hier rechtstreeks uit de opslag gelezen en niet uit overrideSession.js
+// geïmporteerd: dat bestand leest workouts.js, en een kringetje tussen die twee
+// is precies het soort afhankelijkheid dat later stilletjes breekt. De sleutel
+// staat op één plek gedocumenteerd — overrideSession.STORAGE_KEY.
+function overrideDatums() {
+  try {
+    const arr = JSON.parse(localStorage.getItem('gc_overrides') || '[]');
+    return Array.isArray(arr) ? new Set(arr.map(o => o.date)) : new Set();
+  } catch { return new Set(); }
+}
+
 // ── Tolerantie: pas succesvol als 24-48u later goed verdragen ───
 // 'good' | 'poor' | 'pending' (nog geen dag-erna data)
-export function toleranceFor(workout, logs) {
+//
+// Voor een override geldt een strengere lat. Normaal is één antwoord in het
+// venster genoeg om een sessie verdragen te noemen. Bij een sessie die tegen
+// het coachadvies in is gedaan wil je dat niet: dan zou een enkel "ging wel"
+// op dag één de verdragen afstand omhoog kunnen zetten terwijl de tweede dag
+// — juist de dag waarop PEM zich meldt — nog moest komen. Daarom telt een
+// override pas als het hele 24–48u-venster voorbij is.
+export function toleranceFor(workout, logs, currentDate = null) {
   if (!workout?.date) return 'pending';
   const l1 = logs?.[addDays(workout.date, 1)], l2 = logs?.[addDays(workout.date, 2)];
   const bad = (l) => l && (l.delayed_fatigue || l.delayed_brainfog || l.delayed_breathless ||
     l.symptom_pem || l.recovery_check === 'bad' || l.training_recovery === 2);
   if (bad(l1) || bad(l2)) return 'poor';
   const answered = (l) => l && (l.recovery_check === 'good' || l.energy != null || l.training_recovery != null);
+
+  if (overrideDatums().has(workout.date)) {
+    // Slecht nieuws telt meteen (hierboven al afgehandeld); goed nieuws pas
+    // als beide dagen achter de rug zijn en er iets is ingevuld.
+    const vandaag = currentDate || todayLocal();
+    if (vandaag < addDays(workout.date, 2)) return 'pending';
+    return answered(l1) || answered(l2) ? 'good' : 'pending';
+  }
+
   if (answered(l1) || answered(l2)) return 'good';
   return 'pending';
 }

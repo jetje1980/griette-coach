@@ -10,6 +10,9 @@ import {
 import { sessionMath, fmtPaceSec, paceToSec, fmtSec } from '../sessionMath';
 import { hrPrescription } from '../hrModel';
 import { easyRunPace } from '../easyPace';
+import {
+  overrideAvailability, buildOverrideSession, recordOverride, GATE,
+} from '../overrideSession';
 import { todayLocal } from '../datetime';
 import RunGoalEditor from './RunGoalEditor';
 
@@ -72,26 +75,151 @@ function Row({ k, v, sub }) {
   );
 }
 
+// ── "Ik wil toch trainen" ───────────────────────────────────────
+//
+// Twee stappen, met opzet. De eerste klik zegt alleen wat de coach vindt en
+// waarom; pas de tweede toont een sessie. Zo blijft de volgorde zichtbaar:
+// eerst het advies, dan haar keuze — nooit andersom, en nooit alsof het
+// alternatief het advies wás.
+//
+// Geen waarschuwingstaal en geen schuld. Zij weet beter dan wie ook hoe een
+// slechte dag voelt; wat de app kan toevoegen is de reden en een dosering,
+// niet een oordeel.
+function Override({ log, logs, currentDate, runGate, plan, onLogged }) {
+  const [stap, setStap] = useState(0);
+  const [gekozen, setGekozen] = useState(null);
+
+  const info = useMemo(
+    () => overrideAvailability({ log, logs, currentDate, runGate, plan }),
+    [log, logs, currentDate, runGate, plan]);
+
+  if (info.gate === GATE.NOT_NEEDED) return null;
+
+  // Rode vlag: de knop bestaat, want hem verbergen verklaart niets. Wat hij
+  // toont is één zin en geen sessie.
+  if (info.hardStop) {
+    return (
+      <div className="os-card" style={{ borderLeft: '4px solid var(--rust)', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--rust)',
+          textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+          Jouw override
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.55, marginBottom: 4 }}>
+          {info.message}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5 }}>
+          Reden: {info.stopReason}.
+        </div>
+      </div>
+    );
+  }
+
+  if (stap === 0) {
+    return (
+      <button className="os-toggle-chip" data-override="start"
+        style={{ fontSize: 12.5, marginBottom: 12 }}
+        onClick={() => setStap(1)}>Ik wil toch trainen</button>
+    );
+  }
+
+  return (
+    <div className="os-card" style={{ borderLeft: '4px solid var(--blue)', marginBottom: 12 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--blue)',
+        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+        Jouw override
+      </div>
+
+      <div style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.6, marginBottom: 8 }}>
+        De coach adviseert vandaag nog steeds geen loopprikkel vanwege:{' '}
+        <span style={{ color: 'var(--sub)' }}>{info.coachReason}</span>.
+        {' '}Als je bewust toch wilt trainen, kies ik de laagst-risico sessie die
+        aansluit bij je huidige belastbaarheid. Dit verandert het oorspronkelijke
+        coachadvies niet.
+      </div>
+
+      {stap === 1 && (
+        <button className="os-toggle-chip" data-override="show"
+          style={{ fontSize: 12.5 }}
+          onClick={() => {
+            const r = buildOverrideSession({ log, logs, currentDate, runGate, plan });
+            setGekozen(r);
+            setStap(2);
+            if (r.session) {
+              recordOverride({ currentDate, runGate, plan, availability: info,
+                session: r.session });
+              onLogged?.();
+            }
+          }}>Toon veiligste alternatief</button>
+      )}
+
+      {stap === 2 && gekozen && !gekozen.session && (
+        <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.55 }}>
+          {gekozen.message}
+        </div>
+      )}
+
+      {stap === 2 && gekozen?.session && (
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-serif)',
+            lineHeight: 1.2, marginBottom: 8 }}>
+            {gekozen.session.description}
+          </div>
+          <Row k="Looptempo" v={gekozen.session.runPaceLabel}
+            sub="rustiger dan je gemeten easy tempo" />
+          <Row k="Hartslag" v={gekozen.session.hrZone} />
+          <Row k="Duur" v={`${gekozen.session.duration} min`} />
+          <Row k="Verwachte afstand"
+            v={gekozen.session.expectedTotalKm != null
+              ? `${gekozen.session.expectedTotalKm} km` : null} />
+
+          <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 8 }}>
+            {Math.round((gekozen.session.basedOn.factor || 0) * 100)}% van je laatste
+            goed verdragen sessie ({gekozen.session.basedOn.provenDuration} min op{' '}
+            {gekozen.session.basedOn.provenDate?.slice(5)}), omdat{' '}
+            {gekozen.session.scaleWhy}.
+          </div>
+
+          <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 6 }}>
+            {gekozen.session.excluded.join(' · ')}.
+          </div>
+
+          <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 8,
+            paddingTop: 8, borderTop: '1px solid var(--divide)' }}>
+            Deze sessie telt pas als bewijs zodra je 24–48u-respons binnen is en
+            schoon is. Tot dan verandert er niets aan je verdragen afstand, je
+            opbouw of je racevoorspelling.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── De sessie van vandaag ───────────────────────────────────────
-function NextSession({ plan, budget, statuses, limiter, easy }) {
+function NextSession({ plan, budget, statuses, limiter, easy,
+  log, logs, currentDate, runGate, onOverride }) {
   const [why, setWhy] = useState(false);
   const run = plan?.run;
 
   if (!run) {
     return (
-      <div className="os-card" style={{ borderLeft: '4px solid var(--gold)', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
-          textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
-          Volgende looptraining
+      <>
+        <div className="os-card" style={{ borderLeft: '4px solid var(--gold)', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
+            textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+            Coachadvies
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'var(--font-serif)',
+            marginBottom: 4 }}>
+            Vandaag geen loopsessie
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--sub)', lineHeight: 1.55 }}>
+            {plan?.why || plan?.reason || budgetLine(budget)}
+          </div>
         </div>
-        <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'var(--font-serif)',
-          marginBottom: 4 }}>
-          Vandaag geen loopsessie
-        </div>
-        <div style={{ fontSize: 12.5, color: 'var(--sub)', lineHeight: 1.55 }}>
-          {plan?.why || plan?.reason || budgetLine(budget)}
-        </div>
-      </div>
+        <Override log={log} logs={logs} currentDate={currentDate}
+          runGate={runGate} plan={plan} onLogged={onOverride} />
+      </>
     );
   }
 
@@ -312,7 +440,7 @@ export default function RunCoach({ log = {}, logs = {}, currentDate = todayLocal
   const [tick, setTick] = useState(0);
   const [editing, setEditing] = useState(null);
 
-  const { plan, budget, statuses, limiter, easy } = useMemo(() => {
+  const { plan, budget, statuses, limiter, easy, runGate } = useMemo(() => {
     const runGate = restDayDecision({ log, logs, currentDate, coach: {} });
     const b = recoveryBudget({ log, logs, currentDate, runGate });
     const p = planNextSession({ log, logs, currentDate });
@@ -321,12 +449,15 @@ export default function RunCoach({ log = {}, logs = {}, currentDate = todayLocal
     // Het gemeten easy-tempo: nodig om te tonen op hoeveel sessies het
     // voorgeschreven tempo rust, en wat je er zelf voor RPE bij gaf.
     const e = easyRunPace({ logs, currentDate });
-    return { plan: p, budget: b, statuses: rows, limiter: driving?.limiter || null, easy: e };
+    return { plan: p, budget: b, statuses: rows, limiter: driving?.limiter || null,
+      easy: e, runGate };
   }, [log, logs, currentDate, tick]);
 
   return (
     <div>
-      <NextSession plan={plan} budget={budget} statuses={statuses} limiter={limiter} easy={easy} />
+      <NextSession plan={plan} budget={budget} statuses={statuses} limiter={limiter}
+        easy={easy} log={log} logs={logs} currentDate={currentDate} runGate={runGate}
+        onOverride={() => setTick(t => t + 1)} />
 
       <div className="os-card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55 }}>

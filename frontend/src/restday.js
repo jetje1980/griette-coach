@@ -16,7 +16,7 @@
 
 import { RUNS } from './data/runningSchema';
 import { loadWorkouts, toleranceFor, workoutWasHeavy } from './workouts';
-import { exertionalResponse } from './symptoms';
+import { exertionalResponse, readSymptoms, RED_FLAG_IDS } from './symptoms';
 import { loadStrengthSessions } from './data/strengthSchema';
 import { goalTarget } from './goals';
 
@@ -262,9 +262,25 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
     log.symptom_brainfog, log.symptom_pain].filter(Boolean).length;
 
   // ── 1. Systemische stops ──────────────────────────────────────
-  // Een rode exertionele respons is hetzelfde patroon als 12 januari 2025.
-  // Daar volgt geen training op, in welke vorm dan ook.
-  if (lastResponse?.status === 'red') {
+  // Alarmsymptomen van vandaag zelf.
+  //
+  // Deze velden werden alleen gelezen als reactie op een vorige sessie. Wie ze
+  // op een dag zonder recente training aanvinkt — borstklachten, neurologische
+  // alarmsymptomen, een instortgevoel, koorts, hartkloppingen, koud zweet —
+  // kreeg gewoon een looptraining voorgeschreven. Dat is nooit de bedoeling
+  // geweest; het viel op toen de override-knop een harde stop nodig had en
+  // bleek dat de coach zelf die stop niet had.
+  //
+  // Ziek of grieperig staat er bewust bij: er is geen apart ziektevakje, en dit
+  // is het veld waarin dat terechtkomt.
+  const alarmVandaag = readSymptoms(log).signs
+    .filter(s => RED_FLAG_IDS.includes(s.id) || s.id === 'malaise');
+
+  if (alarmVandaag.length) {
+    action = 'FULL_REST';
+    blockers.push(`${alarmVandaag.map(s => s.label.toLowerCase()).join(', ')} vandaag — geen belasting tot dit weg is`);
+    earliestRunDate = addDays(currentDate, 2);
+  } else if (lastResponse?.status === 'red') {
     action = 'FULL_REST';
     blockers.push(`Abnormale respons na je sessie van ${lastRun.date.slice(5)}: ${lastResponse.reason.toLowerCase()}`);
     earliestRunDate = addDays(currentDate, 3);
@@ -462,11 +478,13 @@ export function weekCalendar(logs, currentDate, days = 14) {
 }
 
 // Langst verdragen run — de bovengrens die de racevoorspelling gebruikt.
-export function longestToleratedRun(logs) {
+export function longestToleratedRun(logs, currentDate = null) {
   const runs = loadWorkouts().filter(isRun);
   let best = null;
   for (const w of runs) {
-    if (toleranceFor(w, logs) !== 'good') continue;
+    // De datum moet mee: een override telt pas als het 24–48u-venster voorbij
+    // is, en zonder deze parameter zou hier de echte systeemdatum gelden.
+    if (toleranceFor(w, logs, currentDate) !== 'good') continue;
     if (!best || num(w.distance) > num(best.distance)) best = w;
   }
   return best;
