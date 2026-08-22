@@ -28,6 +28,8 @@ import { allBreakdowns } from './pace';
 import { exertionalResponse } from './symptoms';
 import { calibrateHr } from './runningHistory';
 import { hrPrescription, intensityRelease, loadHrModel } from './hrModel';
+import { recoveryBudget, BAND } from './recoveryBudget';
+import { dayVerdict, DECISION, AMBER_KIND } from './dayVerdict';
 import { easyRunPace, prescribedPace } from './easyPace';
 import { runningState } from './raceGoals';
 import { loadRaceGoals, saveRaceGoal, resetRaceGoals, DEFAULT_GOALS } from './raceGoalModel';
@@ -262,6 +264,60 @@ export function paceFor(purpose, { runPace, race }) {
 }
 
 // ── De sessie zelf ──────────────────────────────────────────────
+// ── De amberdosis ───────────────────────────────────────────────
+// Doelen die op een fysieke amberdag niet passen. Geen kwaliteit, geen
+// racespecifiek werk — dat zijn intensiteitsprikkels, en die horen niet op een
+// dag waarop het lichaam iets meldt.
+const DOSE_HEAVY = ['QUALITY_LITE', 'FIVE_K_SPECIFIC', 'TEN_K_SPECIFIC'];
+
+// KALIBRATIEPARAMETER — GEEN FYSIOLOGISCHE WAARHEID.
+//
+// Hoeveel korter moet een amberdag zijn? Daar is voor deze gebruiker geen
+// bewijs voor. Er zijn nog geen amberdagen met en zonder verkorting naast
+// elkaar gemeten, dus elk getal hier is een keuze en geen bevinding.
+//
+// De keuze is bewust conservatief en hangt aan het herstelbudget, dat wél uit
+// bestaande belastinglogica komt: hoe minder budget er over is, hoe minder
+// blokken. Zodra er genoeg overrides en amberdagen beoordeeld zijn, hoort dit
+// getal vervangen te worden door iets wat uit haar eigen respons volgt.
+const AMBER_REP_FACTOR = {
+  [BAND.GOOD]:     0.80,
+  [BAND.MODERATE]: 0.70,
+  [BAND.LOW]:      0.60,
+  [BAND.NONE]:     0.60,
+};
+const AMBER_REP_FACTOR_DEFAULT = 0.70;
+const AMBER_MIN_REPS = 3;
+
+// Eén as, en dat is het aantal blokken.
+//
+// Niet ook trager, niet ook lagere hartslag, niet ook meer wandelen. Dat zou
+// vier dingen tegelijk veranderen en dan weet je achteraf niet welke ervan de
+// dag draaglijk maakte. Het tempo blijft het gemeten easy tempo, de hartslag
+// blijft wat hrModel voorschrijft, de bloklengte blijft wat ze aantoonbaar
+// aankan. Alleen: minder ervan.
+function amberDose({ base, budget }) {
+  const factor = AMBER_REP_FACTOR[budget?.band] ?? AMBER_REP_FACTOR_DEFAULT;
+  const gewenst = Math.floor(base.reps * factor);
+  const reps = Math.max(AMBER_MIN_REPS, Math.min(base.reps, gewenst));
+
+  // Levert de factor niets op — bijvoorbeeld omdat de basis al op het minimum
+  // zit — dan is er geen verlaging en wordt er ook niet net gedaan alsof.
+  if (reps >= base.reps) return null;
+
+  return {
+    base: { ...base, reps, duration: Math.round(reps * (base.runMin + base.walkMin)) },
+    info: {
+      axis: 'reps',
+      from: base.reps, to: reps,
+      factor, band: budget?.band || null,
+      source: 'calibratie',
+      lever: `minder blokken (${base.reps} → ${reps})`,
+      why: 'Fysieke amberdag: hetzelfde blok, hetzelfde tempo, dezelfde hartslag — alleen minder herhalingen.',
+    },
+  };
+}
+
 function buildRun({ purpose, base, targetPace, hrZone, race, walkPace }) {
   const round1 = (x) => +x.toFixed(1);
   let runMin = base.runMin, walkMin = base.walkMin, reps = base.reps;
@@ -382,9 +438,18 @@ export function planNextSession({
     ? exertionalResponse({ workoutDate: lastRun.date, logs, currentDate }) : null;
 
   const warnings = st.warnings?.signals?.length || 0;
+  // Het dagoordeel komt uit dayVerdict, dezelfde bron als het scherm. Twee
+  // keer amber narekenen zou twee definities geven die uit elkaar lopen.
+  const verdict = dayVerdict(log, logs, currentDate);
+  const fysiekAmber = verdict.decision === DECISION.AMBER &&
+    verdict.amberKind === AMBER_KIND.PHYSICAL;
+
   const mayBuild = !!(lastResponse ? lastResponse.allowsBuild : true)
     && (runGate.action === 'RUN_TODAY' || ignoreGate)
-    && warnings < 2;
+    && warnings < 2
+    // Geen opbouw op een dag waarop het lichaam iets meldt. Amber was tot nu
+    // toe alleen een kleur; dit is waar hij gevolg krijgt.
+    && !fysiekAmber;
 
   const inputs = {
     runPace: st.runPace, runHr: st.runHr,
@@ -433,9 +498,15 @@ export function planNextSession({
       })();
 
   // ── Doel kiezen ───────────────────────────────────────────────
-  const chosen = forcePurpose || choosePurpose({
+  // Op een fysieke amberdag geen kwaliteit en geen race-specifieke sessie.
+  // Dat is geen nieuwe fysiologie maar dezelfde regel als bij mayBuild: als
+  // het lichaam iets meldt, is de vorm van vandaag herhalen genoeg.
+  let chosen = forcePurpose || choosePurpose({
     timeline, st, mayBuild, currentDate,
   });
+  if (fysiekAmber && !forcePurpose && DOSE_HEAVY.includes(chosen)) {
+    chosen = 'EASY_ECONOMY';
+  }
 
   const race = raceForPurpose(chosen, timeline);
 
@@ -454,9 +525,21 @@ export function planNextSession({
   const hrZone = hrx.line;
   const hrDetail = hrx.text;
 
+  // Eén as omlaag op een fysieke amberdag: het aantal blokken. Bloklengte,
+  // wandelpauze, tempo en hartslag blijven exact wat ze op een groene dag
+  // zouden zijn — zie amberDose() voor waarom juist die ene.
+  const dose = fysiekAmber
+    ? amberDose({ base, budget: recoveryBudget({ log, logs, currentDate, runGate }) })
+    : null;
+
   const { run, levers } = buildRun({
-    purpose: chosen, base, targetPace, hrZone, race, walkPace,
+    purpose: chosen, base: dose ? dose.base : base,
+    targetPace, hrZone, race, walkPace,
   });
+  if (dose) {
+    run.doseAdjust = dose.info;
+    levers.push(dose.info.lever);
+  }
   run.hrDetail = hrDetail;
   run.hrWhy = hrx.why;
 
@@ -467,6 +550,7 @@ export function planNextSession({
     reason: reasonFor({ chosen, mayBuild, lastResponse, st }),
     why: whyText({ chosen, race, timeline, st, proven, mayBuild, targetPace, currentDate }),
     gate: runGate, inputs, levers,
+    verdict, doseAdjust: dose?.info || null,
     proven,
   };
 }
