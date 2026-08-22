@@ -1058,6 +1058,9 @@ textarea {
 .os-verdict.v-green { border-left-color: var(--green); }
 .os-verdict.v-blue  { border-left-color: var(--blue);  }
 .os-verdict.v-red   { border-left-color: var(--alert); }
+/* Wachten is geen oordeel. Grijs-neutraal, zodat het niet als groen of
+   als alarm leest — er valt nog niets te zeggen. */
+.os-verdict.v-wait  { border-left-color: var(--muted); }
 
 .os-v-status {
   font-size: 12px;

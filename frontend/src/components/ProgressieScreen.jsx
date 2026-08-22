@@ -7,6 +7,7 @@ import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
 import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
 import { protectedHours } from './WeekScreen';
 import { store } from '../store';
+import { recoveryScore, runBuildScore, shapeScore, capacityLevel } from '../performance';
 import SubTabs from './SubTabs';
 import RunForecastPanel from './RunForecastPanel';
 import RunDashboard from './RunDashboard';
@@ -231,6 +232,54 @@ function PhotoTimeline({ sessions }) {
 // ═══════════════════════════════════════════════════════════════
 // TAB 0: OVERZICHT
 // ═══════════════════════════════════════════════════════════════
+// ── Performance strip ───────────────────────────────────────────
+// Vier cijfers met een verdedigbare berekening; bij te weinig data een
+// streepje in plaats van een verzonnen getal.
+//
+// Stond op Vandaag. Daar hoorde hij niet: op geen van de vier verandert je
+// gedrag als het cijfer vandaag anders is, en Capaciteit zei hetzelfde als de
+// statuskleur erboven. Hier, tussen de andere trends, is het wél wat het is —
+// voortgang die je af en toe wilt zien.
+function PerformanceStrip({ log, logs, currentDate }) {
+  const rec   = recoveryScore(logs, currentDate);
+  const build = runBuildScore(logs, currentDate);
+  const shape = shapeScore(logs);
+  const cap   = capacityLevel(log, logs, currentDate);
+
+  const cells = [
+    { label: 'Herstel',   value: rec.value != null ? `${rec.value}%` : '—',
+      pct: rec.value, color: 'var(--sage)', sub: rec.value == null ? rec.reason : `${rec.n} dagen` },
+    { label: 'Doelafstand', value: `${build.value}%`, pct: build.value,
+      color: 'var(--blue)', sub: build.label },
+    { label: 'Shape',     value: shape.value != null ? `${shape.value}%` : '—',
+      pct: shape.value, color: 'var(--rust)', sub: shape.value == null ? shape.reason : shape.label },
+    { label: 'Capaciteit', value: cap.word, pct: null, color: cap.color, sub: null },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 12 }}>
+      {cells.map(c => (
+        <div key={c.label} style={{ background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: 10, padding: '9px 7px' }}>
+          <div style={{ fontSize: 9, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.4px',
+            textTransform: 'uppercase', marginBottom: 3 }}>{c.label}</div>
+          <div style={{ fontSize: 17, fontWeight: 900, fontFamily: 'var(--font-serif)',
+            color: c.color, lineHeight: 1.1 }}>{c.value}</div>
+          {c.pct != null && (
+            <div style={{ height: 3, background: 'var(--border)', borderRadius: 99, marginTop: 5, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, c.pct)}%`, background: c.color, borderRadius: 99 }} />
+            </div>
+          )}
+          {c.sub && (
+            <div style={{ fontSize: 9, color: 'var(--ghost)', marginTop: 3, overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.sub}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TabOverzicht({ logs, streak, sessions, goToTab }) {
   const [measurements, setMeasurements] = useState([]);
   useEffect(() => {
@@ -359,8 +408,12 @@ function TabOverzicht({ logs, streak, sessions, goToTab }) {
 
   return (
     <div>
+      {/* De vier cijfers die van Vandaag hierheen kwamen. */}
+      <div className="os-section-label" style={{ marginTop: 0 }}>Waar je staat</div>
+      <PerformanceStrip logs={logs} currentDate={tod} log={logs[tod] || {}} />
+
       {/* Bewijs dat ik verander */}
-      <div className="os-section-label" style={{ marginTop: 0 }}>Bewijs dat ik verander</div>
+      <div className="os-section-label">Bewijs dat ik verander</div>
       <div className="os-card">
         {proof.map((p, i) => (
           <div key={p.label} style={{ display: 'flex', alignItems: 'baseline', gap: 10,

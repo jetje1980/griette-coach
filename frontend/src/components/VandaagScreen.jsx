@@ -12,53 +12,9 @@ import { fmtPace } from '../workouts';
 import RecoveryCheck from './RecoveryCheck';
 import CaptureCenter from './CaptureCenter';
 import { USER } from '../config';
-import { loadTasks, dueFollowUps, getDayActions, saveDayActions, completeTask } from '../tasks';
+import { loadTasks } from '../tasks';
 import { loadExecutiveFocus } from './LevenScreen';
-import { recoveryScore, runBuildScore, shapeScore, capacityLevel } from '../performance';
 import { todayLocal } from '../datetime';
-
-// ── Performance strip ───────────────────────────────────────────
-// Alleen percentages met een verdedigbare berekening; bij te weinig
-// data een streepje in plaats van een verzonnen getal.
-function PerformanceStrip({ log, logs, currentDate }) {
-  const rec   = recoveryScore(logs, currentDate);
-  const build = runBuildScore(logs, currentDate);
-  const shape = shapeScore(logs);
-  const cap   = capacityLevel(log, logs, currentDate);
-
-  const cells = [
-    { label: 'Herstel',   value: rec.value != null ? `${rec.value}%` : '—',
-      pct: rec.value, color: 'var(--sage)', sub: rec.value == null ? rec.reason : `${rec.n} dagen` },
-    { label: 'Doelafstand', value: `${build.value}%`, pct: build.value,
-      color: 'var(--blue)', sub: build.label },
-    { label: 'Shape',     value: shape.value != null ? `${shape.value}%` : '—',
-      pct: shape.value, color: 'var(--rust)', sub: shape.value == null ? shape.reason : shape.label },
-    { label: 'Capaciteit', value: cap.word, pct: null, color: cap.color, sub: null },
-  ];
-
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 12 }}>
-      {cells.map(c => (
-        <div key={c.label} style={{ background: 'var(--card)', border: '1px solid var(--border)',
-          borderRadius: 10, padding: '9px 7px' }}>
-          <div style={{ fontSize: 9, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.4px',
-            textTransform: 'uppercase', marginBottom: 3 }}>{c.label}</div>
-          <div style={{ fontSize: 17, fontWeight: 900, fontFamily: 'var(--font-serif)',
-            color: c.color, lineHeight: 1.1 }}>{c.value}</div>
-          {c.pct != null && (
-            <div style={{ height: 3, background: 'var(--border)', borderRadius: 99, marginTop: 5, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${Math.min(100, c.pct)}%`, background: c.color, borderRadius: 99 }} />
-            </div>
-          )}
-          {c.sub && (
-            <div style={{ fontSize: 9, color: 'var(--ghost)', marginTop: 3, overflow: 'hidden',
-              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.sub}</div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 const NL_DAYS   = ['Zondag','Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag'];
 const NL_MONTHS = ['januari','februari','maart','april','mei','juni','juli','augustus',
@@ -70,7 +26,6 @@ function formatNL(dateStr) {
 }
 
 const todayStr = todayLocal;
-function getHour()  { return new Date().getHours(); }
 
 // ── localStorage helpers ────────────────────────────────────────
 const SEASON_KEY = 'gc_focus_season';
@@ -98,17 +53,6 @@ function getDayPlan(date) {
   try { return JSON.parse(localStorage.getItem(`gc_day_plan_${date}`) || '{}'); } catch { return {}; }
 }
 
-// ── Beslissings-mapping ─────────────────────────────────────────
-const VERDICT_MAP = {
-  GREEN: { cls: 'v-green', word: 'Groen', sub: 'Klaar voor training', notToday: null },
-  AMBER: { cls: '',        word: 'Amber', sub: 'Voorzichtig vandaag',
-    notToday: { title: 'Zone C training', desc: 'Blijf in zone B of lager — herstel gaat voor intensiteit.' } },
-  BLUE:  { cls: 'v-blue',  word: 'Blauw', sub: 'Hersteldag',
-    notToday: { title: 'Intensieve training', desc: 'Lichte beweging is oké, prestatiegericht sporten niet.' } },
-  RED:   { cls: 'v-red',   word: 'Rood',  sub: 'Rust is de training',
-    notToday: { title: 'Alle training', desc: 'Je lichaam vraagt volledige rust. Morgen is er weer een kans.' } },
-};
-
 const DAY_CAP = [
   { id: 'minimum', label: 'Minimum', emoji: '🪫' },
   { id: 'normaal', label: 'Normaal', emoji: '⚡' },
@@ -123,141 +67,6 @@ const FREE_BLOCK_LABELS = { morning: 'Ochtend', midday: 'Middag', evening: 'Avon
 const TRAIN_LABELS = { run: '🏃 Hardlopen', walk: '🚶 Wandelen', swim: '🏊 Zwemmen',
   bike: '🚴 Fietsen', core: '💪 Kracht', rest: '🛌 Rust', free: '🌿 Vrij' };
 
-// ── Wat Nu? — exact één actie ───────────────────────────────────
-// Weegt: readiness, tijd van de dag, trainingsstatus, Top 3, open taken,
-// follow-ups van gedelegeerde taken en beschermde vrije tijd.
-function computeWatNu({ log, coach, nextSession, currentDate, hasData }) {
-  const hour = getHour();
-  const decision = coach?.decision || 'AMBER';
-  const trained = log?.run_done || log?.core_done || log?.strength_done;
-  const plan = getDayPlan(currentDate);
-  const freeBlocks = plan.freeBlocks || [];
-
-  // Beschermde vrije tijd nu actief? Dan is niets doen de actie.
-  const inFreeBlock =
-    freeBlocks.includes('fullday') ||
-    (freeBlocks.includes('morning') && hour >= 6 && hour < 12) ||
-    (freeBlocks.includes('midday') && hour >= 12 && hour < 17) ||
-    (freeBlocks.includes('evening') && hour >= 17 && hour < 23);
-
-  if (!hasData) {
-    return { emoji: '📊', action: 'Vul je ochtendcheck in',
-      context: 'Slaap, energie en herstel — hieronder, duurt een minuut.', color: 'var(--gold)' };
-  }
-
-  if (inFreeBlock) {
-    return { emoji: '🌿', action: 'Dit blok is beschermde vrije tijd',
-      context: 'Geen werk, geen todo\'s, geen training. Dat is nu precies de bedoeling.', color: 'var(--green)' };
-  }
-
-  // Vertraagde herstelcheck openstaand
-  if (coach?.pendingRecoveryCheck) {
-    return { emoji: '🌅', action: 'Beantwoord je herstelcheck',
-      context: 'Hoe reageerde je lichaam op de vorige training? Daarna geef ik je volgende sessie vrij.',
-      color: 'var(--gold)' };
-  }
-
-  // Follow-up van gedelegeerde taak
-  const followUp = dueFollowUps(currentDate)[0];
-  if (followUp) {
-    return { emoji: '🤝', action: `Check bij ${followUp.delegatedTo || 'de ander'}`,
-      context: `"${followUp.title}" — je wilde hier vandaag op terugkomen.`, color: 'var(--gold)' };
-  }
-
-  // De rustdagpoort gaat vóór het trainingsadvies: zonder dit blok bleef
-  // "Wat nu?" een run voorstellen terwijl de coach net rust voorschreef.
-  const gate = coach?.gate;
-  if (!trained && gate && gate.action !== 'RUN_TODAY' && hour < 21) {
-    const COLOR = {
-      STRENGTH_TODAY: '#7A5AA8', ACTIVE_RECOVERY: 'var(--blue)',
-      FULL_REST: 'var(--rust)', WAIT_FOR_RESPONSE: 'var(--gold)',
-    };
-    return {
-      emoji: gate.emoji,
-      action: gate.action === 'STRENGTH_TODAY' ? 'Krachttraining in plaats van lopen'
-        : gate.action === 'ACTIVE_RECOVERY' ? 'Wandelen — geen trainingsprikkel'
-        : gate.action === 'WAIT_FOR_RESPONSE' ? 'Beantwoord eerst je herstelcheck'
-        : 'Rust is vandaag de training',
-      context: gate.blockers[0] || gate.headline,
-      color: COLOR[gate.action] || 'var(--blue)',
-    };
-  }
-
-  // Training als die vandaag past en nog niet gedaan is
-  if (!trained && (decision === 'GREEN' || decision === 'AMBER') && hour < 19) {
-    const label = nextSession?.purposeLabel || (nextSession?.run ? 'je looptraining' : 'je sessie');
-    return {
-      emoji: decision === 'GREEN' ? '🏃' : '🚶',
-      action: decision === 'GREEN' ? `Training ${label} doen` : 'Aangepaste sessie of wandeling',
-      context: nextSession?.run
-        ? `${nextSession.run.description} · ${nextSession.run.duration} min` +
-          (nextSession.run.tempo ? ` · ${nextSession.run.tempo.replace('Looptempo: ', '')}` : '')
-        : 'Lichte beweging helpt je herstel vandaag.',
-      color: decision === 'GREEN' ? 'var(--sage)' : 'var(--gold)',
-    };
-  }
-
-  if (!trained && (decision === 'BLUE' || decision === 'RED')) {
-    return { emoji: '🛌', action: 'Rust is vandaag de training',
-      context: 'Je lichaam geeft een hersteldag aan. Geen prestatiedruk.', color: 'var(--blue)' };
-  }
-
-  // ── Ranking engine: kies EXACT één beste actie ──
-  // Weegt beschikbare tijd, cognitieve energie, prioriteit en herkomst.
-  if (hour < 21) {
-    const energy = log?.energy;                       // 0-3 fysiek/mentaal
-    const cognitiveOk = energy == null || energy >= 2;
-    const minutesLeftToday = Math.max(0, (21 - hour) * 60);
-
-    const candidates = [];
-    getTop3(currentDate).filter(i => !i.done).forEach((t, idx) => {
-      candidates.push({ title: t.text, source: 'Top 3', emoji: '🎯',
-        score: 100 - idx * 5, needsFocus: true });
-    });
-    getDayActions(currentDate).filter(a => !a.done).forEach(a => {
-      candidates.push({ title: a.title, source: 'Capture', emoji: '✅',
-        score: 60, needsFocus: false });
-    });
-
-    if (candidates.length) {
-      // Bij lage cognitieve energie eerst iets kleins, anders de zwaarste prioriteit
-      candidates.sort((a, b) => cognitiveOk
-        ? b.score - a.score
-        : (a.needsFocus === b.needsFocus ? b.score - a.score : (a.needsFocus ? 1 : -1)));
-      const pick = candidates[0];
-      const block = !cognitiveOk ? 15 : Math.min(45, Math.max(20, minutesLeftToday));
-      return {
-        emoji: pick.emoji,
-        action: pick.title,
-        context: cognitiveOk
-          ? `Uit ${pick.source}. Zet ${block} minuten opzij en doe alleen de eerste stap.`
-          : `Je energie is laag — pak dit in een blok van ${block} minuten, of verplaats het bewust.`,
-        color: 'var(--text)',
-      };
-    }
-  }
-
-  if (trained && hour < 14) {
-    return { emoji: '💧', action: 'Herstel: water en eiwitten',
-      context: 'Training gedaan — zorg voor herstel in de komende twee uur.', color: 'var(--sage)' };
-  }
-
-  if (hour >= 20) {
-    return { emoji: '🌙', action: 'Shutdown starten',
-      context: 'Sluit het werkblok af — morgen is ook een dag.', color: 'var(--blue)' };
-  }
-
-  const openInbox = loadTasks().filter(t => t.status === 'inbox').length;
-  if (openInbox > 0) {
-    return { emoji: '📥', action: `${openInbox} item${openInbox > 1 ? 's' : ''} in je inbox verwerken`,
-      context: 'Geef elk item een bestemming: vandaag, deze week, later of klaar.', color: 'var(--text)' };
-  }
-
-  return { emoji: '☕', action: 'Niets dringends',
-    context: 'Alles is verwerkt. Dit is ruimte, geen leegte.', color: 'var(--sub)' };
-}
-
-// ── Gedeelde UI ─────────────────────────────────────────────────
 function ExpandSection({ label, children, initialOpen = false, badge }) {
   const [open, setOpen] = useState(initialOpen);
   return (
@@ -275,91 +84,6 @@ function ExpandSection({ label, children, initialOpen = false, badge }) {
   );
 }
 
-// ── 1. Decision Cockpit ─────────────────────────────────────────
-// Eén geïntegreerd besluit: status, actie, reden, en wat je bewust NIET doet.
-function DecisionCockpit({ coach, nextSession, hasData, isFuture }) {
-  const v = VERDICT_MAP[coach?.decision] || VERDICT_MAP.AMBER;
-
-  if (isFuture) {
-    return (
-      <div className="os-card" style={{ textAlign: 'center', padding: '26px 20px' }}>
-        <div style={{ fontSize: 14, color: 'var(--sub)' }}>Toekomstige dag — nog geen advies.</div>
-      </div>
-    );
-  }
-  if (!hasData) {
-    return (
-      <div className="os-card" style={{ textAlign: 'center', padding: '28px 20px' }}>
-        <div style={{ fontSize: 32, marginBottom: 10 }}>📊</div>
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Nog geen data vandaag</div>
-        <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.5 }}>
-          Vul je check-in hieronder in — dan bereken ik je advies.
-        </div>
-      </div>
-    );
-  }
-
-  // De rustdagpoort gaat vóór de sessiekeuze: staat lopen op slot, dan is
-  // dát het besluit van vandaag — niet de sessie die het schema klaar had.
-  const gate = coach.gate;
-  const gated = gate && gate.action !== 'RUN_TODAY';
-
-  const actie = gated
-    ? `${gate.emoji} ${gate.label}`
-    : nextSession?.state === 'SWAP'
-      ? 'Wandelen of zwemmen — geen hardlopen'
-      : nextSession?.run
-        ? `${nextSession.purposeLabel || 'Looptraining'} — ${nextSession.run.description}`
-        : coach.trainingDesc;
-
-  return (
-    <div className={`os-card os-verdict ${v.cls}`} style={{ marginBottom: 10 }}>
-      {/* De kleur beschrijft je toestand; bij een gesloten poort mag de
-          ondertitel niet alsnog "klaar voor training" beloven. */}
-      <div className="os-v-status">
-        {v.word} — {gated ? 'trainen staat op slot' : v.sub}
-      </div>
-      <div className="os-v-head">{actie}</div>
-
-      {gated && (
-        <div style={{ fontSize: 12.5, color: 'var(--sub)', lineHeight: 1.45, marginBottom: 8 }}>
-          {gate.headline}
-          {gate.daysUntilRun > 0 && (
-            <> Volgende loopmoment op zijn vroegst <strong>{gate.earliestRunDate.slice(5)}</strong>.</>
-          )}
-        </div>
-      )}
-
-      {coach.adaptive && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
-          background: 'rgba(0,0,0,0.06)', borderRadius: 8, padding: '4px 10px',
-          fontSize: 12, fontWeight: 600, marginBottom: 8, marginTop: 2 }}>
-          <span>{coach.adaptive.emoji}</span>
-          <span>{coach.adaptive.label}</span>
-        </div>
-      )}
-
-      <ul className="os-v-list">
-        {(coach.why || []).slice(0, 2).map((w, i) => <li key={i}>{w}</li>)}
-      </ul>
-
-      {v.notToday && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10,
-          paddingTop: 10, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-          <span style={{ color: 'var(--rust)', fontWeight: 800, fontSize: 13, lineHeight: 1.4 }}>✕</span>
-          <div style={{ fontSize: 12.5, lineHeight: 1.45 }}>
-            <span style={{ fontWeight: 700 }}>Niet vandaag: {v.notToday.title}.</span>{' '}
-            <span style={{ color: 'var(--sub)' }}>{v.notToday.desc}</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── 1b. Kleine forecast — Vandaag blijft compact ────────────────
-// Alleen de vier getallen die je vóór het vertrek wilt weten, plus hoe
-// zeker ze zijn. De volledige onderbouwing staat onder Progressie → Run.
 function ForecastMini({ log, logs, currentDate, coach, nextSession }) {
   const f = useMemo(
     () => nextSessionForecast({
@@ -450,29 +174,7 @@ function PhotoCheckpointCard({ currentDate, goToTab }) {
   );
 }
 
-// ── 2. Wat Nu? ──────────────────────────────────────────────────
-function WatNuCard({ watNu }) {
-  if (!watNu) return null;
-  return (
-    <>
-      <div className="os-section-label">Wat nu?</div>
-      <div className="os-card" style={{ borderLeft: `4px solid ${watNu.color}`, paddingLeft: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <div style={{ fontSize: 26, lineHeight: 1, marginTop: 2 }}>{watNu.emoji}</div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'var(--font-serif)',
-              color: 'var(--text)', marginBottom: 3, lineHeight: 1.25 }}>
-              {watNu.action}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.5 }}>{watNu.context}</div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
 
-// ── 3. Top 3 ────────────────────────────────────────────────────
 function Top3({ currentDate }) {
   const [items, setItems] = useState(() => getTop3(currentDate));
   const [text, setText] = useState('');
@@ -781,6 +483,21 @@ function ShutdownProtocol({ currentDate }) {
 // ── Hoofdcomponent ──────────────────────────────────────────────
 export default function VandaagScreen({ log, logs, currentDate, saveField, saveFields, shiftDay, isFuture, goToTab }) {
   const [inboxCount, setInboxCount] = useState(0);
+  const [openCheckIn, setOpenCheckIn] = useState(false);
+  const checkInRef = useRef(null);
+
+  // De enige knop op het scherm moet ook echt ergens heen. Een primaire actie
+  // die niets doet is erger dan geen knop: dan denk je dat je klaar bent.
+  function handleCta(cta) {
+    if (!cta) return;
+    if (cta.kind === 'training') { goToTab?.(cta.tab); return; }
+    if (cta.kind === 'checkin' || cta.kind === 'recovery') {
+      setOpenCheckIn(true);
+      requestAnimationFrame(() => {
+        checkInRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  }
 
   // Executive focus is canoniek; de oude seizoenssleutel wordt alleen
   // nog gelezen als terugval, nooit overschreven.
@@ -801,7 +518,6 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
   const coach = computeHeadCoach(log, logs, currentDate);
   const nextSession = computeNextSession(log, logs, currentDate);
   const hasData = log && Object.keys(log).filter(k => k !== 'date').length > 1;
-  const watNu = !isFuture ? computeWatNu({ log, coach, nextSession, currentDate, hasData }) : null;
 
   useEffect(() => {
     setInboxCount(loadTasks().filter(t => t.status === 'inbox').length);
@@ -833,7 +549,8 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
         </div>
       </div>
 
-      {/* Herstelcheck — alleen na een training gisteren */}
+      {/* De herstelcheck staat boven het advies zolang hij open is: zonder
+          die respons is elk advies een gok, en dat zegt de kaart eronder ook. */}
       {!isFuture && (
         <RecoveryCheck log={log} logs={logs} currentDate={currentDate} saveField={saveField} />
       )}
@@ -842,24 +559,21 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
           tegen elkaar afgewogen; de gebruiker krijgt niet zeven meningen. */}
       <CockpitCard log={log} logs={logs} currentDate={currentDate}
         hasData={hasData} isFuture={isFuture}
-        saveFields={saveFields} goToTab={goToTab} />
+        saveFields={saveFields} onCta={handleCta} />
 
-      {/* Alles hieronder zit achter progressive disclosure. Het bestaat, het
-          is compleet, maar het hoort niet op het eerste scherm van iemand
-          die haar dag nog moet beginnen. */}
+      {/* De override staat bewust hier: onder het coachadvies, nooit erboven,
+          en nooit als primaire knop zolang de coach rust adviseert. */}
+
+      {/* Vier laden. Het waren er tien; dat las als een dashboard met een
+          advies erboven in plaats van andersom. Wat hier staat is compleet —
+          het staat alleen niet in de weg. */}
       {!isFuture && hasData && (
-        <ExpandSection label="Training in detail">
+        <ExpandSection label="Training &amp; kracht">
           <ForecastMini log={log} logs={logs} currentDate={currentDate}
             coach={coach} nextSession={nextSession} />
           <StrengthToday log={log} logs={logs} currentDate={currentDate}
             runGate={coach?.gate} coach={coach}
             onSaved={() => saveFields?.({ strength_done: true })} />
-        </ExpandSection>
-      )}
-
-      {!isFuture && hasData && (
-        <ExpandSection label="Cijfers en hefbomen">
-          <PerformanceStrip log={log} logs={logs} currentDate={currentDate} />
           <LeverageCard log={log} logs={logs} currentDate={currentDate}
             coach={coach} runGate={coach?.gate}
             strengthGate={strengthDecision({ log: log || {}, logs, currentDate,
@@ -868,92 +582,66 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
       )}
 
       {!isFuture && (
-        <ExpandSection label="Meer van je droomleven">
-          <PhotoCheckpointCard currentDate={currentDate} goToTab={goToTab} />
-          <AlivenessCard log={log} logs={logs} currentDate={currentDate}
-            coach={coach} state={log?.adhd_state} />
-        </ExpandSection>
-      )}
-
-      {/* De drie prioriteiten staan al in de cockpit; hier alleen het
-          bewerken ervan. */}
-      {!isFuture && (
-        <ExpandSection label="Top 3 bewerken">
-          <Top3 currentDate={currentDate} />
-        </ExpandSection>
-      )}
-
-      {!isFuture && (
-        <ExpandSection label="Vandaag gepland">
+        <ExpandSection label="Mijn dag plannen">
           <DagPlanning currentDate={currentDate} log={log} nextSession={nextSession} goToTab={goToTab} />
-        </ExpandSection>
-      )}
-
-      {/* 5. Transition coach — alleen als relevant */}
-      {!isFuture && transitionsRelevant && (
-        <ExpandSection label="Overgangsmomenten">
-          <Transitions currentDate={currentDate} />
+          <Top3 currentDate={currentDate} />
+          {transitionsRelevant && <Transitions currentDate={currentDate} />}
         </ExpandSection>
       )}
 
       {/* Zonder check-in is er geen advies, dus die staat open zolang
           er nog niets is ingevuld. */}
       {!isFuture && (hasData ? (
-        <ExpandSection label="Check-in bijwerken">
+        <ExpandSection label="Check-in bijwerken" initialOpen={openCheckIn}>
+          <div ref={checkInRef} />
           <CompactCheckIn log={log} saveField={saveField} goToTab={goToTab} />
+          <div className="os-section-label">Type dag</div>
+          <div className="os-scale-btns" style={{ marginBottom: 16 }}>
+            {DAY_CAP.map(opt => (
+              <button key={opt.id}
+                className={`os-scale-btn ${log?.day_capacity === opt.id ? 'active' : ''}`}
+                onClick={() => saveField('day_capacity', opt.id)}>
+                <div>{opt.emoji}</div>
+                <div style={{ fontSize: 11, marginTop: 2 }}>{opt.label}</div>
+              </button>
+            ))}
+          </div>
+          <div className="os-section-label">Energie per dagdeel</div>
+          {ENERGIE_KEYS.map((key, i) => (
+            <div key={key} style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.6px',
+                textTransform: 'uppercase', marginBottom: 5 }}>{ENERGIE_SLOT_LABELS[i]}</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {ENERGIE_OPTS.map(opt => (
+                  <button key={opt}
+                    className={`os-toggle-chip ${log?.[key] === opt.toLowerCase() ? 'active green' : ''}`}
+                    onClick={() => saveField(key, opt.toLowerCase())}
+                    style={{ fontSize: 12, padding: '5px 10px' }}>{opt}</button>
+                ))}
+              </div>
+            </div>
+          ))}
         </ExpandSection>
       ) : (
         <>
-          <div className="os-section-label">Check-in</div>
+          <div className="os-section-label" ref={checkInRef}>Check-in</div>
           <div className="os-card">
             <CompactCheckIn log={log} saveField={saveField} goToTab={goToTab} />
           </div>
         </>
       ))}
 
-      {/* Achter progressive disclosure */}
-      <ExpandSection label="Capture — inbox" badge={inboxCount}>
-        <CaptureCenter currentDate={currentDate} onChange={() => setInboxCount(loadTasks().filter(t => t.status === 'inbox').length)} />
-      </ExpandSection>
-
       {!isFuture && (
-        <ExpandSection label="Dagtype &amp; energie per dagdeel">
-          <div>
-            <div className="os-section-label" style={{ marginTop: 0 }}>Type dag</div>
-            <div className="os-scale-btns" style={{ marginBottom: 16 }}>
-              {DAY_CAP.map(opt => (
-                <button key={opt.id}
-                  className={`os-scale-btn ${log?.day_capacity === opt.id ? 'active' : ''}`}
-                  onClick={() => saveField('day_capacity', opt.id)}>
-                  <div>{opt.emoji}</div>
-                  <div style={{ fontSize: 11, marginTop: 2 }}>{opt.label}</div>
-                </button>
-              ))}
-            </div>
-            <div className="os-section-label">Energie per dagdeel</div>
-            {ENERGIE_KEYS.map((key, i) => (
-              <div key={key} style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.6px',
-                  textTransform: 'uppercase', marginBottom: 5 }}>{ENERGIE_SLOT_LABELS[i]}</div>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {ENERGIE_OPTS.map(opt => (
-                    <button key={opt}
-                      className={`os-toggle-chip ${log?.[key] === opt.toLowerCase() ? 'active green' : ''}`}
-                      onClick={() => saveField(key, opt.toLowerCase())}
-                      style={{ fontSize: 12, padding: '5px 10px' }}>{opt}</button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </ExpandSection>
-      )}
-
-      {!isFuture && (
-        <ExpandSection label="Werk afsluiten — shutdown">
+        <ExpandSection label="Meer" badge={inboxCount}>
+          <PhotoCheckpointCard currentDate={currentDate} goToTab={goToTab} />
+          <AlivenessCard log={log} logs={logs} currentDate={currentDate}
+            coach={coach} state={log?.adhd_state} />
+          <CaptureCenter currentDate={currentDate}
+            onChange={() => setInboxCount(loadTasks().filter(t => t.status === 'inbox').length)} />
           <ShutdownProtocol currentDate={currentDate} />
         </ExpandSection>
       )}
+
     </div>
   );
 }
