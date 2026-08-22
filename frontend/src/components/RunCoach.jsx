@@ -11,7 +11,9 @@ import { sessionMath, fmtPaceSec, paceToSec, fmtSec } from '../sessionMath';
 import { hrPrescription } from '../hrModel';
 import { easyRunPace } from '../easyPace';
 import {
-  overrideAvailability, buildOverrideSession, recordOverride, GATE,
+  overrideAvailability, buildOverrideSession, planOverride, completeOverride,
+  cancelOverride, overrideForDate, overrideStatus, linkActivities,
+  GATE, OVERRIDE_STATUS,
 } from '../overrideSession';
 import { todayLocal } from '../datetime';
 import RunGoalEditor from './RunGoalEditor';
@@ -88,6 +90,11 @@ function Row({ k, v, sub }) {
 function Override({ log, logs, currentDate, runGate, plan, onLogged }) {
   const [stap, setStap] = useState(0);
   const [gekozen, setGekozen] = useState(null);
+  // Wat er van vandaag al vastligt. Null zolang je alleen hebt gekeken.
+  const [vastgelegd, setVastgelegd] = useState(() => {
+    const o = overrideForDate(currentDate);
+    return o ? overrideStatus(o) : null;
+  });
 
   const info = useMemo(
     () => overrideAvailability({ log, logs, currentDate, runGate, plan }),
@@ -141,14 +148,10 @@ function Override({ log, logs, currentDate, runGate, plan, onLogged }) {
         <button className="os-toggle-chip" data-override="show"
           style={{ fontSize: 12.5 }}
           onClick={() => {
-            const r = buildOverrideSession({ log, logs, currentDate, runGate, plan });
-            setGekozen(r);
+            // Alleen kijken. Er wordt hier bewust niets vastgelegd —
+            // nieuwsgierigheid is geen training.
+            setGekozen(buildOverrideSession({ log, logs, currentDate, runGate, plan }));
             setStap(2);
-            if (r.session) {
-              recordOverride({ currentDate, runGate, plan, availability: info,
-                session: r.session });
-              onLogged?.();
-            }
           }}>Toon veiligste alternatief</button>
       )}
 
@@ -189,6 +192,57 @@ function Override({ log, logs, currentDate, runGate, plan, onLogged }) {
             schoon is. Tot dan verandert er niets aan je verdragen afstand, je
             opbouw of je racevoorspelling.
           </div>
+
+          {/* Kijken, plannen en doen zijn drie verschillende dingen. */}
+          {vastgelegd === null && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button className="os-toggle-chip" data-override="plan"
+                style={{ fontSize: 12 }}
+                onClick={() => {
+                  planOverride({ currentDate, runGate, plan, availability: info,
+                    session: gekozen.session });
+                  setVastgelegd(OVERRIDE_STATUS.PLANNED);
+                  onLogged?.();
+                }}>Deze training ga ik doen</button>
+              <button className="os-toggle-chip" data-override="cancel"
+                style={{ fontSize: 12, opacity: 0.75 }}
+                onClick={() => { setStap(0); setGekozen(null); }}>Toch niet</button>
+            </div>
+          )}
+
+          {vastgelegd === OVERRIDE_STATUS.PLANNED && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--blue)', lineHeight: 1.55,
+                fontWeight: 600 }}>
+                Gepland als jouw override — het oorspronkelijke coachadvies blijft
+                ongewijzigd.
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button className="os-toggle-chip" data-override="done"
+                  style={{ fontSize: 12 }}
+                  onClick={() => {
+                    completeOverride(currentDate);
+                    setVastgelegd(OVERRIDE_STATUS.COMPLETED);
+                    onLogged?.();
+                  }}>Training gedaan</button>
+                <button className="os-toggle-chip" data-override="cancel2"
+                  style={{ fontSize: 12, opacity: 0.75 }}
+                  onClick={() => {
+                    cancelOverride(currentDate);
+                    setVastgelegd(OVERRIDE_STATUS.CANCELLED);
+                    setStap(0); setGekozen(null);
+                    onLogged?.();
+                  }}>Toch niet</button>
+              </div>
+            </div>
+          )}
+
+          {vastgelegd === OVERRIDE_STATUS.COMPLETED && (
+            <div style={{ fontSize: 12, color: 'var(--sage)', lineHeight: 1.55,
+              fontWeight: 600, marginTop: 10 }}>
+              Training gedaan — vanaf nu telt je 24–48u-respons mee.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -448,6 +502,9 @@ export default function RunCoach({ log = {}, logs = {}, currentDate = todayLocal
     const { rows, driving } = allRunGoalStatuses({ goals, logs, currentDate, budget: b });
     // Het gemeten easy-tempo: nodig om te tonen op hoeveel sessies het
     // voorgeschreven tempo rust, en wat je er zelf voor RPE bij gaf.
+    // Komt de run later binnen via Strava of Garmin, dan hoort hij bij de
+    // override die je die dag plande — niet als losse tweede gebeurtenis.
+    linkActivities({ currentDate });
     const e = easyRunPace({ logs, currentDate });
     return { plan: p, budget: b, statuses: rows, limiter: driving?.limiter || null,
       easy: e, runGate };

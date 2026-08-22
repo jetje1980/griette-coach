@@ -245,18 +245,62 @@ function persist(arr) {
   return arr;
 }
 
-export function recordOverride({
-  currentDate = todayLocal(), runGate = null, plan = null, availability = null,
-  session = null, workoutId = null,
-} = {}) {
+// ── Drie toestanden, want kijken is niet doen ───────────────────
+//
+// De eerste versie legde een override vast zodra je op "toon veiligste
+// alternatief" klikte. Dat is verkeerd: dan telde nieuwsgierigheid als een
+// gelopen training. Het herstelvenster ging lopen zonder dat er iets gelopen
+// was, en de leerteller ging omhoog op een sessie die nooit bestond.
+//
+//   PREVIEW    je kijkt wat er zou kunnen. Wordt niet opgeslagen.
+//   PLANNED    je zegt: deze ga ik doen. Vastgelegd, maar nog geen bewijs.
+//   COMPLETED  gedaan — of een echte activiteit van die dag is eraan gekoppeld.
+//              Pas hier begint het 24–48u-venster te tellen.
+//   CANCELLED  toch niet.
+//
+// Alleen COMPLETED telt ergens voor mee. Dat is de hele regel.
+export const OVERRIDE_STATUS = {
+  PREVIEW: 'PREVIEW',
+  PLANNED: 'PLANNED',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+// Oudere records hebben geen status. Ze zijn ontstaan bij het bekijken, dus ze
+// bewijzen niets — behalve als er een activiteit aan hangt. Ze worden gelezen
+// als PLANNED en kunnen door de koppeling alsnog COMPLETED worden.
+function statusOf(o) {
+  if (o?.status) return o.status;
+  return o?.workoutId ? OVERRIDE_STATUS.COMPLETED : OVERRIDE_STATUS.PLANNED;
+}
+
+export function overrideStatus(o) { return statusOf(o); }
+
+function upsert(currentDate, patch) {
   const arr = loadOverrides();
-  // Eén override per dag. Twee keer op dezelfde knop drukken maakt geen
-  // tweede gebeurtenis.
-  const bestaand = arr.find(o => o.date === currentDate);
-  const entry = {
-    id: bestaand?.id || `ovr_${currentDate}`,
-    date: currentDate,
-    userOverride: true,
+  const i = arr.findIndex(o => o.date === currentDate);
+  if (i >= 0) {
+    arr[i] = { ...arr[i], ...patch, updatedAt: new Date().toISOString() };
+    persist(arr);
+    return arr[i];
+  }
+  const entry = { id: `ovr_${currentDate}`, date: currentDate, userOverride: true,
+    createdAt: new Date().toISOString(), ...patch };
+  arr.unshift(entry);
+  persist(arr);
+  return entry;
+}
+
+// PLANNED — "deze training ga ik doen".
+export function planOverride({
+  currentDate = todayLocal(), runGate = null, plan = null, availability = null,
+  session = null,
+} = {}) {
+  return upsert(currentDate, {
+    status: OVERRIDE_STATUS.PLANNED,
+    plannedAt: new Date().toISOString(),
+    completedAt: null,
+    linkedActivityId: null,
     originalCoachDecision: runGate?.action || plan?.purpose || null,
     originalCoachHeadline: runGate?.headline || null,
     originalBlockReason: availability?.coachReason || runGate?.blockers?.[0] || null,
@@ -267,15 +311,61 @@ export function recordOverride({
       expectedTotalKm: session.expectedTotalKm,
       factor: session.basedOn?.factor ?? null,
     } : null,
-    workoutId: workoutId || bestaand?.workoutId || null,
-    // Worden pas ingevuld als de dagen erna beoordeeld zijn.
-    outcome24h: bestaand?.outcome24h ?? null,
-    outcome48h: bestaand?.outcome48h ?? null,
-    createdAt: bestaand?.createdAt || new Date().toISOString(),
-  };
-  const i = arr.findIndex(o => o.date === currentDate);
-  if (i >= 0) arr[i] = { ...arr[i], ...entry }; else arr.unshift(entry);
-  return persist(arr)[0] && entry;
+    outcome24h: null,
+    outcome48h: null,
+  });
+}
+
+// COMPLETED — gedaan. Vanaf hier telt de sessie mee.
+export function completeOverride(currentDate = todayLocal(), { linkedActivityId = null } = {}) {
+  const bestaand = overrideForDate(currentDate);
+  if (!bestaand) return null;
+  return upsert(currentDate, {
+    status: OVERRIDE_STATUS.COMPLETED,
+    completedAt: new Date().toISOString(),
+    linkedActivityId: linkedActivityId || bestaand.linkedActivityId || null,
+  });
+}
+
+export function cancelOverride(currentDate = todayLocal()) {
+  const bestaand = overrideForDate(currentDate);
+  if (!bestaand) return null;
+  return upsert(currentDate, {
+    status: OVERRIDE_STATUS.CANCELLED,
+    completedAt: null,
+  });
+}
+
+// Koppelen aan een echte activiteit.
+//
+// Komt de run later binnen via Strava of Garmin, dan hoort hij bij de override
+// die je die dag had gepland — en niet als tweede gebeurtenis ernaast. Vandaar
+// dat er op datum wordt gekoppeld en niet nieuw wordt aangemaakt.
+export function linkActivities({ currentDate = todayLocal() } = {}) {
+  const arr = loadOverrides();
+  let veranderd = false;
+
+  for (let i = 0; i < arr.length; i++) {
+    const o = arr[i];
+    const st = statusOf(o);
+    if (st === OVERRIDE_STATUS.CANCELLED) continue;
+    if (st === OVERRIDE_STATUS.COMPLETED && o.linkedActivityId) continue;
+
+    const run = lastRunWorkout(o.date);
+    if (!run || run.date !== o.date) continue;
+    // Al aan een andere dag gekoppeld? Dan niet nog eens.
+    if (arr.some(x => x.date !== o.date && x.linkedActivityId === run.id)) continue;
+
+    arr[i] = { ...o,
+      status: OVERRIDE_STATUS.COMPLETED,
+      linkedActivityId: run.id,
+      completedAt: o.completedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    veranderd = true;
+  }
+  if (veranderd) persist(arr);
+  return arr;
 }
 
 // De uitkomst wordt afgeleid, niet apart ingevuld: hij komt uit dezelfde
@@ -313,7 +403,11 @@ export const COACH_CALIBRATION = {
 
 export function overrideLearning({ logs = {}, currentDate = todayLocal() } = {}) {
   const alle = loadOverrides();
-  const beoordeeld = alle
+  // Alleen uitgevoerde overrides. Een preview bestaat niet meer, een plan dat
+  // je liet lopen zegt niets over of de coach te voorzichtig was, en een
+  // geannuleerde al helemaal niet.
+  const uitgevoerd = alle.filter(o => statusOf(o) === OVERRIDE_STATUS.COMPLETED);
+  const beoordeeld = uitgevoerd
     .map(o => ({ entry: o, uitkomst: overrideOutcome(o, { logs, currentDate }) }))
     .filter(r => r.uitkomst.windowClosed);
 
@@ -348,6 +442,8 @@ export function overrideLearning({ logs = {}, currentDate = todayLocal() } = {})
 
   return {
     total: alle.length,
+    completed: uitgevoerd.length,
+    planned: alle.filter(o => statusOf(o) === OVERRIDE_STATUS.PLANNED).length,
     assessed: beoordeeld.length,
     clean: schoon,
     delayedWorsening: verslechterd,
@@ -363,7 +459,11 @@ export function overrideLearning({ logs = {}, currentDate = todayLocal() } = {})
 // Wordt gelezen door workouts.js. Een override telt pas mee als het volledige
 // 24–48u-venster voorbij is én er niets slechts in staat.
 export function overrideDates() {
-  return new Set(loadOverrides().map(o => o.date));
+  // Alleen uitgevoerde overrides. Een plan dat je niet hebt gedaan hoort
+  // nergens een strengere lat op te leggen.
+  return new Set(loadOverrides()
+    .filter(o => statusOf(o) === OVERRIDE_STATUS.COMPLETED)
+    .map(o => o.date));
 }
 
 export function overrideCleared(workoutDate, logs, currentDate = todayLocal()) {
@@ -375,6 +475,7 @@ export function overrideCleared(workoutDate, logs, currentDate = todayLocal()) {
 // Overzicht voor het scherm: welke overrides staan nog open?
 export function pendingOverrides({ logs = {}, currentDate = todayLocal() } = {}) {
   return loadOverrides()
+    .filter(o => statusOf(o) === OVERRIDE_STATUS.COMPLETED)
     .map(o => ({ ...o, uitkomst: overrideOutcome(o, { logs, currentDate }) }))
     .filter(o => !o.uitkomst.windowClosed || o.uitkomst.status === 'pending');
 }
@@ -389,15 +490,11 @@ export function overrideForDate(date) {
   return loadOverrides().find(o => o.date === date) || null;
 }
 
-// Wordt gebruikt door de registratieflow: markeer de zojuist opgeslagen
-// workout als de uitvoering van de override van die dag.
+// Wordt gebruikt door de registratieflow: de zojuist opgeslagen workout is de
+// uitvoering van de override van die dag.
 export function attachWorkout(date, workoutId) {
-  const arr = loadOverrides();
-  const i = arr.findIndex(o => o.date === date);
-  if (i < 0) return null;
-  arr[i] = { ...arr[i], workoutId };
-  persist(arr);
-  return arr[i];
+  if (!overrideForDate(date)) return null;
+  return completeOverride(date, { linkedActivityId: workoutId });
 }
 
 // Puur afgeleid, nooit opgeslagen: telt deze sessie al als bewijs?
