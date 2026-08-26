@@ -33,6 +33,11 @@ import { todayLocal, addDays } from './datetime';
 import {
   timeline, series, latest, rollingMean, trend, completeness, DOMAIN,
 } from './timeline';
+import {
+  classifyLimiter, classifyChange, recompositionSignal, personalBandwidth,
+  hormonalPattern, comparableCycleDays, activeMilestone, reviewDue, CHANGE,
+} from './bodyReview';
+import { convergentFindings, loadAnalyses } from './photoAnalysis';
 
 function lees(key, terug) {
   try {
@@ -57,6 +62,11 @@ export function buildCoachContext({ asOf = todayLocal(), horizon = 120 } = {}) {
     cycle: cycleContext(asOf),
     goals: goalContext(asOf),
     context: overigContext(asOf),
+    // De longitudinale laag. Dit is het verschil tussen een coach die weet
+    // hoe je er vandaag bij zit en een coach die weet wat er over weken aan
+    // het gebeuren is — en het is de laag waardoor veranderde historie tot
+    // een ander advies leidt in plaats van tot dezelfde tekst.
+    longitudinal: longitudinalContext(asOf),
     completeness: completeness({ asOf }),
     // Zodat de coach wéét dat er historie is, ook als hij hem niet meekrijgt.
     history: {
@@ -66,6 +76,47 @@ export function buildCoachContext({ asOf = todayLocal(), horizon = 120 } = {}) {
       note: alles.length
         ? `Er zijn ${alles.length} waarnemingen vanaf ${alles[0].observedAt}. Vraag om oudere context als dat nodig is.`
         : 'Nog geen waarnemingen.',
+    },
+  };
+}
+
+// ── De lange lijn ───────────────────────────────────────────────
+// Vijf vragen die alleen over weken te beantwoorden zijn:
+//   wat beperkt me nu · is deze verandering echt · verlies ik weefsel of vet ·
+//   herhaalt dit zich met mijn cyclus · loopt er een doel en is het toe aan
+//   herziening.
+//
+// Elk antwoord draagt zijn eigen zekerheid mee. Waar de data te dun is staat
+// er wat er nog nodig is, niet een voorzichtig geformuleerde gok.
+function longitudinalContext(asOf) {
+  const limiter = classifyLimiter({ asOf });
+  const verandering = {};
+  for (const m of ['weight', 'waist', 'navel']) {
+    verandering[m] = classifyChange(m, { asOf });
+  }
+  const doel = activeMilestone({ asOf });
+  const analyses = loadAnalyses().filter(a => a.to <= asOf);
+
+  return {
+    limiter,
+    change: verandering,
+    bandwidth: {
+      weight: personalBandwidth('weight', { asOf }),
+      waist: personalBandwidth('waist', { asOf }),
+    },
+    recomposition: recompositionSignal({ asOf }),
+    hormonalPattern: {
+      weight: hormonalPattern('weight', { asOf }),
+    },
+    sameCycleDay: {
+      weight: comparableCycleDays('weight', { asOf }),
+    },
+    milestone: doel,
+    review: reviewDue({ asOf }),
+    photoVision: {
+      count: analyses.filter(a => a.method === 'visual').length,
+      last: analyses.find(a => a.method === 'visual') || null,
+      convergent: convergentFindings({ asOf }),
     },
   };
 }
@@ -414,6 +465,24 @@ export function usedData(ctx) {
     ? `${ctx.cycle.phase.label} (${ctx.cycle.phase.certainty})` : 'onbekend');
   push('progressiefoto', ctx.body.photos.known ? `${ctx.body.photos.lastDate}` : null);
   push('laatste PEM-signaal', ctx.recovery.pem.lastDate || 'geen in 12 weken');
+  const lg = ctx.longitudinal;
+  if (lg) {
+    push('beperkende factor deze week', lg.limiter.limiter);
+    if (lg.bandwidth.weight.known) {
+      push('jouw normale gewichtsschommeling', `±${lg.bandwidth.weight.band} kg (${lg.bandwidth.weight.n} metingen)`);
+    }
+    push('gewichtsverandering', lg.change.weight.verdict);
+    if (lg.recomposition.signal !== 'GEEN_OORDEEL') push('lichaamssamenstelling', lg.recomposition.signal);
+    if (lg.sameCycleDay.weight.known) {
+      push('vergeleken met dezelfde cyclusdag',
+        `${lg.sameCycleDay.weight.delta > 0 ? '+' : ''}${lg.sameCycleDay.weight.delta} kg`,
+        `cyclusdag ${lg.sameCycleDay.weight.currentCycleDay}`);
+    }
+    if (lg.milestone) push('lopend tussendoel', `tot ${lg.milestone.until}`);
+    push('visuele fotovergelijkingen', lg.photoVision.count
+      ? `${lg.photoVision.count}${lg.photoVision.last ? ` · laatste ${lg.photoVision.last.to} (zekerheid ${lg.photoVision.last.confidence})` : ''}`
+      : 'nog geen — er is nog niet werkelijk naar de beelden gekeken');
+  }
   push('datadekking', `${Math.round(ctx.completeness.coverage * 100)}% · zekerheid ${ctx.completeness.confidence}`);
 
   return { items: r, missing: ctx.completeness.missing };
@@ -487,6 +556,56 @@ export function contextAsText(ctx) {
   } else zeg('  onbekend — geen menstruatiedata vastgelegd');
   zeg(`  ${ctx.cycle.instruction}`);
   zeg('');
+
+  // ── De lange lijn ─────────────────────────────────────────────
+  // Deze sectie staat bewust vóór de doelen. Een doel dat je leest zonder te
+  // weten wat je op dit moment beperkt, lees je als een opdracht in plaats
+  // van als een richting.
+  const lg = ctx.longitudinal;
+  if (lg) {
+    zeg('LANGE LIJN — WAT ER OVER WEKEN GEBEURT:');
+    zeg(`  beperkende factor deze week: ${lg.limiter.limiter}`);
+    for (const w of lg.limiter.why) zeg(`    · ${w}`);
+    if (lg.limiter.others?.length) zeg(`    ook aanwezig, maar niet leidend: ${lg.limiter.others.join(', ')}`);
+    if (lg.limiter.note) zeg(`    ${lg.limiter.note}`);
+
+    for (const [naam, m] of [['gewicht', 'weight'], ['taille', 'waist'], ['navel', 'navel']]) {
+      const c = lg.change[m];
+      zeg(`  ${naam}: ${c.verdict} (zekerheid ${c.confidence})`);
+      for (const w of c.why) zeg(`    · ${w}`);
+    }
+
+    const bw = lg.bandwidth.weight;
+    zeg(`  eigen bandbreedte gewicht: ${bw.known ? `±${bw.band} kg over ${bw.n} metingen` : bw.note}`);
+    zeg('    Een verschil binnen die bandbreedte is ruis. Behandel het niet als vooruitgang of terugval.');
+
+    if (lg.recomposition.note) zeg(`  lichaamssamenstelling: ${lg.recomposition.signal} — ${lg.recomposition.note}`);
+
+    const hp = lg.hormonalPattern.weight;
+    zeg(`  hormonaal patroon in gewicht: ${hp.note}`);
+    const sc = lg.sameCycleDay.weight;
+    zeg(`  vergelijking met dezelfde cyclusdag: ${sc.note}`);
+    zeg('    Vergelijk bij voorkeur met dezelfde hormonale context, niet met vorige week.');
+
+    if (lg.milestone) {
+      zeg(`  lopend tussendoel: ${lg.milestone.from} → ${lg.milestone.until}`);
+      for (const t of lg.milestone.targets || []) {
+        zeg(`    ${t.label}: ${t.from ?? '?'} → ${t.to ?? t.direction ?? '?'}${t.unit ? ' ' + t.unit : ''}`);
+      }
+    }
+    zeg(`  review: ${lg.review.reason}`);
+
+    const pv = lg.photoVision;
+    if (pv.count) {
+      zeg(`  visuele fotovergelijkingen: ${pv.count} uitgevoerd, laatste ${pv.last?.to} (zekerheid ${pv.last?.confidence})`);
+      if (pv.last?.summary) zeg(`    ${pv.last.summary}`);
+      zeg(`    ${pv.convergent.note}`);
+    } else {
+      zeg('  visuele fotovergelijkingen: geen. Er is nog niet werkelijk naar de beelden gekeken.');
+      zeg('    Baseer geen uitspraak over zichtbare verandering op opgeslagen tekstobservaties alsof het een vergelijking was.');
+    }
+    zeg('');
+  }
 
   zeg('DOELEN:');
   for (const g of ctx.goals.body) zeg(`  lichaam: ${g.name}${g.target != null ? ` → ${g.target}` : ''}`);

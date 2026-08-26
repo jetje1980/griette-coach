@@ -56,7 +56,11 @@ export async function userPrefix() {
   return uid ? `${uid}/progress` : null;
 }
 
-const PHOTO_TYPES = ['voor', 'zij', 'achter'];
+// 'gezicht' is er later bij gekomen. Het staat hier niet alleen voor het
+// opslaan maar vooral voor het terughalen: restoreFromCloud loopt de mappen
+// per aanzicht af, en een aanzicht dat niet in deze lijst staat wordt bij
+// een herstelactie stilzwijgend overgeslagen.
+const PHOTO_TYPES = ['voor', 'zij', 'achter', 'gezicht'];
 
 function newPhotoId() {
   return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;

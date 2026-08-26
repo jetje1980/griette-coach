@@ -13,6 +13,9 @@ import RunForecastPanel from './RunForecastPanel';
 import RunDashboard from './RunDashboard';
 import StrengthPanel from './StrengthPanel';
 import MyChangePanel from './MyChangePanel';
+import BodyCheckIn from './BodyCheckIn';
+import WhyPanel from './WhyPanel';
+import BodyReviewPanel from './BodyReviewPanel';
 import { loadRaceGoals } from '../raceGoalModel';
 import { easyHrLine } from '../hrModel';
 import { measuredPaces } from '../easyPace';
@@ -1543,6 +1546,16 @@ export default function ProgressieScreen({ logs, streak }) {
           <MyChangePanel sessions={sessions} measurements={measurements}
             logs={logs} currentDate={todayStr()}
             onReload={reloadPhotos} />
+          {/* Het oordeel over weken, met de tussendoelen en de review. */}
+          <BodyReviewPanel currentDate={todayStr()} />
+          <WhyPanel asOf={todayStr()} compact />
+          {/* De check-in staat ónder het overzicht en niet erboven: eerst zien
+              waar je staat, dan pas iets toevoegen. */}
+          <ExpandSection label="Wekelijkse check-in · foto's, maten en vergelijken">
+            <BodyCheckIn sessions={sessions} measurements={measurements}
+              logs={logs} currentDate={todayStr()}
+              onReload={() => { reloadPhotos(); store.getMeasurements().then(setMeasurements).catch(() => {}); }} />
+          </ExpandSection>
           <ExpandSection label="Metingen en weeghistorie">
             <TabLichaam logs={logs} sessions={sessions} />
           </ExpandSection>

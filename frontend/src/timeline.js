@@ -246,6 +246,41 @@ function uitFotos() {
   return uit;
 }
 
+// Vergelijkingen waarbij het model de beelden werkelijk gezien heeft.
+//
+// Deze staan bewust náást photo_observation en niet ermee vermengd: het ene
+// is een herinnering aan wat zij zag, het andere een vergelijking van de
+// beelden zelf. Het onderscheid zit in de metric én in `method`, zodat het
+// verderop niet per ongeluk op één hoop belandt.
+function uitFotoAnalyses() {
+  const uit = [];
+  const rijen = lees('gc_photo_analyses', []);
+  if (!Array.isArray(rijen)) return uit;
+
+  for (const r of rijen) {
+    if (!r?.to || !/^\d{4}-\d{2}-\d{2}$/.test(r.to)) continue;
+    const velden = r.fields && typeof r.fields === 'object' ? r.fields : {};
+    const paren = Object.entries(velden).filter(([, v]) => v);
+    if (!paren.length) continue;
+    uit.push(obs({
+      observedAt: r.to, domain: DOMAIN.BODY, metric: 'photo_comparison',
+      value: paren.map(([k, v]) => `${k}: ${v}`).join(' · '),
+      source: r.method === 'visual' ? 'vision-model' : (r.method || 'unknown'),
+      // Een modelwaarneming is geen meting. Zij is bekend, met voorbehoud —
+      // en dat voorbehoud is precies de vergelijkbaarheid.
+      certainty: CERTAINTY.UNCERTAIN,
+      meta: {
+        track: r.track || null, from: r.from || null,
+        confidence: r.confidence || null,
+        notVisible: r.notVisible || [],
+        model: r.model || null,
+        summary: r.summary || null,
+      },
+    }));
+  }
+  return uit;
+}
+
 function uitOverrides() {
   const uit = [];
   for (const o of lees('gc_overrides', [])) {
@@ -270,7 +305,8 @@ const num = (x) => {
 export function timeline({ asOf = null, domains = null, since = null } = {}) {
   let alles = [
     ...uitDaglogs(), ...uitMetingen(), ...uitWorkouts(),
-    ...uitKracht(), ...uitCyclus(), ...uitFotos(), ...uitOverrides(),
+    ...uitKracht(), ...uitCyclus(), ...uitFotos(), ...uitFotoAnalyses(),
+    ...uitOverrides(),
   ];
 
   // As-of-date. Dit is de hele bescherming tegen future leakage: wie de wereld
@@ -310,7 +346,16 @@ export function rollingMean(metric, days, { asOf = todayLocal() } = {}) {
 // De verandering over een venster, met het aantal metingen erbij: twee punten
 // is geen trend, en dat hoort de lezer te weten.
 export function trend(metric, days, { asOf = todayLocal() } = {}) {
-  const vanaf = addDays(asOf, -(days - 1));
+  // Let op het verschil met rollingMean hierboven: een gemiddelde over zeven
+  // dagen telt zeven dagen inclusief vandaag, maar een verandering óver 28
+  // dagen heeft twee eindpunten nodig die 28 dagen uit elkaar liggen — dus
+  // 29 kalenderdagen.
+  //
+  // Dit stond eerst als -(days - 1), en dat kostte precies het punt dat je
+  // nodig hebt: wie elke vier weken haar taille meet, had de vorige meting
+  // altijd één dag buiten het venster staan. De 4-wekentrend op maten was
+  // daardoor structureel "één meting is geen trend".
+  const vanaf = addDays(asOf, -days);
   const s = series(metric, { asOf, since: vanaf }).filter(o => typeof o.value === 'number');
   if (s.length < 2) {
     return { available: false, n: s.length,
@@ -345,7 +390,7 @@ export function completeness({ asOf = todayLocal(), days = 14 } = {}) {
     training: heeft('distance') + heeft('duration'),
     strength: heeft('strength_volume'),
     measurements: heeft('waist') + heeft('navel') + heeft('hip'),
-    photos: heeft('photo_observation'),
+    photos: heeft('photo_observation') + heeft('photo_comparison'),
     cycle: heeft('menstruation_start') + heeft('bloating') + heeft('hot_flashes'),
   };
 

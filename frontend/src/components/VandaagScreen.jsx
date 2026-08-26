@@ -4,6 +4,7 @@ import { nextSessionForecast } from '../forecast';
 import StrengthToday from './StrengthToday';
 import LeverageCard from './LeverageCard';
 import CockpitCard from './CockpitCard';
+import WhyPanel from './WhyPanel';
 import AlivenessCard from './AlivenessCard';
 import { strengthDecision } from '../strengthGate';
 import { photoStore } from '../photoStore';
@@ -560,6 +561,12 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
       <CockpitCard log={log} logs={logs} currentDate={currentDate}
         hasData={hasData} isFuture={isFuture}
         saveFields={saveFields} onCta={handleCta} />
+
+      {/* Direct onder het besluit, ingeklapt: waar het op gebaseerd is en —
+          net zo belangrijk — wat er níet in zat. Alleen voor dagen die al
+          geweest zijn of vandaag; over een toekomstige dag valt niets te
+          verantwoorden. */}
+      {!isFuture && <WhyPanel asOf={currentDate} compact />}
 
       {/* De override staat bewust hier: onder het coachadvies, nooit erboven,
           en nooit als primaire knop zolang de coach rust adviseert. */}

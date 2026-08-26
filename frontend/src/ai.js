@@ -705,70 +705,69 @@ Toon: direct, nieuwsgierig, data-gedreven. Behandel haar als iemand die haar eig
     return callClaude([{ role: 'user', content: prompt }], 900);
   },
 
-  // photos = array van { base64, mimeType, type ('voor'|'zij'|'achter') }
-  // previousAnalyses = array van { date, text }
-  // prevPhotos = array van { base64, mimeType, type, sessionDate } — vorige sessie voor visuele vergelijking
-  async analyzePhoto(photos, dayNum, currentWeight, logs, measurements, previousAnalyses = [], prevPhotos = []) {
-    const context = buildContext(logs, measurements);
+  // ── Werkelijk kijken naar de foto's ───────────────────────────
+  //
+  // Hier stond een functie die de beelden keurig als image-blokken opbouwde
+  // en die door geen enkel scherm werd aangeroepen. De coach "zag" dus nooit
+  // een foto; hij las hooguit terug wat zij er zelf over had opgeschreven.
+  //
+  // Dit is de vervanger, en hij verschilt op vier punten:
+  //   · de aanroep bestaat werkelijk (photoAnalysis bouwt de aanvraag, een
+  //     scherm roept hem aan);
+  //   · elke afbeelding is gelabeld met datum en aanzicht, referentie eerst;
+  //   · het antwoord komt terug in vaste velden op een schaal, niet als proza;
+  //   · het model moet zeggen wat het NIET kan zien, en de vergelijkbaarheid
+  //     die uit de omstandigheden komt mag het niet naar boven bijstellen.
+  //
+  // request komt uit photoAnalysis.buildComparisonRequest().
+  async comparePhotos(request, { fields, schema, context = '' } = {}) {
+    if (!request?.ok) throw new Error(request?.reason || 'Geen vergelijkbare beelden.');
 
-    const typeNL = { voor: 'voorkant', zij: 'zijkant', achter: 'achterkant' };
-    const availableViews = photos.map(p => typeNL[p.type] || p.type).join(', ');
-    const prevDate = prevPhotos[0]?.sessionDate ?? null;
-    const prevViews = prevPhotos.map(p => typeNL[p.type] || p.type).join(', ');
+    const veldvragen = (fields || [])
+      .map(f => `- ${f.id} (${f.label}): ${f.ask}`).join('\n');
 
-    const prevContext = previousAnalyses.length > 0
-      ? `\nEERDERE FOTO-ANALYSES (tekst, meest recent eerst):\n${
-          previousAnalyses.slice(0, 3).map(a => `[${a.date}]:\n${a.text.slice(0, 400)}`).join('\n\n---\n\n')
-        }\n`
-      : '';
+    const prompt = `${context ? context + '\n' : ''}Je vergelijkt progressiefoto's van dezelfde persoon.
 
-    const hasPrevPhotos = prevPhotos.length > 0;
+DE BEELDEN, in deze volgorde:
+${request.labels.map(l => '  ' + l).join('\n')}
 
-    const prompt = `${context}
-${prevContext}
-HUIDIGE FOTO-SESSIE: dag ${dayNum} van 70 | aanzichten: ${availableViews}
-Huidig gewicht: ${currentWeight ?? '?'} kg | doel: ${USER.goalWeight} kg | start: ${USER.startWeight} kg
-${hasPrevPhotos ? `VERGELIJKINGSFOTO'S: sessie ${prevDate} | aanzichten: ${prevViews} (staan VÓÓR de huidige foto's hierboven)` : ''}
+REFERENTIE: ${request.from} · NU: ${request.to}
+Aanzichten die aan beide kanten bestaan: ${request.sharedViews.join(', ') || 'geen'}
+${request.unpairedViews.length ? `Aanzichten die maar aan één kant bestaan (NIET gebruiken voor een oordeel): ${request.unpairedViews.join(', ')}` : ''}
 
-${hasPrevPhotos
-  ? `De EERSTE ${prevPhotos.length} afbeelding(en) zijn van sessie ${prevDate} (referentie).
-De LAATSTE ${photos.length} afbeelding(en) zijn van vandaag (dag ${dayNum}).
-Vergelijk ze VISUEEL en concreet.`
-  : 'Dit is de eerste foto-sessie — geen eerdere foto\'s beschikbaar voor vergelijking.'}
+OMSTANDIGHEDEN: ${request.comparability?.note || 'niet vastgelegd'}
+Deze vergelijkbaarheid is vastgesteld uit de omstandigheden. Je mag hem naar BENEDEN bijstellen als de beelden je daartoe aanleiding geven, nooit naar boven.
 
-Analyseer als gecombineerde expert: personal trainer + lichaamscompositie specialist + voedingscoach.
-Schrijf max 380 woorden in het Nederlands. Wees eerlijk en concreet.
+WAT JE BEOORDEELT:
+${veldvragen}
 
-Gebruik exact deze structuur:
+HARDE REGELS:
+- Geen vetpercentage, geen kilo's, geen centimeters. Uit beeld komt vorm, contour en houding — meer niet.
+- Een verschil in licht, houding of kleding is géén verandering in het lichaam. Benoem het als zodanig.
+- Kun je iets niet zien, zet het veld dan op de neutrale waarde en het veld in "not_visible". Een verzonnen waarneming is erger dan een lege.
+- Vergelijk alleen aanzichten die aan beide kanten bestaan.
+- Nederlands, geen getallen in de tekst.
 
-📸 LICHAAMSCOMPOSITIE (vandaag)
-Beschrijf vetopslag per zone (abdomen/flanken/heupen/dijen/armen) en spierdefinitie.
+Antwoord met UITSLUITEND een JSON-object, zonder markdown eromheen:
+${JSON.stringify(schema, null, 2)}`;
 
-🔄 VISUELE PROGRESSIE ${hasPrevPhotos ? `(${prevDate} → dag ${dayNum})` : ''}
-${hasPrevPhotos
-  ? 'Vergelijk de referentiefoto\'s met vandaag: wat is er zichtbaar veranderd? Wees specifiek over welke zones.'
-  : 'Eerste meting — beschrijf het startpunt als baseline voor toekomstige vergelijkingen.'}
-
-🏋️ TRAININGSAANPASSING
-Concrete aanbeveling op basis van wat je nu ziet. Welke zones vragen aandacht? Lopen/zwemmen/fietsen/core — welke mix past nu het best? Zone B altijd leidend.
-
-🥗 VOEDINGSFOCUS
-Op basis van vetdistributie en Mounjaro: eiwitdoelen, timing, specifieke kansen.
-
-💡 KERNBOODSCHAP
-1–2 zinnen: wat heeft haar lichaam nu het meest nodig?`;
-
-    const content = [];
-    // Eerst de vorige sessie foto's (als referentie), dan de huidige
-    for (const photo of [...prevPhotos, ...photos]) {
-      content.push({
-        type: 'image',
-        source: { type: 'base64', media_type: photo.mimeType, data: photo.base64 },
-      });
-    }
+    const content = request.images.map(img => ({
+      type: 'image',
+      source: { type: 'base64', media_type: img.mimeType, data: img.base64 },
+    }));
     content.push({ type: 'text', text: prompt });
 
-    return callClaude([{ role: 'user', content }], 1100);
+    const raw = await callClaude([{ role: 'user', content }], 1400);
+    const json = raw.replace(/^```(?:json)?/m, '').replace(/```\s*$/m, '').trim();
+    let parsed;
+    try {
+      parsed = JSON.parse(json.slice(json.indexOf('{'), json.lastIndexOf('}') + 1));
+    } catch {
+      // Liever een eerlijke fout dan een half antwoord dat als meting wordt
+      // opgeslagen en er over drie maanden uitziet als een waarneming.
+      throw new Error('Het antwoord van het model was niet leesbaar als vergelijking.');
+    }
+    return { ...parsed, _model: MODEL, _images: request.images.length };
   },
 
   // Genereert een concreet weekplan op basis van alle beschikbare data
