@@ -10,6 +10,7 @@ import { todayLocal } from './datetime';
 import { easyHrLine } from './hrModel';
 import { activeRunGoals } from './runGoalModel';
 import { allRunGoalStatuses, STATUS_META } from './runGoalStatus';
+import { buildCoachContext, contextAsText } from './coachContext';
 import { planNextSession } from './raceplan';
 const MODEL = 'claude-sonnet-4-6';
 const EDGE_FN = `${SUPABASE_URL}/functions/v1/coach-ai`;
@@ -450,7 +451,20 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
     ].join('\n');
   })();
 
+  // De volledige context uit één bouwer.
+  //
+  // Hiervoor werd de context hier ter plekke bij elkaar geraapt uit logs en
+  // measurements, en bleven acht opslagsleutels ongelezen: krachtsessies,
+  // lichaamsdoelen, foto-observaties, cyclushistorie, seizoensfocus, de
+  // levendlijst, de overrides en het adaptieve logboek. De coach kon over
+  // kracht niets zeggen omdat er niets over kracht in stond.
+  const volledig = (() => {
+    try { return contextAsText(buildCoachContext({ asOf: today })); }
+    catch { return ''; }
+  })();
+
   return `
+${volledig ? `${volledig}\n` : ''}
 ${dataRange}
 
 GRIETTE — 46 jaar, 163 cm

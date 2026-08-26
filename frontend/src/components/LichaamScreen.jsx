@@ -738,7 +738,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   const [battEnd, setBattEnd] = useState('');
   const [flash, setFlash] = useState('');
   const [measurements, setMeasurements] = useState([]);
-  const [maten, setMaten] = useState({ waist: '', hip: '', chest: '', arm: '', thigh: '' });
+  const [maten, setMaten] = useState({ waist: '', navel: '', hip: '', chest: '', arm: '', thigh: '' });
   const [matenDate, setMatenDate] = useState(currentDate);
   const [savingMaten, setSavingMaten] = useState(false);
   const [stravaStatus, setStravaStatus] = useState(null);
@@ -840,7 +840,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
       await store.saveMeasurements(matenDate || currentDate, vals);
       const updated = await store.getMeasurements();
       setMeasurements(updated);
-      setMaten({ waist: '', hip: '', chest: '', arm: '', thigh: '' });
+      setMaten({ waist: '', navel: '', hip: '', chest: '', arm: '', thigh: '' });
       flashMsg('Maten opgeslagen');
     } finally { setSavingMaten(false); }
   }
@@ -1586,12 +1586,24 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
 
   // ── SUBTAB: MATEN ────────────────────────────────────────────
   function TabMaten() {
+    // Taille en navel zijn twee verschillende maten en horen niet op één
+    // getal te staan. De oude waarde van 74 cm is nooit gelabeld: het is niet
+    // meer te achterhalen of dat het smalste punt was of de omtrek over de
+    // navel. Die onzekerheid reist mee in de tijdlijn in plaats van dat er een
+    // aanname van wordt gemaakt.
     const MAAT_FIELDS = [
-      { key: 'waist', label: 'Taille' },
-      { key: 'hip',   label: 'Heup' },
-      { key: 'chest', label: 'Borst' },
-      { key: 'arm',   label: 'Arm' },
-      { key: 'thigh', label: 'Dij' },
+      { key: 'waist', label: 'Taille',
+        hint: 'Smalste punt tussen ribben en heup. Ontspannen, na normale uitademing, buik niet intrekken.' },
+      { key: 'navel', label: 'Navel',
+        hint: 'Horizontaal exact over de navel. Zelfde condities: ontspannen, na uitademing.' },
+      { key: 'hip',   label: 'Heup',
+        hint: 'Breedste punt over de billen.' },
+      { key: 'chest', label: 'Borst',
+        hint: 'Over het volste punt, armen ontspannen langs je lichaam.' },
+      { key: 'arm',   label: 'Arm',
+        hint: 'Midden bovenarm, ontspannen.' },
+      { key: 'thigh', label: 'Dij',
+        hint: 'Breedste punt van de bovenbeen, staand met gewicht op beide benen.' },
     ];
     const lastMeting = measurements[0];
 
@@ -1616,6 +1628,11 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
                 placeholder="cm"
                 value={maten[f.key]}
                 onChange={e => setMaten(prev => ({ ...prev, [f.key]: e.target.value }))} />
+              {f.hint && (
+                <div style={{ fontSize: 9.5, color: 'var(--ghost)', lineHeight: 1.4, marginTop: 3 }}>
+                  {f.hint}
+                </div>
+              )}
             </div>
           ))}
         </div>
