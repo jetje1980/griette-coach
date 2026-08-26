@@ -18,6 +18,10 @@
 // dient autonomie.
 
 import { todayLocal, addDays } from './datetime';
+import {
+  CALIB, applyNovelty, weightedPick, makeRng, seedFor, recordShown, loadShown,
+} from './alivenessSelect';
+import { personalCandidates, futureSelfCandidates } from './alivenessPersonal';
 
 const ANCHOR_KEY = 'gc_anchors';
 const FEEDBACK_KEY = 'gc_aliveness_feedback';
@@ -263,13 +267,21 @@ export function loadFeedback() {
   try { return JSON.parse(localStorage.getItem(FEEDBACK_KEY) || '{}'); } catch { return {}; }
 }
 
-export function recordFeedback(suggestionId, optionId, { date = todayLocal() } = {}) {
+export function recordFeedback(suggestionId, optionId, {
+  date = todayLocal(), tag = null, state = null,
+} = {}) {
   const all = loadFeedback();
   const prev = all[suggestionId] || { score: 0, count: 0, history: [] };
   const opt = FEEDBACK_OPTIONS.find(o => o.id === optionId);
   all[suggestionId] = {
     score: prev.score + (opt?.score ?? 0),
     count: prev.count + 1,
+    // De tag hoort erbij, anders kan "veel" alleen dit ene zinnetje tillen en
+    // nooit het sóórt ding waar het over ging.
+    tag: tag ?? prev.tag ?? null,
+    state: state ?? prev.state ?? null,
+    // "Irritant" blokkeert exact dit item, en met opzet niet de tag: één
+    // ongelukkige formulering hoort geen hele categorie te wissen.
     blocked: optionId === 'annoying' || prev.blocked === true,
     lastDate: date,
     history: [...(prev.history || []).slice(-9), { date, optionId }],
@@ -280,17 +292,67 @@ export function recordFeedback(suggestionId, optionId, { date = todayLocal() } =
 
 // ── Context-bewuste keuze ───────────────────────────────────────
 // Wat past er nú? Op energie, herstel, PEM, tijd, plek en toestand.
+//
+// De volgorde is de hele regel:
+//   1. veiligheid en context filteren  — wat mag vandaag überhaupt
+//   2. personalisatie scoren           — wat past bij jou en je feedback
+//   3. novelty                         — wat had je pas nog
+//   4. gewogen keuze uit de besten     — zodat het niet elke keer nummer één is
+//
+// Stap 3 en 4 mogen stap 1 nooit overrulen. Variatie binnen wat mag; nooit
+// variatie die iets doorlaat wat niet mocht.
 const COST_ORDER = { none: 0, low: 1, medium: 2, high: 3 };
+
+// De drie bronnen waar een voorstel vandaan kan komen. Wordt meegegeven in de
+// historie, zodat achteraf te zien is of haar eigen lijst er ooit uitkomt.
+export const SOURCE = {
+  LIBRARY: 'fixed_library',
+  ANCHOR: 'personal_anchor',
+  ALIVENESS: 'aliveness_item',
+};
+
+// Welke toestanden bij welke knop horen. Dit is het verschil tussen de vier
+// knoppen: niet hetzelfde mandje met een ander etiket, maar een andere vraag.
+export const BUTTON_STATES = {
+  reset:  ['GROUND', 'SOFTEN', 'ENERGIZE', 'RECOVER'],
+  dream5: ['ESCAPE', 'BEAUTIFUL', 'FREE', 'CREATE', 'PLAY', 'RECEIVE'],
+  dream3: null,   // alles mag; de spreiding wordt afgedwongen op state én tag
+  onepct: ['STRONG', 'CREATE', 'FREE', 'CONNECT'],
+};
+
+function baseCandidates({ buttonId = null } = {}) {
+  const lib = LIBRARY.map(x => ({ ...x, source: SOURCE.LIBRARY }));
+
+  // 1% Future Self heeft een eigen bron: gedrag dat hoort bij wie je wilt
+  // worden, uit je seizoensfocus en je doelen. Zonder die bron zou dit
+  // dezelfde mand zijn met een ander etiket — en dat wás het ook, tot de test
+  // liet zien dat beide knoppen dezelfde toestanden opleverden.
+  if (buttonId === 'onepct') {
+    const fs = futureSelfCandidates();
+    return fs.length ? fs : lib;
+  }
+
+  // Mini-reset blijft bij de bibliotheek: een toestand verschuiven vraagt geen
+  // verlangen maar een handeling die zeker werkt.
+  if (buttonId === 'reset') return lib;
+
+  // Haar eigen lijst hoort erbij, niet eronder. De weging gebeurt in de score.
+  return [...lib, ...personalCandidates()];
+}
 
 export function suggestExperience({
   log = {}, logs = {}, currentDate = todayLocal(),
   minutes = null, place = 'home', state = null, coach = null,
   wanted = null,          // gevraagde toestand, bijv. 'PLAY'
   exclude = [],
+  buttonId = null,
+  rng = null,             // zaadbaar voor tests
+  shown = null,
 } = {}) {
   const feedback = loadFeedback();
 
-  // Wat mag het kosten? Bij PEM of rood alleen wat niets vraagt.
+  // ── 1. Veiligheid en context ────────────────────────────────
+  // Ongewijzigd. Bij PEM of rood alleen wat niets vraagt.
   const pem = !!(log.symptom_pem || log.training_recovery === 2);
   const decision = coach?.decision || null;
   const energy = log.energy;
@@ -298,7 +360,6 @@ export function suggestExperience({
     : decision === 'BLUE' || energy === 0 ? 'low'
     : decision === 'AMBER' || energy === 1 ? 'medium' : 'high';
 
-  // Welke toestand ligt voor de hand als er niets gevraagd is?
   const defaultState = pem || decision === 'RED' ? 'RECOVER'
     : decision === 'BLUE' ? 'SOFTEN'
     : state === 'UIT' ? 'GROUND'
@@ -307,35 +368,44 @@ export function suggestExperience({
     : 'GROUND';
 
   const target = wanted || defaultState;
+  const wensStates = BUTTON_STATES[buttonId] || null;
 
-  const scored = LIBRARY
-    .filter(x => !exclude.includes(x.id))
+  const toegestaan = baseCandidates({ buttonId })
     .filter(x => !feedback[x.id]?.blocked)
     .filter(x => COST_ORDER[x.cost] <= COST_ORDER[maxCost])
     .filter(x => minutes == null || x.minutes <= minutes)
-    .filter(x => x.place.includes(place))
-    .map(x => {
-      let score = 0;
-      // De juiste toestand weegt zwaarder dan of er een anker bij past:
-      // Bocelli op een energieke dag is het verkeerde antwoord.
-      if (x.state === target) score += 16;
-      // Een voorstel dat een ontbrekend anker nodig heeft werkt wel, maar
-      // minder persoonlijk — dus iets lager gewogen.
-      // Ankers worden opgehaald voor de toestand van dít voorstel, niet
-      // voor het dagdoel. Anders belandt de muziek die je bij verstilling
-      // hoort in een voorstel om de keuken bij elkaar te zingen.
-      const anchors = anchorValues(x.state);
-      if (x.needs?.length) {
-        const have = x.needs.filter(n => anchors[n]).length;
-        score += have * 4 - (x.needs.length - have) * 2;
-      }
-      const f = feedback[x.id];
-      if (f) score += Math.max(-4, Math.min(6, f.score));
-      // Variatie: iets dat je pas nog kreeg staat achteraan.
-      if (f?.lastDate && f.lastDate >= addDays(currentDate, -3)) score -= 6;
-      return { ...x, score };
-    })
-    .sort((a, b) => b.score - a.score);
+    .filter(x => x.place.includes(place));
+
+  // ── 2. Personalisatie ───────────────────────────────────────
+  const scored = toegestaan.map(x => {
+    let score = 0;
+    if (x.state === target) score += 16;
+    // De knop stuurt mee: een droomleven-knop wil een droomleven-toestand,
+    // ook als de dag om aarden vraagt.
+    if (wensStates && wensStates.includes(x.state)) score += 10;
+
+    const anchors = anchorValues(x.state);
+    if (x.needs?.length) {
+      const have = x.needs.filter(n => anchors[n]).length;
+      score += have * 4 - (x.needs.length - have) * 2;
+    }
+    // Iets uit haar eigen lijst is per definitie persoonlijker dan de
+    // bibliotheek; een verlangen dat blijft terugkeren nog wat meer.
+    if (x.source === SOURCE.ALIVENESS) score += 8 + (x.recurring ? 4 : 0);
+
+    const f = feedback[x.id];
+    if (f) {
+      // Exact hetzelfde item krijgt een gedempte bonus. Zonder die demping
+      // won één enthousiast antwoord voorgoed.
+      score += Math.max(-CALIB.NONE_ID_PENALTY, Math.min(CALIB.MUCH_ID_BONUS_CAP, f.score));
+    }
+    // "Veel" tilt de tag, niet alleen het item: je vond dit sóórt ding fijn.
+    const tagScore = tagFeedback(feedback, x.tag);
+    if (tagScore > 0) score += Math.min(CALIB.MUCH_TAG_BONUS, tagScore * 2);
+    if (tagScore < 0) score -= Math.min(CALIB.NONE_TAG_PENALTY, -tagScore * 1.5);
+
+    return { ...x, score };
+  });
 
   if (!scored.length) {
     return { available: false,
@@ -344,20 +414,33 @@ export function suggestExperience({
         : 'Geen passend voorstel binnen deze tijd en plek.' };
   }
 
+  // ── 3. Novelty ──────────────────────────────────────────────
+  const { pool, fellBack } = applyNovelty(scored, { currentDate, shown, exclude });
+  if (!pool.length) {
+    return { available: false, reason: 'Alles wat past heb je net gehad. Morgen weer.' };
+  }
+
+  // ── 4. Gewogen keuze ────────────────────────────────────────
+  const gekozen = weightedPick(pool, { rng: rng || Math.random });
+
   const pickOne = (x) => {
     const anchors = anchorValues(x.state);
     return {
       id: x.id, state: stateById(x.state), minutes: x.minutes, cost: x.cost, tag: x.tag,
       text: x.text(anchors),
+      source: x.source || SOURCE.LIBRARY,
       usesAnchor: (x.needs || []).some(n => anchors[n]),
+      why: whyChosen(x, { target, wensStates, fellBack }),
     };
   };
 
   return {
     available: true,
     maxCost, target: stateById(target),
-    suggestion: pickOne(scored[0]),
-    alternatives: scored.slice(1, 4).map(pickOne),
+    suggestion: pickOne(gekozen),
+    alternatives: pool.filter(c => c.id !== gekozen.id).slice(0, 4).map(pickOne),
+    poolSize: pool.length,
+    fellBack,
     context: pem ? 'Je hebt vandaag een PEM-signaal gemeld; alleen wat niets van je vraagt.'
       : decision === 'BLUE' ? 'Herstelkleur blauw — iets kleins en zachts.'
       : decision === 'AMBER' ? 'Gemengde dag — iets dat zeker lukt.'
@@ -365,37 +448,80 @@ export function suggestExperience({
   };
 }
 
+// Feedback op tagniveau: hoe vaak vond je dit sóórt ding fijn?
+function tagFeedback(feedback, tag) {
+  if (!tag) return 0;
+  let som = 0;
+  for (const [id, f] of Object.entries(feedback)) {
+    if (f.blocked) continue;
+    if (f.tag === tag) som += Math.sign(f.score);
+  }
+  return som;
+}
+
+function whyChosen(x, { target, wensStates, fellBack }) {
+  const r = [];
+  if (x.state === target) r.push('past bij hoe je dag eruitziet');
+  if (wensStates?.includes(x.state)) r.push('hoort bij wat je vroeg');
+  if (x.source === SOURCE.ALIVENESS) r.push('komt uit je eigen lijst');
+  if (fellBack) r.push('alles wat nieuw was is op — dit is het best passende');
+  return r.length ? r.join(' · ') : 'past binnen je tijd, plek en herstel';
+}
+
 // ── De vier knoppen ─────────────────────────────────────────────
+// Vier verschillende vragen, en dus vier verschillende mandjes.
 export const BUTTONS = [
-  { id: 'reset', label: 'Geef me een mini-reset', minutes: 5, count: 1 },
-  { id: 'dream5', label: 'Geef me 5 minuten van mijn droomleven', minutes: 5, count: 1, prefer: 'ESCAPE' },
-  { id: 'dream3', label: 'Geef me vandaag 3 stukjes van mijn droomleven', minutes: 10, count: 3 },
-  { id: 'onepct', label: 'Geef me vandaag 1% Future Self', minutes: 10, count: 1 },
+  { id: 'reset', label: 'Geef me een mini-reset', minutes: 5, count: 1,
+    intent: 'toestand verschuiven', personal: false },
+  { id: 'dream5', label: 'Geef me 5 minuten van mijn droomleven', minutes: 5, count: 1,
+    intent: 'een miniatuur van een echt verlangen', personal: true },
+  { id: 'dream3', label: 'Geef me vandaag 3 stukjes van mijn droomleven', minutes: 10, count: 3,
+    intent: 'drie duidelijk verschillende ervaringen', personal: true },
+  { id: 'onepct', label: 'Geef me vandaag 1% Future Self', minutes: 10, count: 1,
+    intent: 'gedrag van wie je wilt worden', personal: true },
 ];
 
 export function runButton(buttonId, ctx = {}) {
   const btn = BUTTONS.find(b => b.id === buttonId);
   if (!btn) return null;
 
+  const currentDate = ctx.currentDate || todayLocal();
+  const nth = ctx.nth || 0;
+  const rng = ctx.rng || makeRng(seedFor({ currentDate, buttonId, nth }));
+
   if (btn.count === 1) {
-    const r = suggestExperience({ ...ctx, minutes: btn.minutes, wanted: btn.prefer || ctx.wanted });
+    const r = suggestExperience({
+      ...ctx, minutes: btn.minutes, buttonId,
+      wanted: btn.prefer || ctx.wanted, rng,
+    });
     return { button: btn, ...r, items: r.available ? [r.suggestion] : [] };
   }
 
-  // Drie stukjes: bewust uit verschillende toestanden, zodat het een dag
-  // wordt en geen herhaling.
+  // Drie stukjes: verschillende toestand én verschillende tag. Drie varianten
+  // van hetzelfde gedrag is geen dag maar een herhaling.
   const items = [];
   const used = [];
   const usedStates = new Set();
+  const usedTags = new Set();
+
   for (let i = 0; i < btn.count; i++) {
-    const r = suggestExperience({ ...ctx, minutes: btn.minutes, exclude: used });
+    const r = suggestExperience({
+      ...ctx, minutes: btn.minutes, buttonId, exclude: used,
+      rng: ctx.rng || makeRng(seedFor({ currentDate, buttonId, nth: nth * 10 + i })),
+    });
     if (!r.available) break;
-    let pick = r.suggestion;
-    const alt = r.alternatives?.find(a => !usedStates.has(a.state?.id));
-    if (usedStates.has(pick.state?.id) && alt) pick = alt;
+
+    const anders = (c) => !usedStates.has(c.state?.id) && !usedTags.has(c.tag);
+    let pick = anders(r.suggestion) ? r.suggestion
+      : (r.alternatives || []).find(anders)
+      // Lukt spreiding niet, dan liever een ander item dan hetzelfde nog eens.
+      || (r.alternatives || []).find(c => !used.includes(c.id))
+      || r.suggestion;
+
     items.push(pick);
     used.push(pick.id);
     usedStates.add(pick.state?.id);
+    usedTags.add(pick.tag);
   }
   return { button: btn, available: items.length > 0, items,
     reason: items.length ? null : 'Vandaag past er niets — en dat is ook een antwoord.' };

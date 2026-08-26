@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   BUTTONS, runButton, recordFeedback, FEEDBACK_OPTIONS, STATES,
   ANCHOR_TYPES, loadAnchors, saveAnchor, deleteAnchor,
   ALIVENESS_CATEGORIES, ALIVENESS_PROMPTS,
   loadAlivenessList, saveAlivenessItem, deleteAlivenessItem,
 } from '../aliveness';
+import { recordShown } from '../alivenessSelect';
 import { todayLocal } from '../datetime';
 
 // Een klein stukje van het leven dat je wilt, vandaag al.
@@ -17,17 +18,35 @@ export default function AlivenessCard({ log, logs, currentDate = todayLocal(), c
   const [result, setResult] = useState(null);
   const [given, setGiven] = useState({});
   const [open, setOpen] = useState(false);
+  const [waarom, setWaarom] = useState(false);
+  // Wat je in deze sessie al hebt gezien. "Iets anders" mag nooit hetzelfde
+  // teruggeven — dat is precies de knop waarop je iets nieuws verwacht.
+  const gezien = useRef([]);
+  const klik = useRef(0);
 
   const ctx = { log, logs, currentDate, coach, state, place: 'home' };
 
-  function press(id) {
-    setResult(runButton(id, ctx));
+  function press(id, { anders = false } = {}) {
+    if (!anders) { gezien.current = []; klik.current = 0; }
+    klik.current += 1;
+
+    const r = runButton(id, { ...ctx, exclude: gezien.current, nth: klik.current });
+    // Vastleggen wát er getoond is, los van of er ooit feedback op komt.
+    // Zonder deze regel weet de app niet dat je iets vijf keer hebt gezien.
+    for (const item of (r?.items || [])) {
+      gezien.current = [...gezien.current, item.id];
+      recordShown({ ...item, buttonId: id }, { date: currentDate });
+    }
+    setResult(r);
     setGiven({});
+    setWaarom(false);
     setOpen(true);
   }
 
   function feedback(itemId, optionId) {
-    recordFeedback(itemId, optionId, { date: currentDate });
+    const item = (result?.items || []).find(i => i.id === itemId);
+    recordFeedback(itemId, optionId, { date: currentDate,
+      tag: item?.tag || null, state: item?.state?.id || null });
     setGiven(g => ({ ...g, [itemId]: optionId }));
   }
 
@@ -101,8 +120,23 @@ export default function AlivenessCard({ log, logs, currentDate = todayLocal(), c
                   )}
                 </div>
               ))}
-              <button className="btn-secondary" onClick={() => press(result.button.id)}
-                style={{ fontSize: 11.5, whiteSpace: 'normal' }}>Iets anders</button>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button className="btn-secondary" data-alive="anders"
+                  onClick={() => press(result.button.id, { anders: true })}
+                  style={{ fontSize: 11.5, whiteSpace: 'normal' }}>Iets anders</button>
+                {result.items?.[0]?.why && (
+                  <button className="os-toggle-chip" data-alive="waarom"
+                    onClick={() => setWaarom(w => !w)}
+                    style={{ fontSize: 10.5 }}>Waarom deze? {waarom ? '▲' : '▼'}</button>
+                )}
+              </div>
+              {waarom && (
+                <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 5 }}>
+                  {result.items.map(i => (
+                    <div key={i.id}>{i.why}</div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </>
