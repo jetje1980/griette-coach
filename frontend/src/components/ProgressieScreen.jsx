@@ -16,6 +16,7 @@ import MyChangePanel from './MyChangePanel';
 import BodyCheckIn from './BodyCheckIn';
 import WhyPanel from './WhyPanel';
 import BodyReviewPanel from './BodyReviewPanel';
+import ProgressieOverzicht from './ProgressieOverzicht';
 import { loadRaceGoals } from '../raceGoalModel';
 import { easyHrLine } from '../hrModel';
 import { measuredPaces } from '../easyPace';
@@ -1543,6 +1544,9 @@ export default function ProgressieScreen({ logs, streak }) {
       {activeTab === 0 && <TabOverzicht logs={logs} streak={streak} sessions={sessions} goToTab={setActiveTab} />}
       {activeTab === 1 && (
         <>
+          {/* §37: één scherm met vandaag, foto's, samenstelling en doel —
+              en bij elk getal wat het met het besluit doet. */}
+          <ProgressieOverzicht currentDate={todayStr()} sessions={sessions} />
           <MyChangePanel sessions={sessions} measurements={measurements}
             logs={logs} currentDate={todayStr()}
             onReload={reloadPhotos} />

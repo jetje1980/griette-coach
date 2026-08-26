@@ -42,6 +42,7 @@ import { weeklyLimiter, LIMITER_NL } from './limiter';
 import { longCovidRisk, attributeSymptoms, peseState } from './pese';
 import { cycleIntelligence, PATTERN_CONFIDENCE } from './cyclePatterns';
 import { trainingBalance, progressionProposal, compositionGuard, RISK } from './progression';
+import { coachDecision, decisionAsText } from './decision';
 
 // Alle daglogs uit de opslag, in de vorm { datum: log }.
 function daglogsUitOpslag(asOf) {
@@ -99,6 +100,10 @@ export function buildCoachContext({ asOf = todayLocal(), horizon = 120, logs = n
     balance: trainingBalance({ logs: daglogs, currentDate: asOf }),
     progression: progressionProposal({ logs: daglogs, currentDate: asOf }),
     guard: compositionGuard({ logs: daglogs, currentDate: asOf }),
+    // Het besluit als object. Fase 2C: de coach krijgt eerst een
+    // gestructureerd besluit en schrijft daar de mensentaal omheen, zodat
+    // de tekst niet iets anders kan beweren dan wat er berekend is.
+    decision: coachDecision({ logs: daglogs, currentDate: asOf }),
     completeness: completeness({ asOf }),
     // Zodat de coach wéét dat er historie is, ook als hij hem niet meekrijgt.
     history: {
@@ -609,6 +614,13 @@ export function contextAsText(ctx) {
   } else zeg('  onbekend — geen menstruatiedata vastgelegd');
   zeg(`  ${ctx.cycle.instruction}`);
   zeg('');
+
+  // Het besluit staat vóór alles. Wie eerst de gegevens leest en pas daarna
+  // het besluit, gaat onderweg zijn eigen conclusie trekken.
+  if (ctx.decision) {
+    zeg(decisionAsText(ctx.decision));
+    zeg('');
+  }
 
   // ── Wat je deze week beperkt, en waarom precies dat ───────────
   // Deze sectie staat vóór alle andere. Een coach die eerst gewicht en
