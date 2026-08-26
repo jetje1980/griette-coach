@@ -3,6 +3,7 @@ import SubTabs from './SubTabs';
 import { ai } from '../ai';
 import { store } from '../store';
 import { todayLocal } from '../datetime';
+import WhyPanel from './WhyPanel';
 
 const SUBTABS = ['Nu', 'Weekanalyse', 'Maand'];
 
@@ -433,6 +434,10 @@ export default function CoachScreen({ logs }) {
   return (
     <div className="os-content">
       <SubTabs tabs={SUBTABS} active={activeTab} onChange={setActiveTab} />
+      {/* §29: bij ieder belangrijk advies hoort te staan waarop het berust.
+          Op het coachscherm staat het bovenaan, want daar wordt het advies
+          gemaakt — niet eronder als voetnoot. */}
+      {activeTab === 0 && <WhyPanel asOf={todayLocal()} compact />}
       {activeTab === 0 && <TabNu logs={logs} measurements={measurements} />}
       {activeTab === 1 && <TabWeekanalyse logs={logs} measurements={measurements} />}
       {activeTab === 2 && <TabMaand logs={logs} />}

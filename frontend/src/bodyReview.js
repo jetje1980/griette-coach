@@ -484,77 +484,15 @@ export function reviewMilestone(milestone, { asOf = todayLocal() } = {}) {
   };
 }
 
-// ── 5. Wat is nu de belangrijkste limiter? ──────────────────────
-// Eén waarde per week, gebaseerd op recente data en niet op profielhistorie
-// (§33). De volgorde is de prioriteit uit §46: veiligheid eerst, gewichtstempo
-// laatst.
-export const LIMITER = {
-  PESE: 'PESE',
-  DELAYED_RECOVERY: 'delayed_recovery',
-  HORMONAL: 'hormonal_perimenopause',
-  SLEEP: 'sleep',
-  HEAT: 'heat',
-  MUSCULAR: 'muscular_fatigue',
-  DISTANCE: 'distance_tolerance',
-  ECONOMY: 'aerobic_economy',
-  STRENGTH: 'strength_recovery',
-  NUTRITION: 'nutrition_energy_availability',
-  STRESS: 'stress',
-  READY: 'none_ready_to_build',
-};
-
-export function classifyLimiter({ asOf = todayLocal() } = {}) {
-  const recent = (m, dagen = 6) =>
-    series(m, { asOf, since: addDays(asOf, -dagen) }).length;
-  const laatste = (m, dagen = 6) => {
-    const s = series(m, { asOf, since: addDays(asOf, -dagen) });
-    return s.length ? s[s.length - 1].value : null;
-  };
-
-  const pem14 = series('symptom_pem', { asOf, since: addDays(asOf, -13) }).length;
-  const vertraagd = recent('delayed_fatigue') + recent('delayed_brainfog') +
-    recent('delayed_breathless');
-  const slaap = rollingMean('sleep_hours', 5, { asOf });
-  const spier = recent('symptom_pain');
-  const stress = laatste('stress_high');
-  const krachtSessies = series('strength_volume', { asOf, since: addDays(asOf, -13) }).length;
-
-  // Hormonaal telt pas mee als er een herhaald patroon onder zit — anders is
-  // het een losse klachtendag en geen limiter (§25, §31).
-  const hormonaalSignaal = ['bloating', 'puffiness', 'hot_flashes', 'night_sweats']
-    .filter(m => laatste(m)).length;
-  const patroon = hormonalPattern('weight', { asOf });
-
-  const kandidaten = [];
-  if (pem14 > 0) kandidaten.push({ limiter: LIMITER.PESE, prio: 1,
-    why: `PEM-signaal in de afgelopen twee weken (${pem14}×).` });
-  if (vertraagd > 0) kandidaten.push({ limiter: LIMITER.DELAYED_RECOVERY, prio: 2,
-    why: `Vertraagde klachten na inspanning in de afgelopen week (${vertraagd} meldingen).` });
-  if (slaap != null && slaap < 6.5) kandidaten.push({ limiter: LIMITER.SLEEP, prio: 3,
-    why: `Slaap gemiddeld ${rond(slaap, 1)} u over vijf dagen.` });
-  if (hormonaalSignaal >= 2) kandidaten.push({ limiter: LIMITER.HORMONAL, prio: 4,
-    why: `${hormonaalSignaal} hormonale signalen deze week${patroon.known ? `, en dit patroon herhaalt zich in je eigen data (${patroon.note})` : ', maar nog zonder herhaald patroon in je eigen data'}.` });
-  if (spier >= 2) kandidaten.push({ limiter: LIMITER.MUSCULAR, prio: 5,
-    why: 'Meerdere dagen spierpijn gemeld.' });
-  if (stress) kandidaten.push({ limiter: LIMITER.STRESS, prio: 6,
-    why: 'Stress hoog gemeld.' });
-  if (krachtSessies === 0) kandidaten.push({ limiter: LIMITER.STRENGTH, prio: 7,
-    why: 'Geen krachtsessies in twee weken — spierbehoud is dan de beperkende factor, niet je conditie.' });
-
-  if (!kandidaten.length) {
-    return { limiter: LIMITER.READY, why: ['Geen beperkende signalen in de recente data.'],
-      confidence: 'redelijk',
-      note: 'Er is ruimte om op te bouwen. Te weinig prikkel is ook een coachfout.' };
-  }
-
-  kandidaten.sort((a, b) => a.prio - b.prio);
-  return {
-    limiter: kandidaten[0].limiter,
-    why: kandidaten.map(k => k.why),
-    others: kandidaten.slice(1).map(k => k.limiter),
-    confidence: 'redelijk',
-    note: kandidaten[0].limiter === LIMITER.HORMONAL
-      ? 'Hormonale signalen zijn geen Long-COVID-terugval. Zolang er geen vertraagde verslechtering is, hoeft de belasting hier niet stevig voor omlaag.'
-      : null,
-  };
-}
+// ── 5. En waar de limiter gebleven is ───────────────────────────
+// Hier stond een classifyLimiter() die op zeven ruwe signalen keek. Fase 2B
+// vraagt om twaalf waarden, een secundaire limiter, een echte zekerheid en
+// het onderscheid tussen hormonaal en post-exertioneel — en dat leunt op
+// peseState() en de cyclusanalyse.
+//
+// Die functie is daarom naar limiter.js verhuisd in plaats van uitgebreid.
+// Twee limiters naast elkaar zou precies de parallelle architectuur zijn die
+// de opdracht verbiedt: dan heeft "wat beperkt me deze week" twee antwoorden
+// en is het toeval welke een scherm laat zien.
+//
+// Zie: limiter.js → weeklyLimiter()

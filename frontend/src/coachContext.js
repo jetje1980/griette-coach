@@ -34,10 +34,28 @@ import {
   timeline, series, latest, rollingMean, trend, completeness, DOMAIN,
 } from './timeline';
 import {
-  classifyLimiter, classifyChange, recompositionSignal, personalBandwidth,
+  classifyChange, recompositionSignal, personalBandwidth,
   hormonalPattern, comparableCycleDays, activeMilestone, reviewDue, CHANGE,
 } from './bodyReview';
 import { convergentFindings, loadAnalyses } from './photoAnalysis';
+import { weeklyLimiter, LIMITER_NL } from './limiter';
+import { longCovidRisk, attributeSymptoms, peseState } from './pese';
+import { cycleIntelligence, PATTERN_CONFIDENCE } from './cyclePatterns';
+import { trainingBalance, progressionProposal, compositionGuard, RISK } from './progression';
+
+// Alle daglogs uit de opslag, in de vorm { datum: log }.
+function daglogsUitOpslag(asOf) {
+  const uit = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith('gc_log_')) continue;
+      const l = lees(k, null);
+      if (l?.date && l.date <= asOf) uit[l.date] = l;
+    }
+  } catch { /* opslag niet beschikbaar */ }
+  return uit;
+}
 
 function lees(key, terug) {
   try {
@@ -49,9 +67,13 @@ function lees(key, terug) {
 const rond = (x, n = 1) => (x == null ? null : +Number(x).toFixed(n));
 
 // ── De context ──────────────────────────────────────────────────
-export function buildCoachContext({ asOf = todayLocal(), horizon = 120 } = {}) {
+export function buildCoachContext({ asOf = todayLocal(), horizon = 120, logs = null } = {}) {
   const sinds = addDays(asOf, -horizon);
   const alles = timeline({ asOf });
+  // De responslaag leest daglogs per datum. Waar de aanroeper ze niet
+  // meegeeft, worden ze uit de opslag gehaald — dezelfde bron, alleen een
+  // andere vorm dan de tijdlijn.
+  const daglogs = logs || daglogsUitOpslag(asOf);
 
   return {
     asOf,
@@ -67,6 +89,16 @@ export function buildCoachContext({ asOf = todayLocal(), horizon = 120 } = {}) {
     // het gebeuren is — en het is de laag waardoor veranderde historie tot
     // een ander advies leidt in plaats van tot dezelfde tekst.
     longitudinal: longitudinalContext(asOf),
+    // Fase 2B: de cyclus die geleerd wordt in plaats van aangenomen, de
+    // Long-COVID-laag die met de actuele respons meebeweegt, en de vraag of
+    // er te veel of juist te weinig gevraagd wordt.
+    cycleIntelligence: cycleIntelligence({ asOf }),
+    risk: longCovidRisk({ logs: daglogs, currentDate: asOf }),
+    attribution: attributeSymptoms({ logs: daglogs, currentDate: asOf }),
+    limiter: weeklyLimiter({ logs: daglogs, currentDate: asOf }),
+    balance: trainingBalance({ logs: daglogs, currentDate: asOf }),
+    progression: progressionProposal({ logs: daglogs, currentDate: asOf }),
+    guard: compositionGuard({ logs: daglogs, currentDate: asOf }),
     completeness: completeness({ asOf }),
     // Zodat de coach wéét dat er historie is, ook als hij hem niet meekrijgt.
     history: {
@@ -89,7 +121,6 @@ export function buildCoachContext({ asOf = todayLocal(), horizon = 120 } = {}) {
 // Elk antwoord draagt zijn eigen zekerheid mee. Waar de data te dun is staat
 // er wat er nog nodig is, niet een voorzichtig geformuleerde gok.
 function longitudinalContext(asOf) {
-  const limiter = classifyLimiter({ asOf });
   const verandering = {};
   for (const m of ['weight', 'waist', 'navel']) {
     verandering[m] = classifyChange(m, { asOf });
@@ -98,7 +129,6 @@ function longitudinalContext(asOf) {
   const analyses = loadAnalyses().filter(a => a.to <= asOf);
 
   return {
-    limiter,
     change: verandering,
     bandwidth: {
       weight: personalBandwidth('weight', { asOf }),
@@ -465,9 +495,32 @@ export function usedData(ctx) {
     ? `${ctx.cycle.phase.label} (${ctx.cycle.phase.certainty})` : 'onbekend');
   push('progressiefoto', ctx.body.photos.known ? `${ctx.body.photos.lastDate}` : null);
   push('laatste PEM-signaal', ctx.recovery.pem.lastDate || 'geen in 12 weken');
+  // Fase 2B: de laag waar het besluit werkelijk uit volgt.
+  if (ctx.limiter) {
+    push('beperkende factor deze week',
+      `${ctx.limiter.primaryLabel} (zekerheid ${ctx.limiter.confidence})`);
+    if (ctx.limiter.secondary) push('daarachter', ctx.limiter.secondaryLabel);
+  }
+  if (ctx.risk) {
+    push('PESE-status', `${ctx.risk.pese} · bescherming ${ctx.risk.protection}`);
+    push('laatste PEM-signaal', ctx.risk.history.pemFreeDays != null
+      ? `${ctx.risk.history.pemFreeDays} dagen geleden` : 'geen geregistreerd');
+  }
+  if (ctx.attribution) push('klachten toegeschreven aan', ctx.attribution.attribution);
+  if (ctx.cycleIntelligence?.position?.known) {
+    const p = ctx.cycleIntelligence.position;
+    push('cyclusdag en fase', `dag ${p.day} · ${p.phase} (${p.certainty})`);
+  }
+  if (ctx.cycleIntelligence?.patterns?.known) {
+    push('geleerde cycluspatronen', `${ctx.cycleIntelligence.patterns.patterns.length}`);
+  }
+  if (ctx.balance) push('belasting tegenover herstel', ctx.balance.risk);
+  if (ctx.progression) {
+    push('voorgestelde stap', ctx.progression.build
+      ? `${ctx.progression.lever} — ${ctx.progression.step}` : 'geen opbouw deze week');
+  }
   const lg = ctx.longitudinal;
   if (lg) {
-    push('beperkende factor deze week', lg.limiter.limiter);
     if (lg.bandwidth.weight.known) {
       push('jouw normale gewichtsschommeling', `±${lg.bandwidth.weight.band} kg (${lg.bandwidth.weight.n} metingen)`);
     }
@@ -557,6 +610,119 @@ export function contextAsText(ctx) {
   zeg(`  ${ctx.cycle.instruction}`);
   zeg('');
 
+  // ── Wat je deze week beperkt, en waarom precies dat ───────────
+  // Deze sectie staat vóór alle andere. Een coach die eerst gewicht en
+  // maten leest en dán pas ontdekt dat er een PEM-signaal ligt, heeft de
+  // eerste helft van zijn redenering al op de verkeerde grond gebouwd.
+  if (ctx.limiter) {
+    const L = ctx.limiter;
+    zeg('BEPERKENDE FACTOR DEZE WEEK:');
+    zeg(`  primair: ${L.primary} — ${L.primaryLabel} (zekerheid ${L.confidence})`);
+    if (L.secondary) zeg(`  secundair: ${L.secondary} — ${L.secondaryLabel}`);
+    zeg(`  waarom: ${L.explanation}`);
+    for (const sig of L.signals) zeg(`    · ${sig}`);
+    if (L.secondaryExplanation) zeg(`  over de secundaire: ${L.secondaryExplanation}`);
+    if (L.note) zeg(`  ${L.note}`);
+    zeg('  Laat je advies van deze ene factor afhangen. Noem niet zeven dingen tegelijk.');
+    zeg('');
+  }
+
+  // ── Long COVID: dynamisch, niet permanent ─────────────────────
+  if (ctx.risk) {
+    const R = ctx.risk;
+    zeg('POST-EXERTIONELE BELASTBAARHEID:');
+    zeg(`  ${R.principle}`);
+    zeg(`  PESE-status: ${R.pese} · bescherming: ${R.protection} (zekerheid ${R.confidence})`);
+    zeg(`  ${R.reason}`);
+    zeg(`  advies vanuit deze laag: ${R.advice}`);
+    zeg(`  geschiedenis: ${R.history.redResponsesYear} abnormale responsen in een jaar` +
+      `${R.history.lastRedResponse ? `, laatste ${R.history.lastRedResponse}` : ''}` +
+      `${R.history.pemFreeDays != null ? ` · laatste PEM-signaal ${R.history.pemFreeDays} dagen geleden` : ' · geen PEM-signaal geregistreerd'}`);
+    for (const sig of R.signals) zeg(`    · ${sig}`);
+    zeg('');
+  }
+
+  // ── Hormonaal of post-exertioneel? ────────────────────────────
+  if (ctx.attribution) {
+    const A = ctx.attribution;
+    zeg('WAAR DE KLACHTEN VANDAAN LIJKEN TE KOMEN:');
+    zeg(`  toeschrijving: ${A.attribution}`);
+    zeg(`  ${A.explanation}`);
+    if (A.shared.length) zeg(`  signalen die bij beide passen: ${A.shared.join(', ')}`);
+    if (A.hormonalOnly.length) zeg(`  alleen hormonaal: ${A.hormonalOnly.join(', ')}`);
+    zeg(`  vertraagde verslechtering: ${A.delayedWorsening ? 'ja' : 'nee'} · dagelijks functioneren aangetast: ${A.dailyFunctionImpaired ? 'ja' : 'nee'}`);
+    if (A.note) zeg(`  ${A.note}`);
+    zeg('  Hogere hartslag, slechtere slaap en meer vocht zijn zonder vertraagde verslechtering GEEN Long-COVID-terugval.');
+    zeg('');
+  }
+
+  // ── De cyclus, geleerd in plaats van aangenomen ───────────────
+  if (ctx.cycleIntelligence) {
+    const C = ctx.cycleIntelligence;
+    zeg('CYCLUS — UIT HAAR EIGEN DATA:');
+    zeg(`  ${C.headline}`);
+    zeg(`  ${C.regularity.note}`);
+    zeg('  Reken NIET met dag 14 als eisprong of dag 21 als luteaal. De fasen hierboven zijn afgeleid van haar werkelijke cycluslengtes.');
+    if (C.patterns.known) {
+      zeg(`  geleerde patronen (${C.patterns.patterns.length}):`);
+      for (const p of C.patterns.patterns.slice(0, 5)) zeg(`    · ${p.note}`);
+    } else {
+      zeg(`  geleerde patronen: geen. ${C.patterns.note}`);
+      zeg('    Doe geen uitspraak over "de luteale fase" die niet uit haar eigen herhaalde data komt.');
+    }
+    const r = C.ranges;
+    const bekend = Object.entries(r).filter(([, v]) => v.known);
+    if (bekend.length) {
+      zeg('  persoonlijke fluctuatieranges:');
+      for (const [, v] of bekend) zeg(`    · ${v.note}`);
+    }
+    if (C.narrative.known) {
+      zeg(`  vergelijking met dezelfde cycluscontext: ${C.narrative.text}`);
+    }
+    zeg('');
+  }
+
+  // ── Te veel of te weinig? ─────────────────────────────────────
+  if (ctx.balance) {
+    zeg('BELASTING TEGENOVER HERSTEL:');
+    zeg(`  richting: ${ctx.balance.risk} (zekerheid ${ctx.balance.confidence})`);
+    zeg(`  ${ctx.balance.note}`);
+    if (ctx.balance.weeklyMinutes?.length) {
+      zeg(`  loopminuten per week (oud → nieuw): ${ctx.balance.weeklyMinutes.join(', ')}`);
+    }
+    if (ctx.balance.signals) for (const sig of ctx.balance.signals) zeg(`    · ${sig}`);
+    if (ctx.balance.missing?.length) {
+      zeg(`  ontbrekend voor dit oordeel: ${ctx.balance.missing.join(', ')}`);
+    }
+    zeg('  Chronisch dezelfde belasting voorschrijven terwijl het herstel ruim meegeeft is geen veiligheid maar ondertraining. Dat is óók een coachfout.');
+    zeg('');
+  }
+
+  if (ctx.progression) {
+    const P = ctx.progression;
+    zeg('PROGRESSIEVOORSTEL:');
+    if (P.build) {
+      zeg(`  hefboom: ${P.lever} — ${P.step}`);
+      zeg(`  waarom deze: ${P.why}`);
+      if (P.alternatives?.length) {
+        zeg(`  alternatieven (NIET tegelijk doen): ${P.alternatives.map(a => `${a.lever} (${a.step})`).join(' · ')}`);
+      }
+      zeg(`  ${P.rule}`);
+    } else {
+      zeg(`  geen opbouw deze week: ${P.reason}`);
+      zeg(`  ${P.advice}`);
+    }
+    zeg('');
+  }
+
+  if (ctx.guard) {
+    zeg('GRENS ROND LICHAAMSCOMPOSITIE:');
+    zeg(`  ${ctx.guard.rule}`);
+    zeg(`  nooit voorschrijven vanuit een gewichtsdoel: ${ctx.guard.forbidden.map(f => f.label).join(' · ')}`);
+    if (ctx.guard.note) zeg(`  ${ctx.guard.note}`);
+    zeg('');
+  }
+
   // ── De lange lijn ─────────────────────────────────────────────
   // Deze sectie staat bewust vóór de doelen. Een doel dat je leest zonder te
   // weten wat je op dit moment beperkt, lees je als een opdracht in plaats
@@ -564,10 +730,6 @@ export function contextAsText(ctx) {
   const lg = ctx.longitudinal;
   if (lg) {
     zeg('LANGE LIJN — WAT ER OVER WEKEN GEBEURT:');
-    zeg(`  beperkende factor deze week: ${lg.limiter.limiter}`);
-    for (const w of lg.limiter.why) zeg(`    · ${w}`);
-    if (lg.limiter.others?.length) zeg(`    ook aanwezig, maar niet leidend: ${lg.limiter.others.join(', ')}`);
-    if (lg.limiter.note) zeg(`    ${lg.limiter.note}`);
 
     for (const [naam, m] of [['gewicht', 'weight'], ['taille', 'waist'], ['navel', 'navel']]) {
       const c = lg.change[m];
