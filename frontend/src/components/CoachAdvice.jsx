@@ -7,6 +7,7 @@ import { restDayDecision } from '../restday';
 import { todayLocal, addDays } from '../datetime';
 
 import { easyHrLine } from '../hrModel';
+import { daySignals } from '../dayVerdict';
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 const prevDate = (dateStr, n = 1) => addDays(dateStr, -n);
@@ -60,9 +61,15 @@ export function computeHeadCoach(log, logs, currentDate) {
     log?.symptom_brainfog, log?.symptom_pain,
   ].filter(Boolean).length;
 
-  // Battery: battery_start (0-100)  ← BUG FIX (was log?.battery)
+  // Battery: battery_start (0-100).
+  //
+  // De vaste drempel van 30 is eruit. Wat "laag" is hangt af van waar zij
+  // vandaan komt: vorig jaar structureel op 5 eindigen en nu tussen 18 en 25
+  // starten is vooruitgang, geen alarm. daySignals() rekent met haar eigen
+  // basislijn; hier wordt datzelfde oordeel overgenomen zodat er niet twee
+  // definities van "laag" naast elkaar leven.
   const battStart = log?.battery_start;
-  const battLow   = battStart != null && battStart <= 30;
+  const battLow   = daySignals(log, logs, currentDate).battLow;
 
   // Stress: low_stress is a habit boolean (1=stress laag, falsy=stress hoog)
   const stressHigh = log?.low_stress === 0 || log?.low_stress === false;

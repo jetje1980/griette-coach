@@ -259,7 +259,7 @@ export function coachDecision({ logs = null, currentDate = todayLocal() } = {}) 
     pese.signals.some(s => /zonder (ingevulde )?herstelcheck|niet ingevuld|geen enkele/.test(s));
   if (zonderCheck) mist('herstelrespons 24–48 uur bij de recente sessies');
   if (!pese.sessionCount) mist('recente trainingssessies');
-  for (const m of dekking.missing) mist(m);
+  for (const m of (dekking.missingLabels || dekking.missing)) mist(m);
   if (economie.missing) for (const m of economie.missing) mist(m);
   if (fotos.missing) for (const m of fotos.missing) mist(m);
   if (kracht.state === 'GEEN_DATA') mist('krachtdata');

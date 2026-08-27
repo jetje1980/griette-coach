@@ -377,6 +377,20 @@ export function trend(metric, days, { asOf = todayLocal() } = {}) {
 // "Geen probleem gemeten" is iets anders dan "geen gegevens" (§44). Deze
 // functie levert dat onderscheid, zodat een advies nooit stilzwijgend groen
 // kleurt omdat er niets is ingevuld.
+// Nederlandse namen voor de velden die completeness() bijhoudt.
+export const FIELD_LABEL = {
+  weight: 'gewicht',
+  sleep: 'slaap',
+  energy: 'energie',
+  hr_rest: 'rusthartslag',
+  recovery: 'herstelcheck na training',
+  training: 'trainingssessies',
+  strength: 'krachtsessies',
+  measurements: 'lichaamsmaten',
+  photos: "progressiefoto's",
+  cycle: 'cyclusgegevens',
+};
+
 export function completeness({ asOf = todayLocal(), days = 14 } = {}) {
   const vanaf = addDays(asOf, -(days - 1));
   const heeft = (metric) => series(metric, { asOf, since: vanaf }).length;
@@ -395,17 +409,23 @@ export function completeness({ asOf = todayLocal(), days = 14 } = {}) {
   };
 
   const ontbreekt = Object.entries(velden).filter(([, n]) => n === 0).map(([k]) => k);
+  // Wat er ontbreekt komt op het scherm terecht. `hr_rest` en `cycle` zijn
+  // veldnamen uit de code, geen Nederlands — en een gebruiker die leest
+  // "beperkt door: hr_rest, cycle" krijgt een foutmelding voorgeschoteld in
+  // plaats van een uitleg.
+  const missingLabels = ontbreekt.map(k => FIELD_LABEL[k] || k);
   const dekking = Object.values(velden).filter(n => n > 0).length / Object.keys(velden).length;
 
   return {
     window: { from: vanaf, to: asOf, days },
     counts: velden,
     missing: ontbreekt,
+    missingLabels,
     coverage: +dekking.toFixed(2),
     // Waar de zekerheid door beperkt wordt — dit is wat §45 in woorden vraagt.
     confidence: dekking >= 0.8 ? 'hoog' : dekking >= 0.5 ? 'matig' : 'laag',
     note: ontbreekt.length
-      ? `Ontbrekend in de laatste ${days} dagen: ${ontbreekt.join(', ')}. Afwezigheid van data is geen groen signaal.`
+      ? `Ontbrekend in de laatste ${days} dagen: ${missingLabels.join(', ')}. Afwezigheid van data is geen groen signaal.`
       : `Alle hoofdbronnen aanwezig in de laatste ${days} dagen.`,
   };
 }

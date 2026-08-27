@@ -543,7 +543,8 @@ export function usedData(ctx) {
   }
   push('datadekking', `${Math.round(ctx.completeness.coverage * 100)}% · zekerheid ${ctx.completeness.confidence}`);
 
-  return { items: r, missing: ctx.completeness.missing };
+  return { items: r, missing: ctx.completeness.missing,
+    missingLabels: ctx.completeness.missingLabels || ctx.completeness.missing };
 }
 
 // ── Als tekst voor de prompt ────────────────────────────────────

@@ -91,7 +91,7 @@ export default function WhyPanel({ asOf = todayLocal(), compact = false }) {
       const c = buildCoachContext({ asOf });
       return { ctx: c, used: usedData(c) };
     } catch {
-      return { ctx: null, used: { items: [], missing: [] } };
+      return { ctx: null, used: { items: [], missing: [], missingLabels: [] } };
     }
   }, [asOf]);
 
@@ -162,9 +162,9 @@ export default function WhyPanel({ asOf = todayLocal(), compact = false }) {
           </span>
         )}
       </div>
-      {used.missing.length > 0 && (
+      {used.missingLabels.length > 0 && (
         <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 4 }}>
-          Beperkt door wat ontbreekt: {used.missing.join(', ')}.
+          Beperkt door wat ontbreekt: {used.missingLabels.join(', ')}.
         </div>
       )}
 
@@ -233,10 +233,10 @@ export default function WhyPanel({ asOf = todayLocal(), compact = false }) {
             textTransform: 'uppercase', letterSpacing: '0.5px', margin: '12px 0 4px' }}>
             Wat ontbreekt
           </div>
-          <div style={{ fontSize: 11.5, color: used.missing.length ? 'var(--rust)' : 'var(--sub)',
+          <div style={{ fontSize: 11.5, color: used.missingLabels.length ? 'var(--rust)' : 'var(--sub)',
             lineHeight: 1.55 }} data-why-missing>
-            {used.missing.length
-              ? `${used.missing.join(', ')}. Afwezigheid van gegevens is geen groen signaal — het advies hierboven zegt niets over wat hier niet staat.`
+            {used.missingLabels.length
+              ? `${used.missingLabels.join(', ')}. Afwezigheid van gegevens is geen groen signaal — het advies hierboven zegt niets over wat hier niet staat.`
               : 'Alle hoofdbronnen zijn de afgelopen twee weken ingevuld.'}
           </div>
 

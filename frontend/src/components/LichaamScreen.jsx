@@ -1605,7 +1605,26 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
       { key: 'thigh', label: 'Dij',
         hint: 'Breedste punt van de bovenbeen, staand met gewicht op beide benen.' },
     ];
-    const lastMeting = measurements[0];
+    // De vorige waarde per veld, niet per meting.
+    //
+    // Hier stond `measurements[0]` — alleen de nieuwste rij. Wie vorige week
+    // borst, arm en dij mat en deze week alleen taille en heup, kreeg bij de
+    // andere vier niets te zien: geen "(was ...)", geen houvast, en dus elke
+    // keer opnieuw zoeken in de geschiedenis. Terwijl die waarde er gewoon is,
+    // één rij lager.
+    //
+    // Nu wordt per veld de meest recente meting gezocht die dat veld
+    // werkelijk heeft, met de datum erbij als hij niet van de laatste keer is.
+    const laatstePerVeld = {};
+    for (const m of measurements) {
+      for (const f of MAAT_FIELDS) {
+        if (laatstePerVeld[f.key]) continue;
+        if (m?.[f.key] != null && m[f.key] !== '') {
+          laatstePerVeld[f.key] = { waarde: m[f.key], date: m.date };
+        }
+      }
+    }
+    const nieuwsteDatum = measurements[0]?.date;
 
     return (
       <div>
@@ -1622,7 +1641,11 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
           {MAAT_FIELDS.map(f => (
             <div key={f.key}>
               <div style={{ fontSize: 11, color: 'var(--ghost)', marginBottom: 4 }}>
-                {f.label} {lastMeting?.[f.key] ? `(was ${lastMeting[f.key]})` : ''}
+                {f.label}{laatstePerVeld[f.key]
+                  ? ` (was ${laatstePerVeld[f.key].waarde}${
+                    laatstePerVeld[f.key].date !== nieuwsteDatum
+                      ? ` op ${laatstePerVeld[f.key].date.slice(5)}` : ''})`
+                  : ''}
               </div>
               <input className="os-input" type="number" step="0.5" inputMode="decimal"
                 placeholder="cm"

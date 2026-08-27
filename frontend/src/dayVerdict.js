@@ -43,6 +43,33 @@ function prevDate(dateStr, n) {
 }
 const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
+// Wat is voor haar een normale ochtendstand? Zes weken terug, mediaan plus
+// een eigen spreiding. Onder zes metingen is er geen basislijn en dus geen
+// oordeel — dan zwijgt dit signaal liever dan dat het gokt.
+export const BATTERY_MIN_N = 6;
+
+export function batteryBaseline(logs, currentDate = todayLocal(), days = 42) {
+  const waarden = [];
+  for (let i = 1; i <= days; i++) {
+    const l = logs?.[prevDate(currentDate, i)];
+    if (l?.battery_start != null) waarden.push(Number(l.battery_start));
+  }
+  if (waarden.length < BATTERY_MIN_N) {
+    return { known: false, n: waarden.length,
+      note: `Nog te weinig batterijstanden (${waarden.length} van ${BATTERY_MIN_N}) om te weten wat voor jou normaal is.` };
+  }
+  const gem = avg(waarden);
+  const afw = waarden.map(v => Math.abs(v - gem)).sort((a, b) => a - b);
+  const mad = afw[Math.floor(afw.length / 2)];
+  const band = Math.max(mad * 1.5, 4);
+  return {
+    known: true, n: waarden.length,
+    mean: Math.round(gem), band: Math.round(band),
+    min: Math.min(...waarden), max: Math.max(...waarden),
+    note: `Je start normaal rond ${Math.round(gem)}% (${Math.min(...waarden)}–${Math.max(...waarden)}% over ${waarden.length} dagen).`,
+  };
+}
+
 // ── De signalen ─────────────────────────────────────────────────
 export function daySignals(log, logs, currentDate = todayLocal()) {
   const yest = logs?.[prevDate(currentDate, 1)] ?? {};
@@ -62,8 +89,23 @@ export function daySignals(log, logs, currentDate = todayLocal()) {
     log?.symptom_brainfog, log?.symptom_pain,
   ].filter(Boolean).length;
 
+  // ── Batterij: haar eigen normaal, niet dat van een gemiddelde ──
+  //
+  // Hier stond `battStart <= 30`. Dat is een drempel uit het niets, en voor
+  // haar precies verkeerd om: vorig jaar eindigde ze structureel op 5, deze
+  // weken start ze tussen 18 en 25. Met een vaste 30 telde elke dag als
+  // "batterij laag gestart" — juist in de periode waarin het beter gaat dan
+  // het ooit was. Dat is geen veiligheid maar blindheid voor vooruitgang.
+  //
+  // Nu telt het pas als signaal wanneer ze onder haar éígen basislijn zakt.
   const battStart = log?.battery_start;
-  const battLow = battStart != null && battStart <= 30;
+  const battBase = batteryBaseline(logs, currentDate);
+  const battLow = battStart != null && battBase.known
+    ? battStart < battBase.mean - battBase.band
+    // Zonder basislijn geen oordeel. Een ontbrekende referentie is geen
+    // reden om een lage waarde te veronderstellen.
+    : false;
+  const battBelowOwn = battLow;
   const stressHigh = log?.low_stress === 0 || log?.low_stress === false;
   const overwhelmed = !!log?.adhd_overwhelmed;
 
@@ -81,7 +123,8 @@ export function daySignals(log, logs, currentDate = todayLocal()) {
   return {
     sleepQ, sleepH, avgSleepH: avg([sleepH, yest.sleep_hours, d2.sleep_hours].filter(Boolean)),
     energy, recovToday, pemToday, pemYest, symptomCount,
-    battStart, battLow, stressHigh, overwhelmed,
+    battStart, battLow, battBelowOwn, battBaseline: battBase,
+    stressHigh, overwhelmed,
     delayedBad, recentTrainDays, zoneC2,
     dayCapacity: log?.day_capacity ?? null,
   };
@@ -135,7 +178,11 @@ function amberKind(decision, s) {
   if (s.symptomCount >= 1) fysiek.push('actieve klachten');
   if (s.delayedBad) fysiek.push('vertraagde respons op gisteren');
   if (s.recentTrainDays >= 3) fysiek.push('drie belastingsdagen in vier');
-  if (s.battLow) fysiek.push('batterij laag gestart');
+  if (s.battLow) {
+    fysiek.push(s.battBaseline?.known
+      ? `batterij ${s.battStart}% tegenover je eigen normaal van ${s.battBaseline.mean}%`
+      : 'batterij laag gestart');
+  }
 
   if (fysiek.length) {
     return { amberKind: AMBER_KIND.PHYSICAL, amberReasons: fysiek };

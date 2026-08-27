@@ -54,6 +54,18 @@ export const CLEAN_STREAK_FOR_BUILD = 3;
 // Dit is de asymmetrie: bescherming gaat er snel op en er langzaam af.
 export const RED_SHADOW_DAYS = 42;
 
+// Hoe recent moet een twijfelachtige respons zijn om déze week te bepalen?
+//
+// Het venster van vier weken hierboven is voor het beeld: hoe gaat het de
+// laatste tijd. Maar de limiter heet "wat beperkt je deze week", en één
+// tegenvallende sessie van drie weken terug hoort dat niet te zijn. Dat is
+// precies waar zij op stuitte: een goede week die als "vertraagd herstel"
+// werd gelabeld op grond van iets van 22 dagen geleden.
+//
+// Tien dagen: ruim genoeg voor het 24–48-uursvenster plus de sessie erna,
+// kort genoeg om "deze week" te blijven.
+export const RECENT_RESPONSE_DAYS = 10;
+
 const rond = (x, n = 1) => (x == null ? null : +Number(x).toFixed(n));
 
 // ── De sessies met hun respons ──────────────────────────────────
@@ -161,7 +173,11 @@ export function peseState({ logs = {}, currentDate = todayLocal() } = {}) {
 
   const beantwoord = sessies.filter(s => !['pending', 'unanswered'].includes(s.status));
   const rode = sessies.filter(s => s.status === 'red');
-  const slechte = sessies.filter(s => s.status === 'poor');
+  const alleSlechte = sessies.filter(s => s.status === 'poor');
+  // Alleen wat binnen het recente venster valt bepaalt deze week. Oudere
+  // slechte responsen blijven zichtbaar als historie, maar sturen niet.
+  const slechte = alleSlechte.filter(s => s.daysAgo <= RECENT_RESPONSE_DAYS);
+  const oudeSlechte = alleSlechte.filter(s => s.daysAgo > RECENT_RESPONSE_DAYS);
   const milde = sessies.filter(s => s.status === 'mild');
   const schone = sessies.filter(s => s.status === 'good');
   const onbeantwoord = sessies.filter(s => s.status === 'unanswered');
@@ -239,9 +255,12 @@ export function peseState({ logs = {}, currentDate = todayLocal() } = {}) {
     });
   }
   if (slechte.length) {
-    signalen.push(`${slechte.length} sessie(s) met duidelijke respons`);
+    signalen.push(`${slechte.length} sessie(s) met duidelijke respons in de afgelopen ${RECENT_RESPONSE_DAYS} dagen`);
     return uitkomst(PESE.ORANGE, 'redelijk', signalen, {
-      reason: `Twijfelachtige vertraagde respons: ${slechte[slechte.length - 1].response.reason}`,
+      // Niet nóg een kop voor de reden plakken: response.reason begint al
+      // met "Duidelijke post-exertionele respons: …". Twee koppen achter
+      // elkaar leest als een systeem dat zichzelf herhaalt.
+      reason: `${slechte[slechte.length - 1].response.reason} (${slechte[slechte.length - 1].date}, ${slechte[slechte.length - 1].daysAgo} dagen geleden)`,
       advice: 'Hold of herhaal. Bouw pas op als de volgende sessie schoon verdragen wordt.',
       sessies, functie, reeks,
     });
@@ -280,6 +299,10 @@ export function peseState({ logs = {}, currentDate = todayLocal() } = {}) {
   signalen.push(`${schone.length} van ${beantwoord.length} beantwoorde sessies goed verdragen`);
   if (zelfPem.any) {
     signalen.push(`laatste zelf gemelde PEM ${zelfPem.daysAgo} dagen geleden, buiten het verse venster`);
+  }
+  if (oudeSlechte.length) {
+    const laatste = oudeSlechte[oudeSlechte.length - 1];
+    signalen.push(`één eerdere tegenvallende respons op ${laatste.date} (${laatste.daysAgo} dagen geleden) — te lang geleden om deze week te sturen`);
   }
   if (functie.known) signalen.push(functie.note.toLowerCase());
   return uitkomst(PESE.GREEN, reeks >= CLEAN_STREAK_FOR_BUILD ? 'hoog' : 'redelijk', signalen, {
