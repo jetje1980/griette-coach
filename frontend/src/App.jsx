@@ -209,6 +209,7 @@ export default function App() {
           saveField={saveField}
           saveFields={saveFields}
           shiftDay={shiftDay}
+          setDate={setCurrentDate}
           isFuture={isFuture}
           goToTab={setTab}
         />

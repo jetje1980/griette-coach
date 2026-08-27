@@ -11,9 +11,26 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
   <title>Coach G · Griette</title>
+
+  <!-- Zonder manifest is dit een snelkoppeling naar een website; met
+       manifest is het een app met een eigen venster en een eigen scope.
+       Dat laatste is wat voorkomt dat je er onverwacht uit valt. -->
+  <link rel="manifest" href="/griette-coach/manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/griette-coach/icon-192.png" />
+  <link rel="apple-touch-icon" href="/griette-coach/icon-192.png" />
 </head>
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
+  <script>
+    // De worker registreren, en niet stilzwijgend falen. In de
+    // ontwikkelserver draait hij niet — daar is geen /griette-coach/ pad.
+    if ('serviceWorker' in navigator && location.pathname.startsWith('/griette-coach/')) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/griette-coach/sw.js', { scope: '/griette-coach/' })
+          .catch(function (e) { console.warn('service worker niet geregistreerd:', e.message); });
+      });
+    }
+  </script>
 </body>
 </html>

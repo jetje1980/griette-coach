@@ -379,6 +379,20 @@ export function fluctuationRanges({ asOf = todayLocal(), days = 180 } = {}) {
     // De bandbreedte is eenzijdig; wat je in de praktijk ziet is dal tot piek.
     const laag = rond(b.band, meta.decimals);
     const hoog = rond(b.band * 1.5, meta.decimals);
+
+    // "Je rusthartslag schommelt normaal ongeveer 0–0 bpm" — dat stond er
+    // werkelijk, bij een reeks die niet varieerde en een maat zonder
+    // decimalen. Een bereik dat na afronding op nul uitkomt is geen bereik;
+    // dan is de eerlijke uitspraak dat de waarde vrijwel constant is.
+    if (hoog === 0) {
+      uit[m] = {
+        known: true, label: meta.label, unit: meta.unit,
+        n: b.n, mean: b.mean, band: b.band, typicalRange: [0, 0], flat: true,
+        note: `Je ${meta.label} is over ${b.n} metingen vrijwel constant (rond ${b.mean}${meta.unit ? ' ' + meta.unit : ''}). Er is nog geen schommeling om een bandbreedte uit af te leiden.`,
+      };
+      continue;
+    }
+
     uit[m] = {
       known: true, label: meta.label, unit: meta.unit,
       n: b.n, mean: b.mean, band: b.band,

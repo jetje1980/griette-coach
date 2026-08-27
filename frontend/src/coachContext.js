@@ -247,7 +247,7 @@ function trainingContext(asOf) {
     sessionCount: sessies.length,
     last3: laatste3.map(s => ({
       date: s.date, distanceKm: s.distance ?? null, durationMin: s.duration ?? null,
-      avgHr: s.avg_hr ?? null, rpe: s.rpe ?? null,
+      avgHr: s.avg_hr ?? null, maxHr: s.max_hr ?? null, rpe: s.rpe ?? null,
       legs: s.legs ?? null, couldDoMore: s.could_do_more ?? null,
     })),
     runDays28: dagen,
@@ -576,7 +576,10 @@ export function contextAsText(ctx) {
   zeg('HARDLOPEN:');
   if (ctx.training.known) {
     for (const s of ctx.training.last3) {
-      zeg(`  ${s.date}: ${s.distanceKm ?? '?'} km · ${s.durationMin ?? '?'} min · HR ${s.avgHr ?? '?'} · RPE ${s.rpe ?? '?'}${s.legs ? ` · benen ${s.legs}` : ''}`);
+      // Max HR stond wel in de tijdlijn en niet in de prompt. Zonder die
+      // waarde kan de coach niet zien of een "rustige" sessie ergens toch
+      // door zone C is gegaan — en dat is precies wat je wilt weten.
+      zeg(`  ${s.date}: ${s.distanceKm ?? '?'} km · ${s.durationMin ?? '?'} min · HR ${s.avgHr ?? '?'}${s.maxHr != null ? ` (max ${s.maxHr})` : ''} · RPE ${s.rpe ?? '?'}${s.legs ? ` · benen ${s.legs}` : ''}`);
     }
     zeg(`  loopdagen laatste 4 weken: ${ctx.training.runDays28}`);
     zeg(`  overige belasting 4 weken: zwemmen ${ctx.training.swimMin28} min · fietsen ${ctx.training.bikeMin28} min`);
@@ -797,6 +800,14 @@ export function contextAsText(ctx) {
   }
   if (ctx.context.overrides.length) {
     zeg(`OVERRIDES (bewust tegen het advies in getraind): ${ctx.context.overrides.length} in 12 weken`);
+    zeg('');
+  }
+
+  // Hoeveel historie is er? Dit stond in de context maar niet in de tekst.
+  // Zonder dat getal weet de coach niet of "geen PEM in twaalf weken" op
+  // twaalf weken data steunt of op drie dagen.
+  if (ctx.history) {
+    zeg(`HISTORIE: ${ctx.history.note}`);
     zeg('');
   }
 

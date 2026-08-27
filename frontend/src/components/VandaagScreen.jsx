@@ -15,7 +15,7 @@ import CaptureCenter from './CaptureCenter';
 import { USER } from '../config';
 import { loadTasks } from '../tasks';
 import { loadExecutiveFocus } from './LevenScreen';
-import { todayLocal } from '../datetime';
+import { todayLocal, formatNLLong } from '../datetime';
 
 const NL_DAYS   = ['Zondag','Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag'];
 const NL_MONTHS = ['januari','februari','maart','april','mei','juni','juli','augustus',
@@ -482,7 +482,7 @@ function ShutdownProtocol({ currentDate }) {
 }
 
 // ── Hoofdcomponent ──────────────────────────────────────────────
-export default function VandaagScreen({ log, logs, currentDate, saveField, saveFields, shiftDay, isFuture, goToTab }) {
+export default function VandaagScreen({ log, logs, currentDate, saveField, saveFields, shiftDay, setDate, isFuture, goToTab }) {
   const [inboxCount, setInboxCount] = useState(0);
   const [openCheckIn, setOpenCheckIn] = useState(false);
   const checkInRef = useRef(null);
@@ -540,7 +540,8 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
           <div style={{ fontSize: 11, color: 'var(--ghost)' }}>{season.name}</div>
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-          <button className="os-nav-arrow" onClick={() => shiftDay(-1)}>‹</button>
+          <button className="os-nav-arrow" onClick={() => shiftDay(-1)}
+            title="Een dag terug" data-dag-terug>‹</button>
           {!isToday && (
             <button className="os-nav-arrow" style={{ width: 'auto', padding: '0 10px', fontSize: 11,
               color: 'var(--green)', borderColor: 'var(--green)' }}
@@ -549,6 +550,48 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
           <button className="os-nav-arrow" onClick={() => shiftDay(1)} disabled={currentDate >= maxFuture}>›</button>
         </div>
       </div>
+
+      {/* ── Een eerdere dag invullen ────────────────────────────
+          De pijltjes deden dit al, maar niemand raadt dat: twee kleine
+          driehoekjes naast een datum zien er uit als navigatie, niet als
+          "hier kun je gisteren alsnog invullen". Daarom staat het er nu
+          met zoveel woorden, met een datumkiezer die rechtstreeks springt.
+
+          En zodra je op een andere dag staat, hoort dat onmiskenbaar te
+          zijn — anders vul je per ongeluk gisteren in terwijl je denkt dat
+          het vandaag is. */}
+      {!isToday ? (
+        <div className="os-card" data-andere-dag
+          style={{ marginBottom: 10, borderLeft: '4px solid var(--gold)' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 2 }}>
+            Je vult {isFuture ? 'een toekomstige dag' : 'een eerdere dag'} in: {formatNLLong(currentDate)}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5 }}>
+            Alles wat je hier invult komt op deze datum te staan en telt meteen
+            mee in je trends en in de coachanalyse.
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8,
+            flexWrap: 'wrap' }}>
+            <input type="date" className="os-input" value={currentDate} max={maxFuture}
+              data-datumkiezer
+              onChange={e => e.target.value && setDate?.(e.target.value)}
+              style={{ width: 'auto', fontSize: 12 }} />
+            <button onClick={() => shiftDay(0)}
+              style={{ fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 6,
+                border: '1px solid var(--green)', background: 'var(--card)',
+                color: 'var(--green)', cursor: 'pointer' }}>
+              terug naar vandaag
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button data-eerdere-dag onClick={() => shiftDay(-1)}
+          style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none',
+            border: 'none', padding: '0 0 10px', cursor: 'pointer',
+            fontSize: 11.5, color: 'var(--muted)' }}>
+          ← Een eerdere dag alsnog invullen
+        </button>
+      )}
 
       {/* De herstelcheck staat boven het advies zolang hij open is: zonder
           die respons is elk advies een gok, en dat zegt de kaart eronder ook. */}
