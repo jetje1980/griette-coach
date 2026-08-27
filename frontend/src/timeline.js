@@ -394,38 +394,88 @@ export const FIELD_LABEL = {
 export function completeness({ asOf = todayLocal(), days = 14 } = {}) {
   const vanaf = addDays(asOf, -(days - 1));
   const heeft = (metric) => series(metric, { asOf, since: vanaf }).length;
-
-  const velden = {
-    weight: heeft('weight'),
-    sleep: heeft('sleep_hours') + heeft('sleep_quality'),
-    energy: heeft('energy'),
-    hr_rest: heeft('hr_rest'),
-    recovery: heeft('training_recovery') + heeft('recovery_check') + heeft('headache_severity'),
-    training: heeft('distance') + heeft('duration'),
-    strength: heeft('strength_volume'),
-    measurements: heeft('waist') + heeft('navel') + heeft('hip'),
-    photos: heeft('photo_observation') + heeft('photo_comparison'),
-    cycle: heeft('menstruation_start') + heeft('bloating') + heeft('hot_flashes'),
+  // Alles wat er ooit is, ongeacht wanneer. Dit is het verschil tussen
+  // "je hebt dit niet" en "je hebt dit al even niet ingevuld".
+  const ooit = (metric) => series(metric, { asOf }).length;
+  const laatste = (metric) => {
+    const s = series(metric, { asOf });
+    return s.length ? s[s.length - 1].observedAt : null;
   };
 
-  const ontbreekt = Object.entries(velden).filter(([, n]) => n === 0).map(([k]) => k);
+  const GROEPEN = {
+    weight: ['weight'],
+    sleep: ['sleep_hours', 'sleep_quality'],
+    energy: ['energy'],
+    hr_rest: ['hr_rest'],
+    recovery: ['training_recovery', 'recovery_check', 'headache_severity'],
+    training: ['distance', 'duration'],
+    strength: ['strength_volume'],
+    measurements: ['waist', 'navel', 'hip'],
+    photos: ['photo_observation', 'photo_comparison'],
+    // Cyclus is meer dan een menstruatiestart: de klachten die ermee
+    // meebewegen tellen net zo goed als cyclusdata. Met alleen
+    // menstruation_start telde een cyclus van 25 dagen na dag 14 als
+    // "geen cyclusgegevens", terwijl ze gewoon in de app staan.
+    cycle: ['menstruation_start', 'bloating', 'hot_flashes', 'night_sweats',
+      'puffiness', 'breast_tenderness', 'cravings', 'heavy_legs', 'mood'],
+  };
+
+  const velden = {};
+  const ooitAanwezig = {};
+  const laatsteDatum = {};
+  for (const [groep, metrics] of Object.entries(GROEPEN)) {
+    velden[groep] = metrics.reduce((n, m) => n + heeft(m), 0);
+    ooitAanwezig[groep] = metrics.reduce((n, m) => n + ooit(m), 0);
+    laatsteDatum[groep] = metrics
+      .map(m => laatste(m)).filter(Boolean).sort().pop() || null;
+  }
+
+  // ── Ontbreekt, of staat het er alleen al even niet bij? ───────
+  //
+  // Hier stond één lijst: alles wat in veertien dagen niet voorkwam heette
+  // "ontbrekend". Daardoor meldde de app rusthartslag en cyclusgegevens als
+  // ontbrekend terwijl ze allebei gewoon in de app staan — alleen ouder dan
+  // veertien dagen. Dat is een ander bericht, en het vraagt ook iets anders
+  // van de gebruiker.
+  const ontbreekt = Object.entries(velden)
+    .filter(([k, n]) => n === 0 && ooitAanwezig[k] === 0).map(([k]) => k);
+  const verouderd = Object.entries(velden)
+    .filter(([k, n]) => n === 0 && ooitAanwezig[k] > 0)
+    .map(([k]) => ({ field: k, label: FIELD_LABEL[k] || k, lastDate: laatsteDatum[k] }));
   // Wat er ontbreekt komt op het scherm terecht. `hr_rest` en `cycle` zijn
   // veldnamen uit de code, geen Nederlands — en een gebruiker die leest
   // "beperkt door: hr_rest, cycle" krijgt een foutmelding voorgeschoteld in
   // plaats van een uitleg.
   const missingLabels = ontbreekt.map(k => FIELD_LABEL[k] || k);
-  const dekking = Object.values(velden).filter(n => n > 0).length / Object.keys(velden).length;
+  // Voor de dekking telt een verouderde bron half mee: hij bestaat, maar hij
+  // is niet actueel. Nul zou onterecht hard zijn, één onterecht geruststellend.
+  const punten = Object.entries(velden)
+    .reduce((n, [k, v]) => n + (v > 0 ? 1 : ooitAanwezig[k] > 0 ? 0.5 : 0), 0);
+  const dekking = punten / Object.keys(velden).length;
+
+  const delen = [];
+  if (ontbreekt.length) {
+    delen.push(`Nog nooit ingevuld: ${missingLabels.join(', ')}.`);
+  }
+  if (verouderd.length) {
+    delen.push(`Wel aanwezig maar ouder dan ${days} dagen: ${verouderd
+      .map(v => `${v.label} (laatst ${v.lastDate})`).join(', ')}. Die tellen mee in de trends; ze zijn alleen niet actueel.`);
+  }
 
   return {
     window: { from: vanaf, to: asOf, days },
     counts: velden,
+    everCounts: ooitAanwezig,
+    lastDates: laatsteDatum,
     missing: ontbreekt,
     missingLabels,
+    // Apart, en met opzet niet in `missing`: dit mag nergens als "ontbreekt"
+    // op het scherm komen.
+    stale: verouderd,
     coverage: +dekking.toFixed(2),
-    // Waar de zekerheid door beperkt wordt — dit is wat §45 in woorden vraagt.
     confidence: dekking >= 0.8 ? 'hoog' : dekking >= 0.5 ? 'matig' : 'laag',
-    note: ontbreekt.length
-      ? `Ontbrekend in de laatste ${days} dagen: ${missingLabels.join(', ')}. Afwezigheid van data is geen groen signaal.`
+    note: delen.length
+      ? `${delen.join(' ')} Afwezigheid van data is geen groen signaal.`
       : `Alle hoofdbronnen aanwezig in de laatste ${days} dagen.`,
   };
 }

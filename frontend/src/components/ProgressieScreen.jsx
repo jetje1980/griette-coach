@@ -16,6 +16,7 @@ import MyChangePanel from './MyChangePanel';
 import BodyCheckIn from './BodyCheckIn';
 import WhyPanel from './WhyPanel';
 import BodyReviewPanel from './BodyReviewPanel';
+import PhotoSessions from './PhotoSessions';
 import ProgressieOverzicht from './ProgressieOverzicht';
 import { loadRaceGoals } from '../raceGoalModel';
 import { easyHrLine } from '../hrModel';
@@ -178,59 +179,15 @@ function EnergySparkline({ logs }) {
 }
 
 // ── Photo timeline ──────────────────────────────────────────────
-const PHOTO_TYPES = [
-  { key: 'voor', label: 'Voor' },
-  { key: 'zij',  label: 'Zij' },
-  { key: 'achter', label: 'Achter' },
-];
-
+// De fotoweergave staat nu in één component: PhotoSessions.
+//
+// Hier stond een eigen PhotoTimeline met een eigen PHOTO_TYPES van drie
+// aanzichten — zonder gezicht — en met de datum bóven een blok in plaats van
+// ernaast. Eén sessie besloeg daardoor meerdere regels en miste een kwart van
+// de foto's. Twee weergaves van hetzelfde ding lopen altijd uiteen; er is er
+// nu één.
 function PhotoTimeline({ sessions }) {
-  const [expandedDate, setExpandedDate] = useState(null);
-
-  if (!sessions.length) return (
-    <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13, lineHeight: 1.6 }}>
-      Nog geen progressiefoto's.<br />
-      <span style={{ fontSize: 11 }}>Maak foto's via Lichaam → Training.</span>
-    </div>
-  );
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {sessions.map(({ date, views }) => {
-        const isOpen = expandedDate === date;
-        const photoCount = PHOTO_TYPES.filter(({ key }) => views[key]).length;
-        const d = new Date(date + 'T12:00:00');
-        const label = d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
-        return (
-          <div key={date}>
-            <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.5px',
-              textTransform: 'uppercase', marginBottom: 6 }}>
-              {label}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5,
-              cursor: photoCount > 0 ? 'pointer' : 'default' }}
-              onClick={() => setExpandedDate(isOpen ? null : date)}>
-              {PHOTO_TYPES.map(({ key, label: pl }) => {
-                const photo = views[key];
-                return photo ? (
-                  <img key={key} src={`data:${photo.mimeType};base64,${photo.base64}`}
-                    alt={`${date} ${pl}`}
-                    style={{ width: '100%', borderRadius: 8, objectFit: 'cover',
-                      height: isOpen ? 140 : 80, transition: 'height 0.2s' }} />
-                ) : (
-                  <div key={key} style={{ height: isOpen ? 140 : 80, background: 'var(--bg)', borderRadius: 8,
-                    border: '1px dashed var(--border)', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', fontSize: 9, color: 'var(--border)' }}>
-                    {pl}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <PhotoSessions sessions={sessions} />;
 }
 
 // ═══════════════════════════════════════════════════════════════

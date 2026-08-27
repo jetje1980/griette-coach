@@ -185,6 +185,10 @@ export function bodyMetrics(measurements = [], logs = {}, currentDate = todayLoc
   };
 
   const waist = pick('waist');
+  // Navel ontbrak hier. Hij werd wél ingevoerd, wél opgeslagen en wél door
+  // de coach gelezen — maar hij kwam nergens in de resultaten terug, want
+  // deze functie kende hem niet. Dan meet je iets en zie je het nooit.
+  const navel = pick('navel');
   const hip = pick('hip');
   const bodyFat = pick('body_fat');
   const weight = weights.length ? {
@@ -197,8 +201,8 @@ export function bodyMetrics(measurements = [], logs = {}, currentDate = todayLoc
   const delta = (m) => m ? +(m.current.value - m.start.value).toFixed(1) : null;
 
   return {
-    waist, hip, weight, bodyFat,
-    waistDelta: delta(waist), hipDelta: delta(hip),
+    waist, navel, hip, weight, bodyFat,
+    waistDelta: delta(waist), navelDelta: delta(navel), hipDelta: delta(hip),
     weightDelta: delta(weight), bodyFatDelta: delta(bodyFat),
     // Vetpercentage alleen tonen bij minstens twee échte metingen
     bodyFatUsable: !!(bodyFat && bodyFat.count >= 2),
@@ -296,17 +300,31 @@ export function changeStory({ sessions = [], measurements = [], logs = {}, curre
   if (metrics.waist && metrics.waistDelta != null) {
     rows.push({ label: 'Taille', from: `${metrics.waist.start.value} cm`,
       to: `${metrics.waist.current.value} cm`, delta: metrics.waistDelta,
-      good: metrics.waistDelta < 0 });
+      fromDate: metrics.waist.start.date, toDate: metrics.waist.current.date,
+      count: metrics.waist.count, good: metrics.waistDelta < 0 });
+  }
+  if (metrics.navel) {
+    // Ook bij één meting tonen. "Nog geen ontwikkeling" is een uitkomst;
+    // helemaal niets tonen laat je denken dat je invoer verdwenen is.
+    rows.push({ label: 'Navel', from: `${metrics.navel.start.value} cm`,
+      to: `${metrics.navel.current.value} cm`,
+      delta: metrics.navel.count > 1 ? metrics.navelDelta : null,
+      fromDate: metrics.navel.start.date, toDate: metrics.navel.current.date,
+      count: metrics.navel.count,
+      single: metrics.navel.count === 1,
+      good: metrics.navelDelta != null && metrics.navelDelta < 0 });
   }
   if (metrics.hip && metrics.hipDelta != null) {
     rows.push({ label: 'Heup', from: `${metrics.hip.start.value} cm`,
       to: `${metrics.hip.current.value} cm`, delta: metrics.hipDelta,
-      good: metrics.hipDelta < 0 });
+      fromDate: metrics.hip.start.date, toDate: metrics.hip.current.date,
+      count: metrics.hip.count, good: metrics.hipDelta < 0 });
   }
   if (metrics.weight && metrics.weightDelta != null) {
     rows.push({ label: 'Gewicht', from: `${metrics.weight.start.value} kg`,
       to: `${metrics.weight.current.value} kg`, delta: metrics.weightDelta,
-      neutral: true });
+      fromDate: metrics.weight.start.date, toDate: metrics.weight.current.date,
+      count: metrics.weight.count, neutral: true });
   }
   if (metrics.bodyFatUsable) {
     rows.push({ label: 'Vetpercentage', from: `${metrics.bodyFat.start.value}%`,

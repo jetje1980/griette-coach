@@ -33,6 +33,7 @@ import { exertionalResponse, readSymptoms, RED_FLAG_IDS } from './symptoms';
 import { loadWorkouts } from './workouts';
 import { series, rollingMean } from './timeline';
 import { cyclePosition, phasePattern, PATTERN_CONFIDENCE, PHASE } from './cyclePatterns';
+import { pemSignals, PEM_WARNING_DAYS, HISTORY_DAYS, withinWarningWindow } from './pemWindow';
 
 // ── De drie niveaus (§23) ───────────────────────────────────────
 export const PESE = {
@@ -62,9 +63,10 @@ export const RED_SHADOW_DAYS = 42;
 // precies waar zij op stuitte: een goede week die als "vertraagd herstel"
 // werd gelabeld op grond van iets van 22 dagen geleden.
 //
-// Tien dagen: ruim genoeg voor het 24–48-uursvenster plus de sessie erna,
-// kort genoeg om "deze week" te blijven.
-export const RECENT_RESPONSE_DAYS = 10;
+// Dit getal woont niet meer hier. Er is één regel voor hoe ver een
+// waarschuwing terug mag kijken, en die staat in pemWindow.js — anders
+// heeft "deze week" per scherm een andere lengte.
+export const RECENT_RESPONSE_DAYS = PEM_WARNING_DAYS;
 
 const rond = (x, n = 1) => (x == null ? null : +Number(x).toFixed(n));
 
@@ -113,19 +115,27 @@ function actueleSignalen({ logs = {}, currentDate = todayLocal() } = {}) {
 // gc_workouts telde daardoor voor niets. Dat is precies verkeerd om — een
 // dag die zij als PEM markeert is de directste uitspraak die er is over haar
 // belastbaarheid, en of er een horloge aan te pas kwam doet daar niet aan af.
-export const PEM_REPORT_WINDOW = 14;
-export const PEM_FRESH_DAYS = 7;
+// Beide getallen stonden hier: veertien dagen om iets "gemeld" te noemen en
+// zeven om het "vers" te noemen. Dat eerste venster leidde tot een
+// waarschuwing op grond van een melding van bijna twee weken terug. Nu geldt
+// alleen het venster uit pemWindow.js; de rest is historie om te tonen.
+export const PEM_REPORT_WINDOW = PEM_WARNING_DAYS;
+export const PEM_FRESH_DAYS = PEM_WARNING_DAYS;
 
-export function selfReportedPem({ currentDate = todayLocal(),
-  days = PEM_REPORT_WINDOW } = {}) {
-  const rijen = series('symptom_pem', { asOf: currentDate, since: addDays(currentDate, -days) });
-  if (!rijen.length) return { any: false, count: 0, lastDate: null, daysAgo: null, fresh: false };
-  const laatste = rijen[rijen.length - 1].observedAt;
-  const geleden = daysBetween(laatste, currentDate);
+export function selfReportedPem({ currentDate = todayLocal() } = {}) {
+  const p = pemSignals({ asOf: currentDate });
   return {
-    any: true, count: rijen.length, lastDate: laatste, daysAgo: geleden,
-    fresh: geleden <= PEM_FRESH_DAYS,
-    dates: rijen.map(r => r.observedAt),
+    // `any` betekent nu: binnen het venster. Alles daarbuiten is historie en
+    // stuurt niets meer.
+    any: p.warning,
+    count: p.count,
+    lastDate: p.lastDate,
+    daysAgo: p.daysAgo,
+    fresh: p.warning,
+    dates: p.dates,
+    history: p.history,
+    windowDays: p.windowDays,
+    note: p.note,
   };
 }
 
@@ -171,18 +181,43 @@ export function peseState({ logs = {}, currentDate = todayLocal() } = {}) {
   const zelfPem = selfReportedPem({ currentDate });
   const signalen = [];
 
+  // Waarschuwen en bewijzen zijn twee verschillende dingen.
+  //
+  // De regel is: een wáárschuwing mag alleen steunen op vandaag plus zeven
+  // dagen. Maar positief bewijs is geen waarschuwing, en dat venster mag
+  // dus langer zijn — anders kan er nooit meer opgebouwd worden. Wie twee
+  // keer per week loopt, krijgt drie schone sessies simpelweg niet binnen
+  // zeven dagen. Dat was mijn eerste poging, en die maakte de coach
+  // permanent voorzichtig: precies de fout die dit project bestrijdt.
+  //
+  //   binnen 7 dagen  → mag oranje of rood veroorzaken
+  //   volledig venster → telt mee als bewijs dat het goed gaat
+  //
+  // Een oude tegenvallende sessie breekt dus wél de schone reeks (want hij
+  // wás niet schoon), maar veroorzaakt geen waarschuwing meer.
+  const recent = sessies.filter(s => withinWarningWindow(s.date, currentDate));
   const beantwoord = sessies.filter(s => !['pending', 'unanswered'].includes(s.status));
-  const rode = sessies.filter(s => s.status === 'red');
+  const alleRode = sessies.filter(s => s.status === 'red');
+  // Een rode respons binnen het venster stuurt; daarbuiten valt hij onder de
+  // schaduwregeling verderop, die wél langer meeweegt maar niet als acute
+  // waarschuwing.
+  const rode = alleRode.filter(s => withinWarningWindow(s.date, currentDate));
   const alleSlechte = sessies.filter(s => s.status === 'poor');
+  void alleSlechte;
   // Alleen wat binnen het recente venster valt bepaalt deze week. Oudere
   // slechte responsen blijven zichtbaar als historie, maar sturen niet.
-  const slechte = alleSlechte.filter(s => s.daysAgo <= RECENT_RESPONSE_DAYS);
-  const oudeSlechte = alleSlechte.filter(s => s.daysAgo > RECENT_RESPONSE_DAYS);
-  const milde = sessies.filter(s => s.status === 'mild');
+  const slechte = alleSlechte.filter(s => withinWarningWindow(s.date, currentDate));
+  const oudeSlechte = alleSlechte.filter(s => !withinWarningWindow(s.date, currentDate));
+  // Milde en onbeantwoorde sessies zijn zwakke waarschuwingen: alleen binnen
+  // het venster.
+  const milde = recent.filter(s => s.status === 'mild');
+  const onbeantwoord = recent.filter(s => s.status === 'unanswered');
+  // Schone sessies zijn bewijs, geen waarschuwing: volledig venster.
   const schone = sessies.filter(s => s.status === 'good');
-  const onbeantwoord = sessies.filter(s => s.status === 'unanswered');
 
-  // De schone reeks aan het eind: hoeveel sessies op rij zijn goed verdragen?
+  // De schone reeks aan het eind, over het volledige venster. Een sessie die
+  // niet schoon was breekt hem — ook als hij ouder is dan zeven dagen, want
+  // hij was nu eenmaal niet schoon.
   let reeks = 0;
   for (let i = sessies.length - 1; i >= 0; i--) {
     if (sessies[i].status === 'pending') continue;

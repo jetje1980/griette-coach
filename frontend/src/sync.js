@@ -204,6 +204,65 @@ async function pushPending() {
   }
 }
 
+// ── Eén sleutel nú wegschrijven, en eerlijk over de afloop ──────
+//
+// pushPending() is fire-and-forget met anderhalve seconde vertraging. Prima
+// voor achtergrondwerk, ongeschikt voor een opslaanknop: het scherm zei
+// "opgeslagen" terwijl de cloud nog niets had gezien, en bij een mislukking
+// bleef die melding gewoon staan.
+//
+// Deze functie wacht wél, en geeft terug wat er werkelijk gebeurde. Wie
+// hem aanroept mag pas daarna "opgeslagen" tonen.
+//
+//   { ok: true,  where: 'cloud' }    het staat online
+//   { ok: false, where: 'lokaal', reason }  lokaal bewaard, cloud mislukt
+//
+// In beide gevallen staat het lokaal: de invoer gaat nooit verloren.
+export async function saveKeyNow(key) {
+  if (!shouldSync(key)) return { ok: true, where: 'lokaal', reason: 'wordt niet gesynchroniseerd' };
+
+  const userId = await getUserId();
+  if (!userId) {
+    markPending(key);
+    setStatus('signed-out');
+    return { ok: false, where: 'lokaal', reason: 'niet ingelogd' };
+  }
+
+  const value = localStorage.getItem(key);
+  try {
+    if (value === null) {
+      const { error } = await supabase.from(TABLE)
+        .delete().eq('user_id', userId).eq('key', key);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from(TABLE)
+        .upsert([{ user_id: userId, key, value, updated_at: new Date().toISOString() }],
+          { onConflict: 'user_id,key' });
+      if (error) throw error;
+    }
+    // Geland: uit de wachtrij halen zodat een latere push hem niet nogmaals
+    // probeert.
+    const p = loadPending(); p.delete(key); savePending(p);
+    setStatus(p.size ? 'pending' : 'ok');
+    return { ok: true, where: 'cloud' };
+  } catch (e) {
+    // In de wachtrij houden: bij de volgende verbinding gaat hij alsnog mee.
+    markPending(key);
+    setStatus(navigator.onLine === false ? 'offline' : 'error');
+    return { ok: false, where: 'lokaal',
+      reason: navigator.onLine === false ? 'geen verbinding' : (e?.message || 'onbekende fout') };
+  }
+}
+
+// Meerdere sleutels tegelijk, met één samengevat antwoord.
+export async function saveKeysNow(keys) {
+  const uit = await Promise.all([...new Set(keys)].map(k => saveKeyNow(k)));
+  const mislukt = uit.filter(r => !r.ok);
+  return mislukt.length
+    ? { ok: false, where: 'lokaal', reason: mislukt[0].reason, failed: mislukt.length }
+    : { ok: true, where: 'cloud' };
+}
+
 // ── Vanuit de cloud hydrateren ──────────────────────────────────
 // Cloud wint bij het opstarten, behalve voor sleutels die nog in de
 // wachtrij staan — die zijn lokaal nieuwer en gaan juist omhoog.

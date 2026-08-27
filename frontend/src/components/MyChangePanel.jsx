@@ -5,6 +5,7 @@ import {
   PHOTO_VIEWS, PHOTO_INSTRUCTIONS, VISUAL_OBSERVATIONS,
   checkpoints, comparisonSet, changeStory, loadObservations, saveObservation,
 } from '../bodyProgress';
+import PhotoSessions from './PhotoSessions';
 import { todayLocal, formatNLLong, daysBetween } from '../datetime';
 
 // "Mijn verandering" — de eerste en belangrijkste ervaring onder Progressie.
@@ -31,65 +32,16 @@ function Label({ children, right }) {
   );
 }
 
-// ── De vergelijking zelf ────────────────────────────────────────
-// Per aanzicht een rij met start, eventueel vorige, en nu. Naast elkaar
-// zodat het verschil zichtbaar wordt zonder dat er iets geïnterpreteerd
-// hoeft te worden.
-function PhotoCompare({ comp, onOpen }) {
-  const columns = [
-    comp.start && { key: 'start', label: 'Start', session: comp.start },
-    comp.previous && { key: 'prev', label: 'Vorige', session: comp.previous },
-    comp.current && !comp.sameSeries && { key: 'now', label: 'Nu', session: comp.current },
-  ].filter(Boolean);
-
-  if (comp.sameSeries && columns.length === 1) {
-    columns[0].label = 'Start';
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {PHOTO_VIEWS.map(view => {
-        const any = columns.some(c => c.session.views?.[view.key]);
-        if (!any) return null;
-        return (
-          <div key={view.key}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ghost)',
-              textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>
-              {view.label}
-            </div>
-            <div style={{ display: 'grid',
-              gridTemplateColumns: `repeat(${columns.length}, 1fr)`, gap: 6 }}>
-              {columns.map(c => {
-                const photo = c.session.views?.[view.key];
-                return (
-                  <div key={c.key}>
-                    <div style={{ fontSize: 9.5, color: 'var(--ghost)', marginBottom: 3,
-                      display: 'flex', justifyContent: 'space-between', gap: 4 }}>
-                      <span style={{ fontWeight: 700 }}>{c.label}</span>
-                      <span>{c.session.date.slice(5)}</span>
-                    </div>
-                    {photo ? (
-                      <img src={src(photo)} alt={`${view.label} ${c.label}`}
-                        onClick={() => onOpen?.({ photo, label: `${view.label} — ${c.label}` })}
-                        style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover',
-                          borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in',
-                          display: 'block' }} />
-                    ) : (
-                      <div style={{ width: '100%', aspectRatio: '3/4', borderRadius: 8,
-                        border: '1px dashed var(--border)', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center',
-                        fontSize: 10, color: 'var(--ghost)' }}>ontbreekt</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// ── Alle fotomomenten, één per rij ──────────────────────────────
+//
+// Hier stond PhotoCompare: drie kolommen — start, vorige, nu — met de
+// aanzichten eronder. Dat had twee problemen tegelijk. Je las één moment
+// verticaal in plaats van horizontaal, en er pasten per definitie maar drie
+// momenten in: niet omdat er niet meer waren, maar omdat de weergave er maar
+// drie kende.
+//
+// Nu: elke sessie een rij, nieuwste boven, met alle vier de aanzichten
+// inclusief gezicht. Alle sessies zijn bereikbaar.
 
 // ── De tijdlijn met ijkpunten ───────────────────────────────────
 function CheckpointTimeline({ cps, onShoot }) {
@@ -350,21 +302,23 @@ export default function MyChangePanel({
           onSaved={onReload} onClose={() => setShootDate(null)} />
       )}
 
-      {/* De vergelijking */}
-      <Label>Start · vorige · nu</Label>
+      {/* Alle fotomomenten, nieuwste boven */}
+      <Label right={
+        <button onClick={() => setShootDate(currentDate)}
+          style={{ background: 'none', border: 'none', color: 'var(--sage)',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+          + foto
+        </button>
+      }>Alle fotomomenten</Label>
       <div className="os-card" style={{ marginBottom: 12 }}>
-        {!comp.available ? (
-          <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.6 }}>
-            Nog geen foto's. Eén serie van voor, zij en achter is genoeg om te beginnen —
-            over vier weken heb je er iets aan.
+        <PhotoSessions sessions={sessions} onOpen={setZoom}
+          onShoot={(datum) => setShootDate(datum)}
+          lege={<>Nog geen foto&apos;s. Eén serie van voor, zij, achter en gezicht is
+            genoeg om te beginnen — over vier weken heb je er iets aan.</>} />
+        {comp.available && comp.note && (
+          <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 8 }}>
+            {comp.note}
           </div>
-        ) : (
-          <>
-            <PhotoCompare comp={comp} onOpen={setZoom} />
-            <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 8 }}>
-              {comp.note || `${comp.spanLabel} tussen je eerste en laatste serie · ${comp.count} series in totaal.`}
-            </div>
-          </>
         )}
       </div>
 
@@ -374,18 +328,31 @@ export default function MyChangePanel({
           <Label>Wat er meetbaar veranderd is</Label>
           <div className="os-card" style={{ marginBottom: 12 }}>
             {story.rows.map((r, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8,
-                padding: '7px 0', borderBottom: i < story.rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                <div style={{ fontSize: 12, color: 'var(--sub)', flex: 1, minWidth: 0 }}>{r.label}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                  color: r.neutral ? 'var(--text)' : r.good ? 'var(--sage)' : 'var(--rust)' }}>
-                  {r.from} → {r.to}
-                  {r.delta != null && !r.text && (
-                    <span style={{ fontSize: 11, marginLeft: 5, fontWeight: 600 }}>
-                      ({r.delta > 0 ? '+' : ''}{r.delta}{r.pct ? '%' : ''})
-                    </span>
-                  )}
+              <div key={i} data-resultaat={r.label}
+                style={{ padding: '7px 0',
+                  borderBottom: i < story.rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <div style={{ fontSize: 12, color: 'var(--sub)', flex: 1, minWidth: 0 }}>{r.label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                    color: r.neutral ? 'var(--text)' : r.good ? 'var(--sage)' : 'var(--rust)' }}>
+                    {r.single ? r.to : `${r.from} → ${r.to}`}
+                    {r.delta != null && !r.text && (
+                      <span style={{ fontSize: 11, marginLeft: 5, fontWeight: 600 }}>
+                        ({r.delta > 0 ? '+' : ''}{r.delta}{r.pct ? '%' : ''})
+                      </span>
+                    )}
+                  </div>
                 </div>
+                {/* De datums erbij: zonder die twee getallen weet je niet of
+                    "−1,5 cm" over drie weken of over drie maanden gaat. */}
+                {(r.fromDate || r.toDate) && (
+                  <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 2,
+                    textAlign: 'right' }}>
+                    {r.single
+                      ? `gemeten ${r.toDate} — nog geen tweede meting om mee te vergelijken`
+                      : `${r.fromDate} → ${r.toDate}${r.count ? ` · ${r.count} metingen` : ''}`}
+                  </div>
+                )}
               </div>
             ))}
             <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 8 }}>

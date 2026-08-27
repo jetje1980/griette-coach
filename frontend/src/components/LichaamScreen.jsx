@@ -18,7 +18,7 @@ import CycleHistory from './CycleHistory';
 import { workoutOn, loadWorkouts, computePace } from '../workouts';
 import { strava } from '../integrations';
 import { store } from '../store';
-import { todayLocal, startOfWeek } from '../datetime';
+import { todayLocal, startOfWeek, formatNLLong } from '../datetime';
 import { weekTrainingRows, nextOfferDate, STATUS_META } from '../trainingDay';
 import { ingestStravaWorkouts } from '../stravaIngest';
 import ExerciseTechnique from './ExerciseTechnique';
@@ -761,6 +761,8 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   const [weight, setWeight] = useState('');
   const [bpSys, setBpSys] = useState('');
   const [bpDia, setBpDia] = useState('');
+  const [hrRest, setHrRest] = useState('');
+  const [savingHr, setSavingHr] = useState(false);
   const [battStart, setBattStart] = useState('');
   const [battEnd, setBattEnd] = useState('');
   const [flash, setFlash] = useState('');
@@ -776,6 +778,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     setWeight(log?.weight    ? String(log.weight)         : '');
     setBpSys (log?.bp_sys    ? String(log.bp_sys)         : '');
     setBpDia (log?.bp_dia    ? String(log.bp_dia)         : '');
+    setHrRest(log?.hr_rest != null ? String(log.hr_rest) : '');
     setBattStart(log?.battery_start != null ? String(log.battery_start) : '');
     setBattEnd  (log?.battery_end   != null ? String(log.battery_end)   : '');
     setMatenDate(currentDate);
@@ -812,15 +815,49 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   const trainedToday = log?.run_done || log?.core_done;
   const medsChecked = MEDS.filter(m => log?.[m.id]).length;
 
-  function flashMsg(msg) { setFlash(msg); setTimeout(() => setFlash(''), 2400); }
+  // Een foutmelding moet langer blijven staan dan een bevestiging: je moet
+  // hem kunnen lezen én kunnen beslissen wat je doet.
+  function flashMsg(msg, ms = 2400) { setFlash(msg); setTimeout(() => setFlash(''), ms); }
+
+  // Eén plek die bepaalt wát er gemeld mag worden.
+  //
+  // Hiervoor riep elke opslagknop saveField() aan en zette meteen
+  // "opgeslagen" op het scherm — zonder te wachten en zonder te kijken. Bij
+  // een mislukte cloudsave bleef die melding gewoon staan. Nu komt de
+  // uitkomst mee terug en zegt de melding wat er werkelijk gebeurde.
+  async function bevestig(belofte, wat) {
+    try {
+      const r = await belofte;
+      const cloud = r?._cloud || r?.cloud;
+      if (cloud && cloud.ok === false) {
+        flashMsg(`⚠ ${wat} staat op dit toestel, maar niet online (${cloud.reason}). Je invoer is niet kwijt; hij gaat mee zodra er verbinding is.`, 7000);
+        return { ok: false, cloud };
+      }
+      flashMsg(`${wat} opgeslagen${cloud?.where === 'cloud' ? ' en online bewaard' : ''}`);
+      return { ok: true, cloud };
+    } catch (e) {
+      flashMsg(`⚠ ${wat} kon niet worden opgeslagen: ${e?.message || 'onbekende fout'}. Je invoer staat nog in het veld.`, 7000);
+      return { ok: false, error: e };
+    }
+  }
 
   function saveWeight()  {
     const v = parseFloat(weight);
-    if (!isNaN(v) && v > 30 && v < 200) { saveField('weight', v); flashMsg('Gewicht opgeslagen'); }
+    if (!isNaN(v) && v > 30 && v < 200) bevestig(saveField('weight', v), 'Gewicht');
   }
   function saveBP() {
     const s = parseInt(bpSys), d = parseInt(bpDia);
-    if (!isNaN(s) && !isNaN(d)) { saveFields({ bp_sys: s, bp_dia: d }); flashMsg('Bloeddruk opgeslagen'); }
+    if (!isNaN(s) && !isNaN(d)) bevestig(saveFields({ bp_sys: s, bp_dia: d }), 'Bloeddruk');
+  }
+  async function saveHrRest() {
+    const v = parseInt(hrRest, 10);
+    if (isNaN(v) || v < 25 || v > 140) {
+      flashMsg('⚠ Een rusthartslag tussen 25 en 140 bpm graag.', 5000);
+      return;
+    }
+    setSavingHr(true);
+    try { await bevestig(saveField('hr_rest', v), 'Rusthartslag'); }
+    finally { setSavingHr(false); }
   }
   function saveBattery() {
     const f = {};
@@ -866,16 +903,35 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
       if (Number.isFinite(n)) vals[f.key] = n;
     }
     if (!Object.keys(vals).length) return;
+    const datum = matenDate || currentDate;
     setSavingMaten(true);
     try {
-      await store.saveMeasurements(matenDate || currentDate, vals);
+      const r = await store.saveMeasurements(datum, vals);
       const updated = await store.getMeasurements();
       setMeasurements(updated);
+
+      // Wat er precies gebeurde, met de datum erbij. "Meting opgeslagen"
+      // zonder datum is precies de melding waarbij je later niet meer weet
+      // of hij op de goede dag is beland.
+      const naam = (k) => MAAT_FIELDS.find(f => f.key === k)?.label.toLowerCase() || k;
+      const delen = [];
+      if (r.toegevoegd?.length) delen.push(`toegevoegd: ${r.toegevoegd.map(naam).join(', ')}`);
+      if (r.gewijzigd?.length) {
+        delen.push(`gewijzigd: ${r.gewijzigd.map(g => `${naam(g.veld)} ${g.van} → ${g.naar}`).join(', ')}`);
+      }
+      if (r.behouden?.length) delen.push(`ongewijzigd bewaard: ${r.behouden.map(naam).join(', ')}`);
+
+      if (r.cloud && r.cloud.ok === false) {
+        flashMsg(`⚠ Meting voor ${formatNLLong(datum)} staat op dit toestel, maar niet online (${r.cloud.reason}). Je invoer is niet kwijt.`, 8000);
+      } else {
+        flashMsg(`Meting voor ${formatNLLong(datum)} opgeslagen — ${delen.join(' · ')}`, 6000);
+      }
       setMaten({ ...MAAT_LEEG });
-      // Zeggen wát er is opgeslagen. Een kale bevestiging verbergt precies
-      // het geval waarin er iets niet is meegegaan.
-      flashMsg(`Opgeslagen: ${Object.keys(vals)
-        .map(k => MAAT_FIELDS.find(f => f.key === k).label.toLowerCase()).join(', ')}`);
+      // Terug naar de dag waar de invoer bij hoort, zodat je hem daar ziet
+      // staan in plaats van hem op goed vertrouwen te moeten aannemen.
+      setMatenDate(datum);
+    } catch (e) {
+      flashMsg(`⚠ Meting voor ${formatNLLong(datum)} kon niet worden opgeslagen: ${e?.message || 'onbekende fout'}. Je invoer staat nog in de velden.`, 8000);
     } finally { setSavingMaten(false); }
   }
 
@@ -960,6 +1016,29 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
               value={weight} onChange={e => setWeight(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && saveWeight()} />
             <button className="os-btn-save" onClick={saveWeight}>Sla op</button>
+          </div>
+
+          {/* Rusthartslag.
+              Dit veld werd overal gelezen — in de tijdlijn, de limiter, de
+              cycluspatronen, de coachprompt — en nergens geschreven. Er was
+              simpelweg geen invoerveld, dus meldde de app hem eeuwig als
+              ontbrekend. */}
+          <SectionLabel style={{ marginTop: 0 }}>Rusthartslag</SectionLabel>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+            <input className="os-input-num" type="number" inputMode="numeric"
+              data-veld="hr_rest"
+              placeholder={log?.hr_rest ? String(log.hr_rest) : 'bijv. 47'}
+              value={hrRest} onChange={e => setHrRest(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveHrRest()} />
+            <span style={{ fontSize: 12, color: 'var(--ghost)' }}>bpm</span>
+            <button className="os-btn-save" onClick={saveHrRest} disabled={savingHr}>
+              {savingHr ? '…' : 'Sla op'}
+            </button>
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5,
+            marginBottom: 14 }}>
+            Je laagste hartslag van vannacht, of direct na het wakker worden vóór
+            je opstaat. Hij telt mee in je herstelbeeld en in je cycluspatronen.
           </div>
 
           <SectionLabel style={{ marginTop: 0 }}>Bloeddruk</SectionLabel>
@@ -1646,15 +1725,64 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     }
     const nieuwsteDatum = measurements[0]?.date;
 
+    // Wat staat er al voor de gekozen dag? Dat hoort zichtbaar te zijn
+    // vóórdat je opslaat, niet erna: dan weet je of je aanvult of wijzigt.
+    const bestaandOpDatum = measurements.find(m => m.date === matenDate) || null;
+    const gaatWijzigen = MAAT_FIELDS.filter(f =>
+      maten[f.key] !== '' && bestaandOpDatum?.[f.key] != null &&
+      Number(bestaandOpDatum[f.key]) !== Number(maten[f.key]));
+    const blijftStaan = bestaandOpDatum
+      ? MAAT_FIELDS.filter(f => bestaandOpDatum[f.key] != null && maten[f.key] === '')
+      : [];
+
     return (
       <div>
         <SectionLabel style={{ marginTop: 0 }}>Nieuwe meting (cm)</SectionLabel>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700 }}>Datum</span>
-          <input type="date" className="os-input" value={matenDate}
-            onChange={e => setMatenDate(e.target.value)} style={{ flex: 1 }} />
-          {matenDate !== currentDate && (
-            <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 600 }}>historisch</span>
+
+        {/* Voor welke dag vul je in? Dit stond er als een kaal datumveld met
+            het woordje "historisch" ernaast. Nu staat de dag voluit, want je
+            moet het kunnen lezen zonder na te denken. */}
+        <div className="os-card" data-maten-datumkop
+          style={{ marginBottom: 10,
+            borderLeft: `4px solid ${matenDate === currentDate ? 'var(--sage)' : 'var(--gold)'}` }}>
+          <div style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--font-serif)' }}>
+            Meting voor {formatNLLong(matenDate)}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5, marginTop: 2 }}>
+            {matenDate === currentDate
+              ? 'Vandaag. Kies hieronder een andere datum om een eerdere dag alsnog in te vullen.'
+              : 'Een eerdere dag. Wat je invult komt op deze datum te staan en telt meteen mee in je trends.'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <input type="date" className="os-input" value={matenDate} max={currentDate}
+              data-maten-datum
+              onChange={e => e.target.value && setMatenDate(e.target.value)}
+              style={{ flex: 1 }} />
+            {matenDate !== currentDate && (
+              <button onClick={() => setMatenDate(currentDate)}
+                style={{ fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 6,
+                  border: '1px solid var(--green)', background: 'var(--card)',
+                  color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                naar vandaag
+              </button>
+            )}
+          </div>
+
+          {/* Niets stilzwijgend overschrijven: wat er al staat, staat er. */}
+          {bestaandOpDatum && (
+            <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.55, marginTop: 8,
+              paddingTop: 8, borderTop: '1px solid var(--border)' }} data-maten-bestaand>
+              Op deze dag staat al: {MAAT_FIELDS.filter(f => bestaandOpDatum[f.key] != null)
+                .map(f => `${f.label.toLowerCase()} ${bestaandOpDatum[f.key]}`).join(', ')}.
+              {blijftStaan.length > 0 && ' Wat je leeg laat blijft staan.'}
+              {gaatWijzigen.length > 0 && (
+                <span style={{ display: 'block', color: 'var(--rust)', fontWeight: 700,
+                  marginTop: 4 }} data-maten-wijziging>
+                  Je wijzigt: {gaatWijzigen.map(f =>
+                    `${f.label.toLowerCase()} ${bestaandOpDatum[f.key]} → ${maten[f.key]}`).join(', ')}.
+                </span>
+              )}
+            </div>
           )}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>

@@ -133,16 +133,23 @@ export default function App() {
     loadLogs();
   }, [currentDate, loadLog, loadLogs]);
 
-  const saveField = useCallback(async (field, value) => {
-    const updated = await store.saveLog(currentDate, { [field]: value });
-    setLog(updated);
+  // Het resultaat gaat terug naar de aanroeper, inclusief `_cloud`.
+  //
+  // Zonder dat kan een scherm niet weten of de cloudsave lukte, en dus ook
+  // niet eerlijk melden dat er iets bewaard is. Alles staat hoe dan ook
+  // lokaal; wat er op het scherm mag komen hangt af van `_cloud.ok`.
+  const saveField = useCallback(async (field, value, date = null) => {
+    const updated = await store.saveLog(date || currentDate, { [field]: value });
+    if (!date || date === currentDate) setLog(updated);
     loadLogs();
+    return updated;
   }, [currentDate, loadLogs]);
 
-  const saveFields = useCallback(async (fields) => {
-    const updated = await store.saveLog(currentDate, fields);
-    setLog(updated);
+  const saveFields = useCallback(async (fields, date = null) => {
+    const updated = await store.saveLog(date || currentDate, fields);
+    if (!date || date === currentDate) setLog(updated);
     loadLogs();
+    return updated;
   }, [currentDate, loadLogs]);
 
   const deleteLog = useCallback(async () => {

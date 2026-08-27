@@ -1,5 +1,6 @@
 // Unified storage: localStorage always, backend optional (Mac only)
 import { supabase as _sb, getUserId } from './supabase';
+import { saveKeyNow } from './sync';
 
 const P = 'gc_';
 
@@ -26,10 +27,57 @@ const ls = {
   getMeasurements() {
     try { return JSON.parse(localStorage.getItem(`${P}measurements`)) || []; } catch { return []; }
   },
+  // Samenvoegen, niet vervangen.
+  //
+  // Hier stond: de rij van die datum eruit filteren en er een nieuwe voor in
+  // de plaats zetten met alleen de zojuist ingevulde velden. Wie 's ochtends
+  // navel invulde en 's middags taille, was zijn navel kwijt — zonder
+  // melding, zonder spoor. saveLog() hierboven deed het al goed; alleen
+  // metingen niet.
+  //
+  // Wat er teruggegeven wordt is niet alleen "gelukt" maar ook wát er
+  // veranderde. Het scherm kan dat tonen, en de audit hieronder bewaart het
+  // zodat een verdwenen waarde terug te vinden is.
   saveMeasurements(date, data) {
-    const existing = this.getMeasurements().filter(m => m.date !== date);
-    localStorage.setItem(`${P}measurements`, JSON.stringify([{ date, ...data }, ...existing]));
-    return { success: true };
+    const alle = this.getMeasurements();
+    const bestaand = alle.find(m => m.date === date) || null;
+    const rest = alle.filter(m => m.date !== date);
+
+    const schoon = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (v === '' || v === null || v === undefined) continue;
+      schoon[k] = v;
+    }
+
+    const samengevoegd = { ...(bestaand || {}), ...schoon, date };
+    const nieuw = [samengevoegd, ...rest].sort((a, b) => b.date.localeCompare(a.date));
+    localStorage.setItem(`${P}measurements`, JSON.stringify(nieuw));
+
+    // Wat is er precies gebeurd? Toegevoegd, gewijzigd, of ongemoeid gelaten.
+    const toegevoegd = [], gewijzigd = [], behouden = [];
+    for (const k of Object.keys(schoon)) {
+      if (!bestaand || bestaand[k] == null) toegevoegd.push(k);
+      else if (Number(bestaand[k]) !== Number(schoon[k])) {
+        gewijzigd.push({ veld: k, van: bestaand[k], naar: schoon[k] });
+      }
+    }
+    for (const k of Object.keys(bestaand || {})) {
+      if (k !== 'date' && !(k in schoon)) behouden.push(k);
+    }
+
+    ls.logMeasurementChange({ date, toegevoegd, gewijzigd, behouden, resultaat: samengevoegd });
+    return { success: true, record: samengevoegd, toegevoegd, gewijzigd, behouden };
+  },
+
+  // Het spoor. Zonder dit is een verdwenen waarde niet terug te vinden en
+  // ook niet te bewijzen; met dit is het allebei.
+  logMeasurementChange(entry) {
+    try {
+      const key = `${P}measurement_log`;
+      const arr = JSON.parse(localStorage.getItem(key) || '[]');
+      arr.unshift({ ...entry, at: new Date().toISOString() });
+      localStorage.setItem(key, JSON.stringify(arr.slice(0, 200)));
+    } catch { /* het spoor mag de opslag nooit blokkeren */ }
   },
 };
 
@@ -60,13 +108,23 @@ export const store = {
     return ls.getLog(date);
   },
 
+  // Opslaan en wachten tot het écht online staat.
+  //
+  // Hiervoor werd er lokaal geschreven, een optionele backend geprobeerd, en
+  // teruggegeven. De cloudsync liep intussen op de achtergrond met anderhalve
+  // seconde vertraging — dus "opgeslagen" verscheen voordat er ook maar iets
+  // was verstuurd, en bij een fout bleef die melding staan.
+  //
+  // Nu komt de uitkomst van de cloud mee terug. Lokaal is het hoe dan ook
+  // bewaard; wat het scherm mag zeggen hangt af van `cloud.ok`.
   async saveLog(date, data) {
     const local = ls.saveLog(date, data);
     localStorage.setItem('gc_last_data_change', new Date().toISOString());
     await tryApi(() =>
       fetch(`/api/log/${date}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
     );
-    return local;
+    const cloud = await saveKeyNow(`gc_log_${date}`);
+    return { ...local, _cloud: cloud };
   },
 
   async deleteLog(date) {
@@ -97,18 +155,32 @@ export const store = {
   },
 
   async deleteMeasurement(date) {
+    const verwijderd = ls.getMeasurements().find(m => m.date === date) || null;
     const arr = ls.getMeasurements().filter(m => m.date !== date);
     localStorage.setItem(`${P}measurements`, JSON.stringify(arr));
     localStorage.setItem('gc_last_data_change', new Date().toISOString());
-    return { success: true };
+    // Ook een verwijdering hoort in het spoor: dan is achteraf te zien wat
+    // er weg is en wat erin stond.
+    ls.logMeasurementChange({ date, verwijderd, toegevoegd: [], gewijzigd: [], behouden: [] });
+    const cloud = await saveKeyNow('gc_measurements');
+    return { success: true, cloud, verwijderd };
+  },
+
+  // Het spoor uitlezen — voor het scherm, en om een verdwenen waarde terug
+  // te vinden.
+  measurementLog() {
+    try { return JSON.parse(localStorage.getItem(`${P}measurement_log`) || '[]'); }
+    catch { return []; }
   },
 
   async saveMeasurements(date, data) {
-    ls.saveMeasurements(date, data);
+    const uitkomst = ls.saveMeasurements(date, data);
+    localStorage.setItem('gc_last_data_change', new Date().toISOString());
     await tryApi(() =>
       fetch(`/api/measurements/${date}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
     );
-    return { success: true };
+    const cloud = await saveKeyNow('gc_measurements');
+    return { ...uitkomst, cloud };
   },
 
   async backup() {

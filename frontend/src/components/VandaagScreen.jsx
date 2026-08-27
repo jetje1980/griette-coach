@@ -13,7 +13,15 @@ import { fmtPace } from '../workouts';
 import RecoveryCheck from './RecoveryCheck';
 import CaptureCenter from './CaptureCenter';
 import { USER } from '../config';
-import { loadTasks } from '../tasks';
+// getDayActions ontbrak hier.
+//
+// DagPlanning riep hem aan, hij was nooit geïmporteerd, en dus wierp het
+// scherm "getDayActions is not defined" zodra je de lade "Mijn dag plannen"
+// opende. React haalt dan de hele boom weg: je ziet een leeg scherm, en op
+// een telefoon voelt dat als uit de app gegooid worden.
+//
+// Het viel niet op omdat geen enkele test die lade ooit opende.
+import { loadTasks, getDayActions } from '../tasks';
 import { loadExecutiveFocus } from './LevenScreen';
 import { todayLocal, formatNLLong } from '../datetime';
 
@@ -52,6 +60,9 @@ function saveTransitions(date, items) {
 }
 function getDayPlan(date) {
   try { return JSON.parse(localStorage.getItem(`gc_day_plan_${date}`) || '{}'); } catch { return {}; }
+}
+function saveDayPlan(date, obj) {
+  localStorage.setItem(`gc_day_plan_${date}`, JSON.stringify(obj));
 }
 
 const DAY_CAP = [
@@ -282,11 +293,12 @@ function DagPlanning({ currentDate, log, nextSession, goToTab }) {
   if (!rows.length) {
     return (
       <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.5 }}>
-        Nog niets gepland vandaag.{' '}
+        Nog niets gepland vandaag — zet hierboven je training, kracht of
+        beschermde blokken.{' '}
         <button onClick={() => goToTab?.(1)}
           style={{ background: 'none', border: 'none', color: 'var(--sage)', cursor: 'pointer',
             fontWeight: 600, fontSize: 13, padding: 0 }}>
-          Plan je week →
+          Of plan je hele week →
         </button>
       </div>
     );
@@ -307,6 +319,138 @@ function DagPlanning({ currentDate, log, nextSession, goToTab }) {
           {r.note && <span style={{ fontSize: 11, color: 'var(--ghost)' }}>{r.note}</span>}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Je dag plannen, binnen de app ───────────────────────────────
+//
+// "Mijn dag plannen" liet zien wát er gepland stond en bood daarnaast één
+// uitweg: "Plan je week →", die naar het weekscherm sprong. Wie iets wilde
+// plannen moest de app dus verlaten om terug te komen — en via de agenda-
+// taken kon je zomaar in Google Calendar belanden.
+//
+// Dit is het scherm dat er hoorde te zijn: training, kracht, herstel en
+// beschermde blokken voor déze dag, hier in te stellen. De agenda blijft
+// bestaan, maar alleen achter een knop die zegt dat hij de agenda opent.
+function PlanEditor({ currentDate, onClose, onSaved }) {
+  const [plan, setPlan] = useState(() => getDayPlan(currentDate));
+  const [bewaard, setBewaard] = useState(false);
+
+  useEffect(() => { setPlan(getDayPlan(currentDate)); setBewaard(false); }, [currentDate]);
+
+  function zet(veld, waarde) {
+    setPlan(p => ({ ...p, [veld]: p[veld] === waarde ? null : waarde }));
+    setBewaard(false);
+  }
+  function wissel(veld, waarde) {
+    setPlan(p => {
+      const lijst = new Set(p[veld] || []);
+      if (lijst.has(waarde)) lijst.delete(waarde); else lijst.add(waarde);
+      return { ...p, [veld]: [...lijst] };
+    });
+    setBewaard(false);
+  }
+  function bewaar() {
+    saveDayPlan(currentDate, plan);
+    setBewaard(true);
+    onSaved?.(plan);
+  }
+
+  const Rij = ({ label, children }) => (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
+        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5 }}>{label}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{children}</div>
+    </div>
+  );
+  const Chip = ({ actief, onClick, children, kleur }) => (
+    <button type="button" onClick={onClick}
+      style={{ fontSize: 11.5, fontWeight: 700, padding: '6px 10px', borderRadius: 99,
+        border: `1px solid ${actief ? (kleur || 'var(--sage)') : 'var(--border)'}`,
+        background: actief ? (kleur || 'var(--sage)') : 'var(--card)',
+        color: actief ? '#fff' : 'var(--text)', cursor: 'pointer' }}>
+      {children}
+    </button>
+  );
+
+  // De agendaknop bouwt een gewone Google Calendar-link. Hij staat apart,
+  // hij zegt wat hij doet, en hij is het enige dat de app verlaat.
+  const agendaUrl = (() => {
+    const t = TRAIN_LABELS[plan.training];
+    const titel = t ? `${t.slice(2)} — Coach G` : 'Coach G — dagplanning';
+    const d = currentDate.replace(/-/g, '');
+    const p = new URLSearchParams({
+      action: 'TEMPLATE', text: titel, dates: `${d}/${d}`,
+      details: 'Gepland in Coach G.',
+    });
+    return `https://calendar.google.com/calendar/render?${p}`;
+  })();
+
+  return (
+    <div className="os-card" data-plan-editor style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--font-serif)', flex: 1 }}>
+          {formatNLLong(currentDate)} plannen
+        </div>
+        {onClose && (
+          <button onClick={onClose} style={{ background: 'none', border: 'none',
+            color: 'var(--ghost)', fontSize: 16, cursor: 'pointer', padding: 0 }}>✕</button>
+        )}
+      </div>
+
+      <Rij label="Training">
+        {['run', 'walk', 'swim', 'bike', 'core', 'rest', 'free'].map(k => (
+          <Chip key={k} actief={plan.training === k} onClick={() => zet('training', k)}>
+            {TRAIN_LABELS[k]}
+          </Chip>
+        ))}
+      </Rij>
+
+      <Rij label="Kracht">
+        {[['snack', 'Strength snack'], ['30', 'Kracht 30'], ['45', 'Kracht 45']].map(([k, l]) => (
+          <Chip key={k} actief={plan.kracht === k} onClick={() => zet('kracht', k)}>{l}</Chip>
+        ))}
+      </Rij>
+
+      <Rij label="Beschermde blokken — niet vullen">
+        {Object.entries(FREE_BLOCK_LABELS).map(([k, l]) => (
+          <Chip key={k} kleur="var(--green)" actief={(plan.freeBlocks || []).includes(k)}
+            onClick={() => wissel('freeBlocks', k)}>{l}</Chip>
+        ))}
+      </Rij>
+
+      <Rij label="Werkblokken">
+        {Object.entries(FREE_BLOCK_LABELS).map(([k, l]) => (
+          <Chip key={k} kleur="var(--gold)" actief={(plan.workBlocks || []).includes(k)}
+            onClick={() => wissel('workBlocks', k)}>{l}</Chip>
+        ))}
+      </Rij>
+
+      <Rij label="Herstel">
+        <Chip actief={!!plan.recovery} onClick={() => setPlan(p => ({ ...p, recovery: !p.recovery }))}>
+          🌊 Herstelmoment inplannen
+        </Chip>
+      </Rij>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+        marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+        <button className="btn-primary" data-plan-bewaar onClick={bewaar}
+          style={{ fontSize: 13 }}>Plan bewaren</button>
+        {bewaard && (
+          <span style={{ fontSize: 11.5, color: 'var(--sage)', fontWeight: 700 }}
+            data-plan-bevestiging>
+            Plan voor {formatNLLong(currentDate)} bewaard
+          </span>
+        )}
+      </div>
+
+      {/* De enige knop die de app verlaat, en hij zegt het erbij. */}
+      <a href={agendaUrl} target="_blank" rel="noopener noreferrer" data-agenda-knop
+        style={{ display: 'inline-block', marginTop: 10, fontSize: 11,
+          color: 'var(--muted)', textDecoration: 'underline' }}>
+        Toevoegen aan Google Agenda ↗
+      </a>
     </div>
   );
 }
@@ -382,13 +526,64 @@ const KLACHT_CHIPS = [
   { id: 'symptom_pain',       label: 'Pijn' },
 ];
 
-function CompactCheckIn({ log, saveField, goToTab }) {
+function CompactCheckIn({ log, saveField, goToTab, currentDate }) {
   const [weight, setWeight] = useState('');
-  useEffect(() => { setWeight(log?.weight ? String(log.weight) : ''); }, [log]);
+  const [hr, setHr] = useState('');
+  const [melding, setMelding] = useState(null);
+  const [bezig, setBezig] = useState(null);
+
+  // De bestaande waarde van déze dag staat in het veld — niet als vraag maar
+  // als wat er al is.
+  useEffect(() => {
+    setWeight(log?.weight != null ? String(log.weight) : '');
+    setHr(log?.hr_rest != null ? String(log.hr_rest) : '');
+  }, [log]);
+
+  // De bevestiging verdwijnt alleen bij het wisselen van dag.
+  //
+  // Hij hing eerst aan `log`, en dat is precies de waarde die door het
+  // opslaan verandert: de melding werd gewist door de save die hem net had
+  // gezet. Je zag dus nooit of het gelukt was — het scherm knipperde en was
+  // weer leeg.
+  useEffect(() => { setMelding(null); }, [currentDate]);
+
+  // Eén plek die meldt wat er werkelijk gebeurde, mét de datum. Zonder die
+  // datum weet je bij een historische invoer niet of hij goed geland is.
+  async function bewaar(veld, waarde, naam) {
+    setBezig(veld);
+    try {
+      const r = await saveField(veld, waarde);
+      const cloud = r?._cloud;
+      const dag = formatNLLong(currentDate || todayStr());
+      if (cloud && cloud.ok === false) {
+        setMelding({ fout: true,
+          tekst: `⚠ ${naam} voor ${dag} staat op dit toestel, maar niet online (${cloud.reason}). Je invoer is niet kwijt.` });
+      } else {
+        setMelding({ fout: false, tekst: `${naam} voor ${dag} opgeslagen${cloud?.where === 'cloud' ? ' en online bewaard' : ''}` });
+      }
+    } catch (e) {
+      setMelding({ fout: true,
+        tekst: `⚠ ${naam} kon niet worden opgeslagen: ${e?.message || 'onbekende fout'}. Je invoer staat nog in het veld.` });
+    } finally { setBezig(null); }
+  }
 
   function saveWeight() {
     const v = parseFloat(weight);
-    if (!isNaN(v) && v > 30 && v < 200) saveField('weight', v);
+    if (!isNaN(v) && v > 30 && v < 200) bewaar('weight', v, 'Gewicht');
+  }
+
+  // ── Rusthartslag ─────────────────────────────────────────────
+  // Dit veld bestond nergens in de app. Het werd wel door de tijdlijn, de
+  // limiter, de cycluspatronen en de coachprompt gelezen, en dus altijd als
+  // ontbrekend gemeld. Het hoort hier: bij de ochtendcheck, aan dezelfde
+  // datum, en niet weggestopt in een meetmenu.
+  function saveHr() {
+    const v = parseInt(hr, 10);
+    if (isNaN(v) || v < 25 || v > 140) {
+      setMelding({ fout: true, tekst: '⚠ Een rusthartslag tussen 25 en 140 bpm graag.' });
+      return;
+    }
+    bewaar('hr_rest', v, 'Rusthartslag');
   }
 
   const Row = ({ label, value, opts, field }) => (
@@ -437,6 +632,35 @@ function CompactCheckIn({ log, saveField, goToTab }) {
         <button className="os-btn-save" onClick={saveWeight} style={{ padding: '7px 12px' }}>Sla op</button>
       </div>
 
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.5px',
+            textTransform: 'uppercase' }}>Rusthartslag</span>
+          <input className="os-input-num" type="number" inputMode="numeric"
+            data-veld="hr_rest"
+            placeholder={log?.hr_rest != null ? String(log.hr_rest) : 'bpm'}
+            value={hr} onChange={e => setHr(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && saveHr()} style={{ width: 78 }} />
+          <button className="os-btn-save" onClick={saveHr} disabled={bezig === 'hr_rest'}
+            data-opslaan="hr_rest"
+            style={{ padding: '7px 12px' }}>{bezig === 'hr_rest' ? '…' : 'Sla op'}</button>
+          <span style={{ fontSize: 11, color: 'var(--ghost)' }}>bpm</span>
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 4 }}>
+          Vanochtend, vóór het opstaan. Telt mee in je herstelbeeld en je
+          cycluspatronen.
+        </div>
+      </div>
+
+      {melding && (
+        <div data-checkin-melding
+          style={{ fontSize: 11.5, lineHeight: 1.5, marginBottom: 12, padding: '7px 9px',
+            borderRadius: 6, border: `1px solid ${melding.fout ? 'var(--rust)' : 'var(--sage)'}`,
+            color: melding.fout ? 'var(--rust)' : 'var(--sage)' }}>
+          {melding.tekst}
+        </div>
+      )}
+
       <button className="os-toggle-chip" onClick={() => goToTab?.(2)}
         style={{ fontSize: 13, width: '100%', padding: '9px 0' }}>
         Meer registreren → Lichaam
@@ -484,6 +708,8 @@ function ShutdownProtocol({ currentDate }) {
 // ── Hoofdcomponent ──────────────────────────────────────────────
 export default function VandaagScreen({ log, logs, currentDate, saveField, saveFields, shiftDay, setDate, isFuture, goToTab }) {
   const [inboxCount, setInboxCount] = useState(0);
+  // Zodat het overzicht eronder meteen laat zien wat je net hebt ingesteld.
+  const [planVersie, setPlanVersie] = useState(0);
   const [openCheckIn, setOpenCheckIn] = useState(false);
   const checkInRef = useRef(null);
 
@@ -633,7 +859,11 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
 
       {!isFuture && (
         <ExpandSection label="Mijn dag plannen">
-          <DagPlanning currentDate={currentDate} log={log} nextSession={nextSession} goToTab={goToTab} />
+          {/* Plannen gebeurt hier, niet in het weekscherm en niet in Google
+              Agenda. Wat er al staat komt eronder. */}
+          <PlanEditor currentDate={currentDate} onSaved={() => setPlanVersie(v => v + 1)} />
+          <DagPlanning key={planVersie} currentDate={currentDate} log={log}
+            nextSession={nextSession} goToTab={goToTab} />
           <Top3 currentDate={currentDate} />
           {transitionsRelevant && <Transitions currentDate={currentDate} />}
         </ExpandSection>
@@ -644,7 +874,8 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
       {!isFuture && (hasData ? (
         <ExpandSection label="Check-in bijwerken" initialOpen={openCheckIn}>
           <div ref={checkInRef} />
-          <CompactCheckIn log={log} saveField={saveField} goToTab={goToTab} />
+          <CompactCheckIn log={log} saveField={saveField} goToTab={goToTab}
+            currentDate={currentDate} />
           <div className="os-section-label">Type dag</div>
           <div className="os-scale-btns" style={{ marginBottom: 16 }}>
             {DAY_CAP.map(opt => (
@@ -676,7 +907,8 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
         <>
           <div className="os-section-label" ref={checkInRef}>Check-in</div>
           <div className="os-card">
-            <CompactCheckIn log={log} saveField={saveField} goToTab={goToTab} />
+            <CompactCheckIn log={log} saveField={saveField} goToTab={goToTab}
+            currentDate={currentDate} />
           </div>
         </>
       ))}
