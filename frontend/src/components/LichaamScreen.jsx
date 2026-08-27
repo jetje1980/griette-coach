@@ -98,6 +98,33 @@ const READINESS_MAP = {
 // met de metingen (gewicht, bloeddruk, maten) — één plek per functie.
 const SUBTABS = ['Training', 'Herstel', 'Body', 'Cyclus', 'Voeding', 'Medicatie'];
 
+// De maten, op één plek.
+//
+// Deze lijst stond binnen het formulier, en saveMaten() had daarnaast een
+// eigen handgeschreven rijtje velden. Die twee liepen uit elkaar: navel
+// stond wél in het formulier, in de geschiedenistabel en in de tijdlijn,
+// maar niet in de opslagfunctie. Je kon hem dus invullen, op "Maten
+// opslaan" drukken, een bevestiging krijgen — en het getal was weg.
+//
+// Eén lijst, door beide gebruikt. Een veld toevoegen betekent nu ook dat
+// het opgeslagen wordt; vergeten kan niet meer.
+const MAAT_FIELDS = [
+  { key: 'waist', label: 'Taille',
+    hint: 'Smalste punt tussen ribben en heup. Ontspannen, na normale uitademing, buik niet intrekken.' },
+  { key: 'navel', label: 'Navel',
+    hint: 'Horizontaal exact over de navel. Zelfde condities: ontspannen, na uitademing.' },
+  { key: 'hip',   label: 'Heup',
+    hint: 'Breedste punt over de billen.' },
+  { key: 'chest', label: 'Borst',
+    hint: 'Over het volste punt, armen ontspannen langs je lichaam.' },
+  { key: 'arm',   label: 'Arm',
+    hint: 'Midden bovenarm, ontspannen.' },
+  { key: 'thigh', label: 'Dij',
+    hint: 'Breedste punt van de bovenbeen, staand met gewicht op beide benen.' },
+];
+
+const MAAT_LEEG = Object.fromEntries(MAAT_FIELDS.map(f => [f.key, '']));
+
 // ── Helpers ──────────────────────────────────────────────────────
 function getNextRunNr(logs) {
   const done = Object.values(logs || {})
@@ -738,7 +765,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   const [battEnd, setBattEnd] = useState('');
   const [flash, setFlash] = useState('');
   const [measurements, setMeasurements] = useState([]);
-  const [maten, setMaten] = useState({ waist: '', navel: '', hip: '', chest: '', arm: '', thigh: '' });
+  const [maten, setMaten] = useState({ ...MAAT_LEEG });
   const [matenDate, setMatenDate] = useState(currentDate);
   const [savingMaten, setSavingMaten] = useState(false);
   const [stravaStatus, setStravaStatus] = useState(null);
@@ -828,20 +855,27 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   }
 
   async function saveMaten() {
+    // Uit MAAT_FIELDS, niet uit een handgeschreven rijtje. Dat rijtje miste
+    // navel, en dat is precies het soort fout dat je niet ziet: het scherm
+    // zegt "Maten opgeslagen" en één getal verdwijnt.
     const vals = {};
-    if (maten.waist)  vals.waist  = parseFloat(maten.waist);
-    if (maten.hip)    vals.hip    = parseFloat(maten.hip);
-    if (maten.chest)  vals.chest  = parseFloat(maten.chest);
-    if (maten.arm)    vals.arm    = parseFloat(maten.arm);
-    if (maten.thigh)  vals.thigh  = parseFloat(maten.thigh);
+    for (const f of MAAT_FIELDS) {
+      const v = maten[f.key];
+      if (v === '' || v == null) continue;
+      const n = parseFloat(v);
+      if (Number.isFinite(n)) vals[f.key] = n;
+    }
     if (!Object.keys(vals).length) return;
     setSavingMaten(true);
     try {
       await store.saveMeasurements(matenDate || currentDate, vals);
       const updated = await store.getMeasurements();
       setMeasurements(updated);
-      setMaten({ waist: '', navel: '', hip: '', chest: '', arm: '', thigh: '' });
-      flashMsg('Maten opgeslagen');
+      setMaten({ ...MAAT_LEEG });
+      // Zeggen wát er is opgeslagen. Een kale bevestiging verbergt precies
+      // het geval waarin er iets niet is meegegaan.
+      flashMsg(`Opgeslagen: ${Object.keys(vals)
+        .map(k => MAAT_FIELDS.find(f => f.key === k).label.toLowerCase()).join(', ')}`);
     } finally { setSavingMaten(false); }
   }
 
@@ -1591,20 +1625,6 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     // meer te achterhalen of dat het smalste punt was of de omtrek over de
     // navel. Die onzekerheid reist mee in de tijdlijn in plaats van dat er een
     // aanname van wordt gemaakt.
-    const MAAT_FIELDS = [
-      { key: 'waist', label: 'Taille',
-        hint: 'Smalste punt tussen ribben en heup. Ontspannen, na normale uitademing, buik niet intrekken.' },
-      { key: 'navel', label: 'Navel',
-        hint: 'Horizontaal exact over de navel. Zelfde condities: ontspannen, na uitademing.' },
-      { key: 'hip',   label: 'Heup',
-        hint: 'Breedste punt over de billen.' },
-      { key: 'chest', label: 'Borst',
-        hint: 'Over het volste punt, armen ontspannen langs je lichaam.' },
-      { key: 'arm',   label: 'Arm',
-        hint: 'Midden bovenarm, ontspannen.' },
-      { key: 'thigh', label: 'Dij',
-        hint: 'Breedste punt van de bovenbeen, staand met gewicht op beide benen.' },
-    ];
     // De vorige waarde per veld, niet per meting.
     //
     // Hier stond `measurements[0]` — alleen de nieuwste rij. Wie vorige week
