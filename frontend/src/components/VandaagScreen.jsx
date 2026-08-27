@@ -526,9 +526,93 @@ const KLACHT_CHIPS = [
   { id: 'symptom_pain',       label: 'Pijn' },
 ];
 
+// ── Rusthartslag ───────────────────────────────────────────────────
+//
+// Dit veld zat in de check-in, en dat leek genoeg. Het was het niet.
+//
+// De check-in staat namelijk alleen open zolang je die dag nog niets hebt
+// ingevuld. Zij vult elke ochtend slaap en energie in, dus vanaf de eerste
+// tik klapte het hele blok dicht tot "Check-in bijwerken" — en daarmee ook
+// de rusthartslag. Niet verstopt achter een muisklik: werkelijk niet in de
+// pagina aanwezig. Ze kon hem dus niet vinden omdat hij er niet stond.
+//
+// Een ochtendmeting hoort niet achter een uitklapper. Hij staat nu boven-
+// aan Vandaag, altijd, op de dag die je hebt gekozen. Eén veld op het hele
+// scherm, want twee velden met elk hun eigen invoer lopen uiteen zodra je
+// in de ene typt en op de andere opslaat.
+function Rusthartslag({ log, saveField, currentDate }) {
+  const [hr, setHr] = useState('');
+  const [melding, setMelding] = useState(null);
+  const [bezig, setBezig] = useState(false);
+
+  // Wat er al staat, staat er als waarde — niet als vraag.
+  useEffect(() => { setHr(log?.hr_rest != null ? String(log.hr_rest) : ''); }, [log]);
+  useEffect(() => { setMelding(null); }, [currentDate]);
+
+  const dag = formatNLLong(currentDate || todayStr());
+  const isVandaag = (currentDate || todayStr()) === todayStr();
+  const bestaat = log?.hr_rest != null;
+
+  async function bewaar() {
+    const v = parseInt(hr, 10);
+    if (isNaN(v) || v < 25 || v > 140) {
+      setMelding({ fout: true, tekst: '⚠ Een rusthartslag tussen 25 en 140 bpm graag.' });
+      return;
+    }
+    setBezig(true);
+    try {
+      const r = await saveField('hr_rest', v);
+      const cloud = r?._cloud;
+      if (cloud && cloud.ok === false) {
+        setMelding({ fout: true,
+          tekst: `⚠ ${v} bpm voor ${dag} staat op dit toestel, maar niet online (${cloud.reason}). Je invoer is niet kwijt.` });
+      } else {
+        setMelding({ fout: false,
+          tekst: `${v} bpm opgeslagen voor ${dag}${cloud?.where === 'cloud' ? ' en online bewaard' : ''}` });
+      }
+    } catch (e) {
+      setMelding({ fout: true,
+        tekst: `⚠ Kon niet opslaan: ${e?.message || 'onbekende fout'}. Je invoer staat nog in het veld.` });
+    } finally { setBezig(false); }
+  }
+
+  return (
+    <div className="os-card" data-rusthartslag
+      style={{ marginBottom: 10, borderLeft: `4px solid ${bestaat ? 'var(--sage)' : 'var(--border)'}` }}>
+      <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 6 }}>
+        Rusthartslag {isVandaag ? 'vanochtend' : `op ${dag}`} (bpm)
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input className="os-input-num" type="number" inputMode="numeric"
+          data-veld="hr_rest" aria-label="Rusthartslag in bpm"
+          placeholder="bpm" value={hr} onChange={e => setHr(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && bewaar()} style={{ width: 84 }} />
+        <button className="os-btn-save" onClick={bewaar} disabled={bezig}
+          data-opslaan="hr_rest" style={{ padding: '7px 12px' }}>
+          {bezig ? '…' : 'Sla op'}
+        </button>
+        <span style={{ fontSize: 11, color: 'var(--ghost)' }}>
+          {bestaat ? `staat nu op ${log.hr_rest} bpm` : 'nog niets voor deze dag'}
+        </span>
+      </div>
+      <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 6 }}>
+        Gemeten vóór het opstaan. Telt mee in je herstelbeeld, je PEM-signalen
+        en je cycluspatronen. Een eerdere dag vul je in met de pijltjes hierboven.
+      </div>
+      {melding && (
+        <div data-hr-melding
+          style={{ fontSize: 11.5, lineHeight: 1.5, marginTop: 8, padding: '7px 9px',
+            borderRadius: 6, border: `1px solid ${melding.fout ? 'var(--rust)' : 'var(--sage)'}`,
+            color: melding.fout ? 'var(--rust)' : 'var(--sage)' }}>
+          {melding.tekst}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CompactCheckIn({ log, saveField, goToTab, currentDate }) {
   const [weight, setWeight] = useState('');
-  const [hr, setHr] = useState('');
   const [melding, setMelding] = useState(null);
   const [bezig, setBezig] = useState(null);
 
@@ -536,7 +620,6 @@ function CompactCheckIn({ log, saveField, goToTab, currentDate }) {
   // als wat er al is.
   useEffect(() => {
     setWeight(log?.weight != null ? String(log.weight) : '');
-    setHr(log?.hr_rest != null ? String(log.hr_rest) : '');
   }, [log]);
 
   // De bevestiging verdwijnt alleen bij het wisselen van dag.
@@ -572,19 +655,8 @@ function CompactCheckIn({ log, saveField, goToTab, currentDate }) {
     if (!isNaN(v) && v > 30 && v < 200) bewaar('weight', v, 'Gewicht');
   }
 
-  // ── Rusthartslag ─────────────────────────────────────────────
-  // Dit veld bestond nergens in de app. Het werd wel door de tijdlijn, de
-  // limiter, de cycluspatronen en de coachprompt gelezen, en dus altijd als
-  // ontbrekend gemeld. Het hoort hier: bij de ochtendcheck, aan dezelfde
-  // datum, en niet weggestopt in een meetmenu.
-  function saveHr() {
-    const v = parseInt(hr, 10);
-    if (isNaN(v) || v < 25 || v > 140) {
-      setMelding({ fout: true, tekst: '⚠ Een rusthartslag tussen 25 en 140 bpm graag.' });
-      return;
-    }
-    bewaar('hr_rest', v, 'Rusthartslag');
-  }
+  // De rusthartslag stond hier ook. Hij staat nu bovenaan het scherm, buiten
+  // deze uitklapper, omdat die dichtklapt zodra je iets hebt ingevuld.
 
   const Row = ({ label, value, opts, field }) => (
     <div style={{ marginBottom: 12 }}>
@@ -630,26 +702,6 @@ function CompactCheckIn({ log, saveField, goToTab, currentDate }) {
           value={weight} onChange={e => setWeight(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && saveWeight()} style={{ width: 78 }} />
         <button className="os-btn-save" onClick={saveWeight} style={{ padding: '7px 12px' }}>Sla op</button>
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700, letterSpacing: '0.5px',
-            textTransform: 'uppercase' }}>Rusthartslag</span>
-          <input className="os-input-num" type="number" inputMode="numeric"
-            data-veld="hr_rest"
-            placeholder={log?.hr_rest != null ? String(log.hr_rest) : 'bpm'}
-            value={hr} onChange={e => setHr(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && saveHr()} style={{ width: 78 }} />
-          <button className="os-btn-save" onClick={saveHr} disabled={bezig === 'hr_rest'}
-            data-opslaan="hr_rest"
-            style={{ padding: '7px 12px' }}>{bezig === 'hr_rest' ? '…' : 'Sla op'}</button>
-          <span style={{ fontSize: 11, color: 'var(--ghost)' }}>bpm</span>
-        </div>
-        <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 4 }}>
-          Vanochtend, vóór het opstaan. Telt mee in je herstelbeeld en je
-          cycluspatronen.
-        </div>
       </div>
 
       {melding && (
@@ -817,6 +869,12 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
             fontSize: 11.5, color: 'var(--muted)' }}>
           ← Een eerdere dag alsnog invullen
         </button>
+      )}
+
+      {/* De ochtendmeting staat vóór het advies, want het advies rekent
+          ermee. En buiten elke uitklapper, want die klapt dicht. */}
+      {!isFuture && (
+        <Rusthartslag log={log} saveField={saveField} currentDate={currentDate} />
       )}
 
       {/* De herstelcheck staat boven het advies zolang hij open is: zonder
