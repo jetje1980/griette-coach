@@ -756,7 +756,7 @@ function RunRoadmap({ logs, currentDate, nextSession }) {
 }
 
 // ── Main component ───────────────────────────────────────────────
-export default function LichaamScreen({ log, logs, currentDate, saveField, saveFields, deleteLog, showFlash, isFuture }) {
+export default function LichaamScreen({ log, logs, currentDate, setDate, saveField, saveFields, deleteLog, showFlash, isFuture }) {
   const [subTab, setSubTab] = useState(0);
   const [weight, setWeight] = useState('');
   const [bpSys, setBpSys] = useState('');
@@ -770,6 +770,7 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
   const [maten, setMaten] = useState({ ...MAAT_LEEG });
   const [matenDate, setMatenDate] = useState(currentDate);
   const [savingMaten, setSavingMaten] = useState(false);
+  const todayStr = todayLocal();
   const [stravaStatus, setStravaStatus] = useState(null);
   const [stravaActivities, setStravaActivities] = useState([]);
   const [syncing, setSyncing] = useState(false);
@@ -973,10 +974,66 @@ export default function LichaamScreen({ log, logs, currentDate, saveField, saveF
     );
   }
 
+  // ── Voor welke dag vul je dit in? ────────────────────────────
+  //
+  // De maten hadden een eigen datumkiezer; alles daarboven — energie,
+  // herstel, slaap, motivatie, gewicht, rusthartslag, bloeddruk, body
+  // battery, notitie — had er geen, en zei ook nergens op welke datum het
+  // terechtkwam. Het schreef stilzwijgend naar de dag die op Vandaag was
+  // ingesteld.
+  //
+  // Dat is twee problemen in één. Je kon hier geen eerdere dag invullen
+  // zonder eerst naar Vandaag te lopen en daar de pijltjes te gebruiken —
+  // wat niemand raadt. En als de datum daar ooit was teruggezet, vulde je
+  // hier een oude dag in terwijl het scherm vandaag leek.
+  //
+  // Eén kop bovenaan lost allebei op: hij zegt voor welke dag je invult,
+  // laat je die dag hier kiezen, en is onmiskenbaar als het niet vandaag is.
+  function DagDatumKop() {
+    const isVandaag = currentDate === todayStr;
+    const gevuld = log ? Object.keys(log).filter(k => k !== 'date').length : 0;
+    return (
+      <div className="os-card" data-dag-datumkop
+        style={{ borderLeft: `4px solid ${isVandaag ? 'var(--sage)' : 'var(--gold)'}` }}>
+        <div style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--font-serif)' }}
+          data-dag-datum>
+          {isVandaag ? 'Vandaag' : 'Een eerdere dag'} — {formatNLLong(currentDate)}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5, marginTop: 2 }}>
+          Alles hieronder — slaap, energie, gewicht, rusthartslag, bloeddruk,
+          body battery, notitie — komt op deze datum te staan en telt meteen
+          mee in je trends en in de coachanalyse.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <input type="date" className="os-input" value={currentDate} max={todayStr}
+            data-dag-datumkiezer
+            onChange={e => e.target.value && setDate?.(e.target.value)}
+            style={{ flex: 1 }} />
+          {!isVandaag && (
+            <button onClick={() => setDate?.(todayStr)} data-dag-naar-vandaag
+              style={{ fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 6,
+                border: '1px solid var(--green)', background: 'var(--card)',
+                color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              naar vandaag
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--sub)', marginTop: 8, paddingTop: 8,
+          borderTop: '1px solid var(--border)' }} data-dag-bestaand>
+          {gevuld
+            ? `Op deze dag staat al ${gevuld} ${gevuld === 1 ? 'gegeven' : 'gegevens'} ingevuld. Wat je leeg laat blijft staan.`
+            : 'Voor deze dag staat nog niets ingevuld.'}
+        </div>
+      </div>
+    );
+  }
+
   function TabCheckInDetail() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {flash && <div style={{ fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>{flash}</div>}
+
+        <DagDatumKop />
 
         <div>
           <SectionLabel style={{ marginTop: 0 }}>Energie</SectionLabel>

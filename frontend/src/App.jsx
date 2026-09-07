@@ -227,6 +227,7 @@ export default function App() {
           log={log}
           logs={logs}
           currentDate={currentDate}
+          setDate={setCurrentDate}
           saveField={saveField}
           saveFields={saveFields}
           deleteLog={deleteLog}
