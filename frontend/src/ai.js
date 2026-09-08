@@ -143,11 +143,63 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
 
   const pemDays = recent.filter(l => l.symptom_pem).map(l => l.date);
 
-  const habitNames = ['water', 'protein', 'no_sugar', 'no_salt', 'bed_on_time', 'low_stress'];
-  const habitPct = habitNames.map(h => {
-    const score = recent.filter(l => l[h]).length;
-    return `${h}: ${Math.round((score / Math.max(1, recent.length)) * 100)}%`;
-  });
+  // ── Gewoontes en voeding ──────────────────────────────────────
+  //
+  // Hier stond een lijst van zes namen — water, protein, no_sugar, no_salt,
+  // bed_on_time, low_stress — die met `l[h]` uit de daglogs werd gelezen.
+  //
+  // Geen van die zes wordt door de app ooit weggeschreven. Het scherm
+  // Voeding schrijft `water_glasses` (een getal 1–8) en `eiwit_0/1/2` (drie
+  // vinkjes per maaltijd); no_sugar, no_salt, bed_on_time en low_stress
+  // hebben helemaal geen invoerveld. Het gevolg was dat dertig dagen
+  // nauwkeurig invullen onveranderlijk "water: 0%, protein: 0%, ..."
+  // opleverde, en de coach daar netjes uit concludeerde dat de gewoontes
+  // laag waren. Zij vulde het in en kreeg elke week te horen dat ze het niet
+  // deed.
+  //
+  // Twee dingen worden hier rechtgezet. De velden die wél bestaan worden
+  // gelezen zoals ze geschreven worden. En wat nergens ingevuld kan worden
+  // heet "niet bijgehouden" — geen nul procent. Een onmeetbaar ding als 0%
+  // rapporteren is niet neutraal: het leest als een tekortkoming.
+  const bijgehouden = (veld) => recent.filter(l => l[veld] != null);
+  const pct = (n, van) => `${Math.round((n / Math.max(1, van)) * 100)}%`;
+
+  const waterDagen = bijgehouden('water_glasses');
+  const waterGem = waterDagen.length
+    ? (waterDagen.reduce((s, l) => s + Number(l.water_glasses || 0), 0) / waterDagen.length) : null;
+
+  // Eiwit staat als drie losse vinkjes: ontbijt, lunch, diner.
+  const eiwitDagen = recent.filter(l =>
+    l.eiwit_0 != null || l.eiwit_1 != null || l.eiwit_2 != null);
+  const eiwitPerDag = eiwitDagen.map(l =>
+    [l.eiwit_0, l.eiwit_1, l.eiwit_2].filter(Boolean).length);
+  const eiwitGem = eiwitPerDag.length
+    ? (eiwitPerDag.reduce((a, b) => a + b, 0) / eiwitPerDag.length) : null;
+  const eiwitVolleDagen = eiwitPerDag.filter(n => n >= 3).length;
+
+  const laatEten = bijgehouden('late_eating');
+  const emoEten = bijgehouden('emotional_eating');
+  const cravings = recent.filter(l => l.craving && l.craving !== 'geen');
+
+  const voedingRegels = [];
+  if (waterGem != null) {
+    voedingRegels.push(`water: gemiddeld ${waterGem.toFixed(1)} glazen per dag over ${waterDagen.length} bijgehouden ${waterDagen.length === 1 ? 'dag' : 'dagen'}`);
+  } else voedingRegels.push('water: niet bijgehouden');
+  if (eiwitGem != null) {
+    voedingRegels.push(`eiwit: gemiddeld ${eiwitGem.toFixed(1)} van de 3 hoofdmaaltijden met eiwit over ${eiwitDagen.length} bijgehouden ${eiwitDagen.length === 1 ? 'dag' : 'dagen'}; ${eiwitVolleDagen} ${eiwitVolleDagen === 1 ? 'dag' : 'dagen'} alle drie (${pct(eiwitVolleDagen, eiwitDagen.length)})`);
+  } else voedingRegels.push('eiwit: niet bijgehouden');
+  if (cravings.length) voedingRegels.push(`cravings op ${cravings.length} ${cravings.length === 1 ? 'dag' : 'dagen'} (${[...new Set(cravings.map(l => l.craving))].join(', ')})`);
+  if (laatEten.length) voedingRegels.push(`laat gegeten op ${laatEten.filter(l => l.late_eating).length} van ${laatEten.length} bijgehouden dagen`);
+  if (emoEten.length) voedingRegels.push(`emotie-eten op ${emoEten.filter(l => l.emotional_eating).length} van ${emoEten.length} bijgehouden dagen`);
+
+  // De vier gewoontes zonder invoerveld: expliciet als niet bijgehouden.
+  const zonderVeld = ['no_sugar', 'no_salt', 'bed_on_time', 'low_stress']
+    .filter(h => !recent.some(l => l[h] != null));
+  const habitPct = [
+    waterGem != null ? `water: ${waterGem.toFixed(1)} glazen/dag` : 'water: niet bijgehouden',
+    eiwitGem != null ? `eiwit: ${pct(eiwitVolleDagen, eiwitDagen.length)} van de dagen alle drie de maaltijden` : 'eiwit: niet bijgehouden',
+    ...(zonderVeld.length ? [`${zonderVeld.join(', ')}: niet bijgehouden (geen invoerveld in de app — dit is geen nul, dit is onbekend)`] : []),
+  ];
 
   const measurementLines = (measurements || []).slice(0, 8).map(m =>
     `${m.date}: taille ${m.waist ?? '?'}cm, heup ${m.hip ?? '?'}cm, borst ${m.chest ?? '?'}cm, arm ${m.arm ?? '?'}cm, dij ${m.thigh ?? '?'}cm`
@@ -168,11 +220,33 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
     // Best energy days (energy === 3) — what habits did they have?
     const bestDays = withEnergy.filter(l => l.energy === 3);
     const worstDays = withEnergy.filter(l => l.energy === 0);
-    const habitIds = ['water', 'protein', 'no_sugar', 'no_salt', 'bed_on_time', 'low_stress'];
-    const habitOnBest  = habitIds.map(h => ({ h, pct: bestDays.length  ? (bestDays.filter(l => l[h]).length  / bestDays.length  * 100).toFixed(0) : 0 }));
-    const habitOnWorst = habitIds.map(h => ({ h, pct: worstDays.length ? (worstDays.filter(l => l[h]).length / worstDays.length * 100).toFixed(0) : 0 }));
-    const bestHabits  = habitOnBest.filter(x => x.pct >= 60).map(x => `${x.h}(${x.pct}%)`).join(', ');
-    const worstMissed = habitOnWorst.filter(x => x.pct < 30).map(x => `${x.h}(${x.pct}%)`).join(', ');
+    // Alleen vergelijken op wat werkelijk wordt bijgehouden. Dezelfde zes
+    // namen stonden hier, met hetzelfde gevolg: op de beste én de slechtste
+    // dagen kwam alles op 0% uit, en de coach kreeg te horen dat er op lage-
+    // energiedagen "gewoontes ontbraken" die nooit ergens ingevuld konden
+    // worden.
+    const gewoonte = {
+      water: l => (l.water_glasses != null ? l.water_glasses >= 6 : null),
+      eiwit: l => {
+        if (l.eiwit_0 == null && l.eiwit_1 == null && l.eiwit_2 == null) return null;
+        return [l.eiwit_0, l.eiwit_1, l.eiwit_2].filter(Boolean).length >= 3;
+      },
+      'niet laat gegeten': l => (l.late_eating != null ? !l.late_eating : null),
+      'geen emotie-eten': l => (l.emotional_eating != null ? !l.emotional_eating : null),
+    };
+    const aandeel = (dagen, fn) => {
+      const bekend = dagen.map(fn).filter(v => v !== null);
+      if (!bekend.length) return null;
+      return { pct: (bekend.filter(Boolean).length / bekend.length * 100).toFixed(0), n: bekend.length };
+    };
+    const opBest = Object.entries(gewoonte)
+      .map(([h, fn]) => ({ h, r: aandeel(bestDays, fn) })).filter(x => x.r);
+    const opWorst = Object.entries(gewoonte)
+      .map(([h, fn]) => ({ h, r: aandeel(worstDays, fn) })).filter(x => x.r);
+    const bestHabits  = opBest.filter(x => +x.r.pct >= 60)
+      .map(x => `${x.h}(${x.r.pct}% van ${x.r.n} dagen)`).join(', ');
+    const worstMissed = opWorst.filter(x => +x.r.pct < 30)
+      .map(x => `${x.h}(${x.r.pct}% van ${x.r.n} dagen)`).join(', ');
     // Weight trend over all time
     const sortedWeights = withWeight.sort((a, b) => a.date.localeCompare(b.date));
     const weightTrend = sortedWeights.length >= 2
@@ -577,7 +651,13 @@ ${hayfeverDays > 0 ? `Hooikoorts actief: ${hayfeverDays}x (verhoogt inflammatoir
 LONG COVID SYMPTOMEN (afgelopen ${recent.length} dagen):
 ${symptomSummary || 'geen klachten geregistreerd'}
 
-GEWOONTES SCORE: ${habitPct.join(', ')}
+GEWOONTES SCORE: ${habitPct.join(' · ')}
+
+VOEDING (afgelopen ${recent.length} dagen, uit haar eigen invoer op het scherm Voeding):
+${voedingRegels.map(r => `- ${r}`).join('\n')}
+Wat hier "niet bijgehouden" heet, is niet nul: er is geen invoerveld voor. Noem
+het niet als tekortkoming en trek er geen conclusie uit. Wat er wél staat is
+haar werkelijke invoer — reken daarmee en benoem het als ze het goed doet.
 
 ${cycleContext}
 ${cycleWeightPattern ? `\n${cycleWeightPattern}` : ''}

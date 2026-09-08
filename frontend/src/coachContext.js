@@ -669,6 +669,35 @@ export function contextAsText(ctx) {
     zeg(`  vertraagde verslechtering: ${A.delayedWorsening ? 'ja' : 'nee'} · dagelijks functioneren aangetast: ${A.dailyFunctionImpaired ? 'ja' : 'nee'}`);
     if (A.note) zeg(`  ${A.note}`);
     zeg('  Hogere hartslag, slechtere slaap en meer vocht zijn zonder vertraagde verslechtering GEEN Long-COVID-terugval.');
+
+    // Wat zij er zelf van zegt. Dit staat er nadrukkelijk als aparte stem,
+    // zodat het model niet doet alsof de afleiding de enige bron is.
+    const Z = A.selfReported;
+    if (Z?.known) {
+      zeg('');
+      zeg('  WAT ZIJ ER ZELF VAN ZEGT (haar eigen toeschrijving, deze week):');
+      if (Z.causes.length) zeg(`    zij wijst dit toe aan: ${Z.labels.join(', ')}`);
+      else if (Z.unsure) zeg('    zij weet het zelf niet — vraag er niet naar door, werk met de data');
+      if (Z.movement) {
+        zeg(`    wat bewegen vandaag doet: ${Z.movement === 'helpt' ? 'het helpt / lucht op'
+          : Z.movement === 'kost' ? 'het kost haar' : 'maakt niet veel uit'}`);
+      }
+      if (A.selfNote) zeg(`    ${A.selfNote}`);
+      if (A.movementNote) zeg(`    ${A.movementNote}`);
+      if (A.conflict) {
+        zeg(`    LET OP — haar lezing en de data lopen uiteen: ${A.conflict}`);
+        zeg('    Benoem dat verschil eerlijk. Overrule haar niet stilzwijgend en negeer de data niet.');
+      }
+      if (A.derivedAttribution !== A.attribution) {
+        zeg(`    (uit de meetwaarden alleen zou hier "${A.derivedAttribution}" staan; haar eigen lezing heeft dat bijgesteld)`);
+      }
+    } else {
+      zeg('  Zij heeft deze week nog niet zelf aangegeven waar de klachten vandaan komen.');
+    }
+    zeg('  Niet elke moeie dag is Long COVID. Een drukke week, een slechte nacht of');
+    zeg('  een hormonale dip vragen om ander advies dan post-exertionele malaise:');
+    zeg('  daar helpt rustig bewegen meestal juist, en stilliggen maakt het erger.');
+    zeg('  Zeg dus expliciet welke van de twee je denkt dat dit is, en waarom.');
     zeg('');
   }
 

@@ -507,8 +507,56 @@ export function attributeSymptoms({ logs = {}, currentDate = todayLocal() } = {}
     uitleg = 'Er zijn klachten, maar te weinig gegevens om ze aan iets toe te schrijven. Vul de herstelcheck na je volgende sessie in — dat is het veld dat het onderscheid maakt.';
   }
 
+  // ── Haar eigen lezing ─────────────────────────────────────────
+  //
+  // Alles hierboven is afgeleid uit meetwaarden. Dat is nuttig en het is niet
+  // genoeg: een model dat naar rusthartslag en slaap kijkt, weet niet dat het
+  // een drukke week was. Zij wel.
+  //
+  // Haar antwoord op "waar komt dit vandaan?" en "wat doet bewegen vandaag?"
+  // staat daarom naast de afleiding, niet eronder. Twee regels:
+  //
+  //   · Zegt zij dat het níét post-exertioneel is en zíét de data ook geen
+  //     vertraagde verslechtering, dan is het dat ook niet. Dan hoeft de
+  //     belasting niet omlaag, en helpt bewegen waarschijnlijk juist.
+  //   · Zegt zij dat het niet PEM is terwijl de data wél vertraagde
+  //     verslechtering laat zien, dan wint geen van beide stilzwijgend. Het
+  //     verschil wordt benoemd, zodat zij het kan wegen.
+  const zelf = zelfLezing({ currentDate });
+
+  let eindoordeel = oordeel;
+  let conflict = null;
+  let zelfNote = null;
+
+  if (zelf.known) {
+    const zegtPem = zelf.causes.includes('pem');
+    const zegtAnders = zelf.causes.some(c => ['cyclus', 'druk', 'slaap', 'stress', 'ziek', 'migraine'].includes(c));
+
+    if (zegtPem && !vertraagd) {
+      // Zij voelt na-ijling die de meetwaarden nog niet laten zien. Haar
+      // lezing wint: PEM voel je eerder dan je hem meet.
+      eindoordeel = ATTRIBUTION.PESE;
+      zelfNote = 'Jij noemt dit na-ijling van inspanning. De meetwaarden laten dat nog niet zien, maar jij voelt het eerder dan het meetbaar is — jouw lezing telt hier zwaarder.';
+    } else if (zegtAnders && !zegtPem && !vertraagd) {
+      // Geen vertraagde verslechtering én zij wijst een andere oorzaak aan.
+      eindoordeel = ATTRIBUTION.HORMONAL;
+      zelfNote = `Jij wijst dit toe aan ${zelf.labels.join(' en ')}, en er is geen vertraagde verslechtering na inspanning. Dan is dit geen Long-COVID-terugval en hoeft de belasting hier niet voor omlaag.`;
+    } else if (zegtAnders && !zegtPem && vertraagd) {
+      conflict = `Jij wijst dit toe aan ${zelf.labels.join(' en ')}; in je data staat wél vertraagde verslechtering na inspanning. Dat hoeft elkaar niet uit te sluiten — een drukke week en na-ijling kunnen samenvallen. De voorzichtige lezing telt zolang dat onduidelijk is, maar dit is jouw afweging, niet die van de app.`;
+      eindoordeel = ATTRIBUTION.BOTH;
+    }
+  }
+
+  // Wat bewegen vandaag met haar doet, is het directste signaal dat er is.
+  const beweegNote = zelf.movement === 'helpt'
+    ? 'Je geeft aan dat bewegen vandaag oplucht. Dat is een reden om te bewegen, niet om het te laten — houd het rustig en stop bij de eerste omslag.'
+    : zelf.movement === 'kost'
+      ? 'Je geeft aan dat bewegen vandaag kost. Dat weegt zwaarder dan welke berekende score dan ook: vandaag niet opbouwen.'
+      : null;
+
   return {
-    attribution: oordeel,
+    attribution: eindoordeel,
+    derivedAttribution: oordeel,
     shared: gedeeld,
     hormonalOnly: hormonaal,
     delayedWorsening: vertraagd,
@@ -517,12 +565,58 @@ export function attributeSymptoms({ logs = {}, currentDate = todayLocal() } = {}
     cycleDay: pos.day ?? null,
     supportingPatterns: patronen,
     explanation: uitleg,
+    // Haar eigen lezing, apart houdbaar zodat het scherm kan tonen wie wat zei.
+    selfReported: zelf,
+    selfNote: zelfNote,
+    conflict,
+    movementEffect: zelf.movement,
+    movementNote: beweegNote,
     // De consequentie voor de training, want daar gaat het uiteindelijk om.
-    lowerLoad: oordeel === ATTRIBUTION.PESE || oordeel === ATTRIBUTION.BOTH,
-    note: oordeel === ATTRIBUTION.HORMONAL
+    lowerLoad: (eindoordeel === ATTRIBUTION.PESE || eindoordeel === ATTRIBUTION.BOTH)
+      || zelf.movement === 'kost',
+    note: eindoordeel === ATTRIBUTION.HORMONAL
       ? 'Hormonale signalen zijn geen Long-COVID-terugval. Zolang er geen vertraagde verslechtering is en het gewone leven doorgaat, hoeft de trainingsprikkel hier niet voor omlaag.'
-      : oordeel === ATTRIBUTION.PESE
+      : eindoordeel === ATTRIBUTION.PESE
         ? 'Dit is wél het post-exertionele patroon. De belasting gaat omlaag, ongeacht waar je in je cyclus zit.'
         : null,
+  };
+}
+
+// ── Wat zij er zelf van zegt ────────────────────────────────────
+//
+// Gelezen over dezelfde zeven dagen als de rest van de waarschuwingslaag:
+// wat je vorige week dacht, zegt niets over vandaag.
+export const OORZAAK_LABELS = {
+  pem: 'na-ijling van inspanning', cyclus: 'de cyclus', druk: 'een drukke periode',
+  slaap: 'slecht slapen', stress: 'spanning', ziek: 'ziek zijn',
+  migraine: 'migraine', geenidee: 'onbekend',
+};
+
+export function zelfLezing({ currentDate = todayLocal() } = {}) {
+  const dagen = [];
+  for (let i = 0; i <= PEM_WARNING_DAYS; i++) {
+    const d = addDays(currentDate, -i);
+    let log = null;
+    try { log = JSON.parse(localStorage.getItem(`gc_log_${d}`) || 'null'); } catch { /* leeg */ }
+    if (log) dagen.push(log);
+  }
+  const metOorzaak = dagen.filter(l => Array.isArray(l.feeling_causes) && l.feeling_causes.length);
+  const metBeweging = dagen.filter(l => l.movement_effect);
+
+  const causes = [...new Set(metOorzaak.flatMap(l => l.feeling_causes))]
+    .filter(c => c !== 'geenidee');
+  const alleenGeenIdee = !causes.length && metOorzaak.length > 0;
+
+  return {
+    known: metOorzaak.length > 0 || metBeweging.length > 0,
+    causes,
+    labels: causes.map(c => OORZAAK_LABELS[c] || c),
+    unsure: alleenGeenIdee,
+    movement: metBeweging.length ? metBeweging[0].movement_effect : null,
+    days: metOorzaak.length,
+    windowDays: PEM_WARNING_DAYS,
+    note: metOorzaak.length
+      ? `Zelf toegeschreven aan ${causes.length ? causes.map(c => OORZAAK_LABELS[c] || c).join(', ') : 'onbekend'} (${metOorzaak.length} van de laatste ${PEM_WARNING_DAYS + 1} dagen).`
+      : 'Nog niet zelf toegeschreven.',
   };
 }

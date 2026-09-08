@@ -47,6 +47,42 @@ const MIGRAINE_TRIGGERS = [
   { id: 'onbekend',   label: 'Onbekend' },
 ];
 
+// ── Waar komt dit volgens jou vandaan? ──────────────────────────
+//
+// De app leidde de oorzaak tot nu toe volledig zelf af uit de data, en dat
+// heeft één ingebouwde blinde vlek: elke moeheid komt uiteindelijk in de
+// buurt van de Long-COVID-laag terecht, omdat dat de laag is die het
+// scherpst kijkt. Maar niet elke slechte dag is post-exertioneel. Soms is
+// het de cyclus, soms is het gewoon een drukke week, en dan is stilliggen
+// precies de verkeerde raad.
+//
+// Zij weet dat vaak zelf, en beter dan een model dat naar rusthartslag
+// kijkt. Dus wordt het gevraagd. Meerdere oorzaken tegelijk kan: een drukke
+// week in de luteale fase is één toestand, geen keuze uit twee.
+//
+// Dit vervangt de afleiding niet — het staat ernaast. Als haar lezing en de
+// data uiteenlopen, wordt dat verschil getoond in plaats van dat een van de
+// twee stilzwijgend wint.
+const OORZAAK_OPTS = [
+  { id: 'pem',      label: 'Na-ijling van inspanning (PEM)' },
+  { id: 'cyclus',   label: 'Cyclus / hormonaal' },
+  { id: 'druk',     label: 'Gewoon druk gehad' },
+  { id: 'slaap',    label: 'Slecht geslapen' },
+  { id: 'stress',   label: 'Spanning / stress' },
+  { id: 'ziek',     label: 'Ziek / infectie' },
+  { id: 'migraine', label: 'Migraine' },
+  { id: 'geenidee', label: 'Geen idee' },
+];
+
+// En de vraag die het advies werkelijk stuurt. Bij een drukke week of een
+// hormonale dip helpt bewegen meestal; bij post-exertionele malaise kost het.
+// Dat verschil is aan haar, niet aan een formule.
+const BEWEGING_OPTS = [
+  { id: 'helpt',   label: 'Bewegen helpt / lucht op' },
+  { id: 'neutraal', label: 'Maakt niet veel uit' },
+  { id: 'kost',    label: 'Bewegen kost me nu' },
+];
+
 const CRAVING_OPTS = [
   { id: 'geen', label: 'Geen' }, { id: 'zoet', label: 'Zoet' },
   { id: 'zout', label: 'Zout' }, { id: 'alles', label: 'Alles' },
@@ -892,6 +928,18 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
     saveField('migraine_triggers', arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
   }
 
+  // "Geen idee" is een antwoord, geen leeg veld — maar het sluit de andere
+  // uit: als je weet dat het de cyclus is, weet je het.
+  function toggleOorzaak(id) {
+    const arr = log?.feeling_causes || [];
+    const aan = arr.includes(id);
+    let nieuw;
+    if (aan) nieuw = arr.filter(x => x !== id);
+    else if (id === 'geenidee') nieuw = ['geenidee'];
+    else nieuw = [...arr.filter(x => x !== 'geenidee'), id];
+    saveField('feeling_causes', nieuw);
+  }
+
   async function saveMaten() {
     // Uit MAAT_FIELDS, niet uit een handgeschreven rijtje. Dat rijtje miste
     // navel, en dat is precies het soort fout dat je niet ziet: het scherm
@@ -989,7 +1037,7 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
   //
   // Eén kop bovenaan lost allebei op: hij zegt voor welke dag je invult,
   // laat je die dag hier kiezen, en is onmiskenbaar als het niet vandaag is.
-  function DagDatumKop() {
+  function DagDatumKop({ velden = 'Alles hieronder' }) {
     const isVandaag = currentDate === todayStr;
     const gevuld = log ? Object.keys(log).filter(k => k !== 'date').length : 0;
     return (
@@ -1000,9 +1048,8 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
           {isVandaag ? 'Vandaag' : 'Een eerdere dag'} — {formatNLLong(currentDate)}
         </div>
         <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5, marginTop: 2 }}>
-          Alles hieronder — slaap, energie, gewicht, rusthartslag, bloeddruk,
-          body battery, notitie — komt op deze datum te staan en telt meteen
-          mee in je trends en in de coachanalyse.
+          {velden} komt op deze datum te staan en telt meteen mee in je trends
+          en in de coachanalyse.
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
           <input type="date" className="os-input" value={currentDate} max={todayStr}
@@ -1033,7 +1080,7 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {flash && <div style={{ fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>{flash}</div>}
 
-        <DagDatumKop />
+        <DagDatumKop velden="Alles hieronder — slaap, energie, gewicht, rusthartslag, bloeddruk, body battery, notitie —" />
 
         <div>
           <SectionLabel style={{ marginTop: 0 }}>Energie</SectionLabel>
@@ -1481,6 +1528,8 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
 
     return (
       <div>
+        <DagDatumKop velden="Alles hieronder — symptomen, pacing, migraine en de na-ijling van gisteren —" />
+
         {pemSignals > 0 && (
           <div style={{ background: 'var(--alert-l)', border: '1px solid var(--alert)', borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 14, fontSize: 13, color: 'var(--alert)', fontWeight: 600 }}>
             {pemSignals} PEM-signalen gedetecteerd — volledige rust heeft prioriteit
@@ -1495,6 +1544,38 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
               onClick={() => toggleSymptom(s.id)}
               style={{ fontSize: 13 }}>
               {s.label}
+            </button>
+          ))}
+        </div>
+
+        <SectionLabel>Waar komt dit volgens jou vandaan?</SectionLabel>
+        <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.5, marginBottom: 7 }}>
+          Meerdere mag. Jouw lezing weegt zwaar mee — niet elke moeie dag is
+          post-exertioneel, en dat verschil bepaalt of bewegen vandaag helpt
+          of kost.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}
+          data-oorzaken>
+          {OORZAAK_OPTS.map(o => (
+            <button key={o.id} data-oorzaak={o.id}
+              className={`os-toggle-chip ${(log?.feeling_causes || []).includes(o.id) ? 'active' : ''}`}
+              onClick={() => toggleOorzaak(o.id)}
+              style={{ fontSize: 13 }}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+
+        <SectionLabel style={{ marginTop: 0 }}>Wat doet bewegen vandaag?</SectionLabel>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}
+          data-beweging>
+          {BEWEGING_OPTS.map(o => (
+            <button key={o.id} data-beweging-optie={o.id}
+              className={`os-toggle-chip ${log?.movement_effect === o.id ? 'active' : ''}`}
+              onClick={() => saveField('movement_effect',
+                log?.movement_effect === o.id ? null : o.id)}
+              style={{ fontSize: 13 }}>
+              {o.label}
             </button>
           ))}
         </div>
@@ -1545,6 +1626,8 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
   function TabVoeding() {
     return (
       <div>
+        <DagDatumKop velden="Alles hieronder — water, eiwit per maaltijd, craving en eetgedrag —" />
+
         <SectionLabel style={{ marginTop: 0 }}>Water (glazen)</SectionLabel>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
           {[1,2,3,4,5,6,7,8].map(n => (
@@ -1646,6 +1729,8 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
 
     return (
       <div>
+        <DagDatumKop velden="Alles hieronder — cyclusfase en de klachten van vandaag —" />
+
         {/* Dagelijkse bloeding — de feitelijke observatie */}
         <SectionLabel style={{ marginTop: 0 }}>Bloeding vandaag</SectionLabel>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
