@@ -22,14 +22,14 @@ export const TRAINING_BLOCKS = [
   {
     id: 'aerobic', name: 'AEROBIC BASE', emoji: '🫁',
     start: '2026-09-01', end: '2026-10-03',
-    adaptation: 'Aerobe basis met continuïteit als hefboom: loopblokken van 8 naar 25 min, wandelpauzes eruit, tempo omlaag naar circa 8:00/km. Eerste doorlopende run (25 min, ±3 km) rond 26 september. Eindigt met de trailrace van 3 oktober.',
+    adaptation: 'Aerobe basis met continuïteit als hefboom: loopblokken van 8 naar 31 min, wandelpauzes eruit, tempo omlaag naar circa 8:00/km. Eerste doorlopende run (20 min) op 19 september, 3,8 km doorlopend op 26 september — een week voor de trailrace van 3 oktober.',
     not: 'Geen snelheid, geen zone C. Elke stap op de ladder alleen bij een schone herstelrespons.',
   },
   {
     id: 'economy', name: 'CONTINU LOPEN', emoji: '🏃',
     start: '2026-10-05', end: '2026-10-30',
-    adaptation: 'Doorlopend zonder wandelpauzes: 30 → 32 → 35 → 40 min. De 5 km achter elkaar valt rond 21 oktober. Bereloop Terschelling (30 okt) wordt de eerste race die doorlopend gaat.',
-    not: 'Geen tempowerk. Dit tempo van opbouwen is sneller dan +10% per week en alleen te verdedigen zolang het herstel groen blijft — bij een slechte respons wordt de stap herhaald.',
+    adaptation: 'Doorlopend zonder wandelpauzes: 4,0 km (7 okt), 4,5 km (9 okt), 5 km achter elkaar rond 16 oktober. Bereloop Terschelling (30 okt) wordt de eerste race die doorlopend gaat.',
+    not: 'Geen tempowerk. Dit tempo van opbouwen is sneller dan +10% per week en alleen te verdedigen zolang het herstel groen blijft — bij een slechte respons wordt de stap herhaald en schuift alles erachter op.',
   },
   {
     id: 'continuous', name: '5 KM VASTHOUDEN', emoji: '📌',

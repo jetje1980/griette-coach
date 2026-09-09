@@ -135,6 +135,13 @@ export const RUNS = [
   // ═══════════════════════════════════════════════════════════════════════
 
   // ── Week 4 · Sep 8-12 · Van intervallen naar blokken ────────────────────
+  //
+  // De rungs zijn groter geworden dan in de eerste opzet, en dat kan omdat
+  // het grootste deel ervan geen nieuwe belasting is. Zij loopt nu al 16 tot
+  // 24 minuten per sessie, alleen in stukjes geknipt. Die stukjes aan elkaar
+  // plakken tot één blok van twintig minuten is dezelfde belasting, anders
+  // gerangschikt. Pas boven de vierentwintig minuten begint werkelijk nieuw
+  // volume — en dat zijn precies de laatste twee rungs.
   {
     nr: 10, week: 4,
     runMin: 4, walkMin: 2, reps: 4, duration: 24,
@@ -143,73 +150,80 @@ export const RUNS = [
   },
   {
     nr: 11, week: 4,
-    runMin: 6, walkMin: 1.5, reps: 4, duration: 30,
-    blockMin: 6,
-    description: '6 min lopen / 1,5 min wandelen × 4',
-    goal: 'Langer blok, kortere pauze. Loop bewust langzamer dan je gewend bent — dit moet op gesprektempo kunnen.',
+    runMin: 8, walkMin: 1.5, reps: 3, duration: 27,
+    blockMin: 8,
+    description: '8 min lopen / 1,5 min wandelen × 3',
+    goal: 'Eerste blok van acht minuten. Loop bewust langzamer dan je gewend bent — dit moet op gesprektempo kunnen.',
   },
   {
     nr: 12, week: 4,
-    runMin: 8, walkMin: 2, reps: 3, duration: 30,
-    blockMin: 8,
-    description: '8 min lopen / 2 min wandelen × 3',
-    goal: 'Eerste blok van 8 minuten. Vanaf hier is tempo de rem, niet de pauze.',
+    runMin: 12, walkMin: 2, reps: 2, duration: 26,
+    blockMin: 12,
+    description: '12 min lopen / 2 min wandelen × 2',
+    goal: 'Twaalf minuten aan één stuk — minder dan wat je nu al per sessie loopt, alleen niet meer geknipt.',
     milestone: true,
   },
 
-  // ── Week 5 · Sep 15-19 · De blokken worden lang ─────────────────────────
+  // ── Week 5 · Sep 15-19 · Van blokken naar doorlopend ────────────────────
   {
     nr: 13, week: 5,
-    runMin: 10, walkMin: 1.5, reps: 3, duration: 33,
-    blockMin: 10,
-    description: '10 min lopen / 1,5 min wandelen × 3',
-    goal: 'Tien minuten aan één stuk. Zakt je tempo daarvoor naar 8:30? Prima — dat is de bedoeling.',
-    milestone: true,
+    runMin: 16, walkMin: 2, reps: 2, duration: 34,
+    blockMin: 16,
+    description: '16 min lopen / 2 min wandelen × 2',
+    goal: 'Zestien minuten, één pauze. Zakt je tempo daarvoor naar 8:30? Prima — dat is de bedoeling.',
   },
   {
     nr: 14, week: 5,
-    runMin: 12, walkMin: 1.5, reps: 2, duration: 27,
-    blockMin: 12,
-    description: '12 min lopen / 1,5 min wandelen × 2',
-    goal: 'Iets korter totaal, langer blok. Herstel telt zwaarder dan volume deze week.',
+    runMin: 12, walkMin: 0, reps: 1, duration: 12,
+    blockMin: 12, continuous: true,
+    description: '12 min doorlopend — kort en licht',
+    goal: 'Bewust lichter tussen twee stappen. Dit is waar de winst wordt opgenomen, niet waar hij wordt gemaakt.',
   },
   {
     nr: 15, week: 5,
-    runMin: 15, walkMin: 2, reps: 2, duration: 32,
-    blockMin: 15,
-    description: '15 min lopen / 2 min wandelen × 2',
-    goal: 'Een kwartier achter elkaar — halverwege de ladder. Eén wandelpauze in de hele sessie.',
+    runMin: 20, walkMin: 0, reps: 1, duration: 20,
+    blockMin: 20, continuous: true,
+    description: '20 min doorlopend — geen wandelpauze',
+    goal: '🎯 Je eerste doorlopende run: ongeveer 2,5 km zonder pauze. Start expres te langzaam.',
     milestone: true,
   },
 
-  // ── Week 6 · Sep 22-26 · Zo ver als eerlijk kan vóór de race ────────────
+  // ── Week 6 · Sep 22-26 · Naar 3,8 km ────────────────────────────────────
   //
-  // Zij wilde hier de volle 5 km doorlopend staan, een week voor de race.
-  // Dat haalt de rekening niet: van 8 minuten naar 40 in zeventien dagen is
-  // een vertienvoudiging, en zelfs op +25% per week — al ruim boven wat bij
-  // een PEM-geschiedenis te verdedigen is — kom je hier rond 30 minuten uit.
-  // Wat hier wél staat is 25 minuten doorlopend, ongeveer 3 km. Dat is een
-  // echte mijlpaal en het is er een die klopt.
+  // Zij vroeg hier eerst 5 km, daarna minimaal 3,8 met 4 of 4,5 als voorkeur.
+  // 3,8 km is 30 minuten op 8:00/km, en dat past: de ladder loopt dan
+  // 8 → 12 → 16 → 20 → 25 → 30, met stappen van +50, +33, +25, +25 en +20
+  // procent. Afnemende stappen, wat de goede vorm is.
+  //
+  // 4,5 km zou 36 minuten zijn: een laatste stap van +44% in dezelfde week,
+  // zonder opnameweek ertussen. Dat is de stap die van een opbouw een gok
+  // maakt, en die staat hier dus niet. Hij staat op 9 oktober.
+  //
+  // Wat deze week kost: er zit geen rustige week meer tussen vandaag en 26
+  // september. Elke sessie is een stap. Gaat één respons mis, dan schuift het
+  // geheel en is de vloer 3,1 km in plaats van 3,8.
   {
     nr: 16, week: 6,
-    runMin: 18, walkMin: 2, reps: 2, duration: 38,
-    blockMin: 18,
-    description: '18 min lopen / 2 min wandelen × 2',
-    goal: 'Langste blokken tot nu toe. Let op je tempo in de tweede helft — daar wordt het verleidelijk.',
+    runMin: 25, walkMin: 0, reps: 1, duration: 25,
+    blockMin: 25, continuous: true,
+    description: '25 min doorlopend',
+    goal: 'Ongeveer 3,1 km. Vanaf hier is het nieuw terrein: langer dan je totale looptijd per sessie tot nu toe.',
+    milestone: true,
   },
   {
     nr: 17, week: 6,
-    runMin: 12, walkMin: 1, reps: 2, duration: 25,
-    blockMin: 12,
-    description: '12 min lopen / 1 min wandelen × 2 — lichter',
-    goal: 'Bewust lichter tussen twee zware sessies. Dit is waar de winst wordt opgenomen.',
+    runMin: 15, walkMin: 0, reps: 1, duration: 15,
+    blockMin: 15, continuous: true,
+    description: '15 min doorlopend — lichter',
+    goal: 'De enige adem in deze week. Loop hem echt rustig; de zaterdag hangt hiervan af.',
   },
   {
     nr: 18, week: 6,
-    runMin: 25, walkMin: 0, reps: 1, duration: 25,
-    blockMin: 25, continuous: true,
-    description: '25 min doorlopend — geen wandelpauze',
-    goal: '🎯 Je eerste echte doorlopende run: ongeveer 3 km zonder pauze. Start expres te langzaam; je mag de laatste vijf minuten versnellen als het meezit.',
+    runMin: 31, walkMin: 0, reps: 1, duration: 31,
+    blockMin: 31, continuous: true,
+    stretchMin: 32,
+    description: '🎯 3,8 km doorlopend — 31 min op 8:00/km',
+    goal: 'De vloer die je vroeg, een week voor de race. Voelt het op 28 minuten nog goed, loop dan door naar 32 min (4,0 km). Voelt het dat niet, stop op 3,8 — dat was het doel en dat is gehaald.',
     milestone: true,
   },
 
@@ -245,76 +259,80 @@ export const RUNS = [
     race: true,
   },
 
-  // ── Week 8 · Okt 6-10 · Ladder weer op ──────────────────────────────────
+  // ── Week 8 · Okt 6-10 · 4,0 en 4,5 km ───────────────────────────────────
+  //
+  // Omdat 26 september nu op 3,8 km eindigt in plaats van 3,1, schuift alles
+  // hierachter een week naar voren. De 4,5 km die zij het liefst al in
+  // september wilde, staat hier — met een opnameweek en een race ertussen in
+  // plaats van in dezelfde week als de 25 minuten.
   {
     nr: 22, week: 8,
-    runMin: 12, walkMin: 0, reps: 1, duration: 12,
-    blockMin: 12, continuous: true,
-    description: '12 min doorlopend — zachte comeback',
-    goal: 'Herstel activeren, niet presteren. Kort en doorlopend.',
+    runMin: 15, walkMin: 0, reps: 1, duration: 15,
+    blockMin: 15, continuous: true,
+    description: '15 min doorlopend — zachte comeback',
+    goal: 'Herstel activeren na de race, niet presteren.',
   },
   {
     nr: 23, week: 8,
-    runMin: 25, walkMin: 0, reps: 1, duration: 25,
-    blockMin: 25, continuous: true,
-    description: '25 min doorlopend',
-    goal: 'Terug op de ladder waar je stond. Dit moet nu makkelijker voelen dan in week 6.',
+    runMin: 32, walkMin: 0, reps: 1, duration: 32,
+    blockMin: 32, continuous: true,
+    description: '4,0 km doorlopend — 32 min',
+    goal: 'Terug op de ladder, één rung hoger dan voor de race.',
   },
   {
     nr: 24, week: 8,
-    runMin: 30, walkMin: 0, reps: 1, duration: 30,
-    blockMin: 30, continuous: true,
-    description: '30 min doorlopend',
-    goal: 'Een half uur achter elkaar — ongeveer 3,7 km. Nog twee stappen naar de 5 km.',
+    runMin: 36, walkMin: 0, reps: 1, duration: 36,
+    blockMin: 36, continuous: true,
+    description: '🎯 4,5 km doorlopend — 36 min',
+    goal: 'De afstand die je het liefst al in september had gelopen. Nog één rung naar de 5 km.',
     milestone: true,
   },
 
-  // ── Week 9 · Okt 13-17 · Naar de 5 km ───────────────────────────────────
+  // ── Week 9 · Okt 13-17 · 🎯 De 5 km achter elkaar ───────────────────────
   {
     nr: 25, week: 9,
-    runMin: 32, walkMin: 0, reps: 1, duration: 32,
-    blockMin: 32, continuous: true,
-    description: '32 min doorlopend',
-    goal: 'Kleine stap, bewust. De sprong van 30 naar 40 gaat niet in één keer.',
+    runMin: 20, walkMin: 0, reps: 1, duration: 20,
+    blockMin: 20, continuous: true,
+    description: '20 min doorlopend — kort, opnemen',
+    goal: 'Licht tussen 4,5 en 5 km. Niet de plek om iets te bewijzen.',
   },
   {
     nr: 26, week: 9,
-    runMin: 20, walkMin: 0, reps: 1, duration: 20,
-    blockMin: 20, continuous: true,
-    description: '20 min doorlopend — korter, iets vlotter',
-    goal: 'Kortere sessie waarin je mag voelen hoe 7:30 aanvoelt. Niet forceren; dit is een verkenning.',
+    runMin: 30, walkMin: 0, reps: 1, duration: 30,
+    blockMin: 30, continuous: true,
+    description: '30 min doorlopend — middellang',
+    goal: 'Ritme vasthouden. Deze moet nu duidelijk makkelijker voelen dan op 26 september.',
   },
   {
     nr: 27, week: 9,
-    runMin: 35, walkMin: 0, reps: 1, duration: 35,
-    blockMin: 35, continuous: true,
-    description: '35 min doorlopend',
-    goal: 'Ongeveer 4,4 km zonder pauze. De 5 km is nu één stap weg.',
+    runMin: 40, walkMin: 0, reps: 1, duration: 40,
+    blockMin: 40, continuous: true,
+    description: '🎯 5 km doorlopend — 40 min op 8:00/km',
+    goal: 'Het doel. Vijf kilometer achter elkaar, geen wandelpauze. Start op 8:15 en houd dat vast; heb je de laatste kilometer nog iets over, dan was het tempo goed.',
     milestone: true,
   },
 
-  // ── Week 10 · Okt 20-24 · 🎯 De 5 km achter elkaar ──────────────────────
+  // ── Week 10 · Okt 20-24 · Vasthouden en taperen voor Bereloop ───────────
   {
     nr: 28, week: 10,
     runMin: 40, walkMin: 0, reps: 1, duration: 40,
     blockMin: 40, continuous: true,
-    description: '🎯 5 km doorlopend — 40 min op 8:00/km',
-    goal: 'Het doel. Vijf kilometer achter elkaar, geen wandelpauze. Start op 8:15 en houd dat vast; als je de laatste kilometer nog iets over hebt is het tempo goed geweest.',
-    milestone: true,
+    description: '5 km doorlopend — bevestiging',
+    goal: 'Twee keer 5 km achter elkaar in één week maakt er een basis van in plaats van een stunt.',
   },
   {
     nr: 29, week: 10,
     runMin: 20, walkMin: 0, reps: 1, duration: 20,
     blockMin: 20, continuous: true,
     description: '20 min doorlopend — rustige activering',
-    goal: 'Opnemen wat je net hebt gedaan. Bereloop is over een week.',
+    goal: 'Opnemen. Bereloop is over een week.',
   },
   {
     nr: 30, week: 10,
     runMin: 15, walkMin: 0, reps: 1, duration: 15,
     blockMin: 15, continuous: true,
     description: '15 min doorlopend — laatste activering',
-    goal: 'Mentaal klaar. Je kunt de afstand nu, dat is het verschil met drie weken terug.',
+    goal: 'Mentaal klaar. Je kunt de afstand nu, dat is het verschil met zes weken terug.',
   },
 
   // ── Week 11 · Okt 27-31 · 🏁 Racedag ────────────────────────────────────
@@ -375,16 +393,15 @@ export const RUNS = [
 // schuift alles erachter een sessie op. Dat is de prijs van dit tempo, en het
 // is een eerlijker prijs dan een datum die niet klopt.
 export const CONTINUITY_LADDER = [
-  { blockMin: 8,  runNr: 12, expected: '2026-09-11' },
-  { blockMin: 10, runNr: 13, expected: '2026-09-15' },
-  { blockMin: 12, runNr: 14, expected: '2026-09-17' },
-  { blockMin: 15, runNr: 15, expected: '2026-09-19' },
-  { blockMin: 18, runNr: 16, expected: '2026-09-22' },
-  { blockMin: 25, runNr: 18, expected: '2026-09-26', note: 'Eerste doorlopende run, circa 3 km — de mijlpaal een week voor de race.' },
-  { blockMin: 30, runNr: 24, expected: '2026-10-09' },
-  { blockMin: 32, runNr: 25, expected: '2026-10-13' },
-  { blockMin: 35, runNr: 27, expected: '2026-10-16' },
-  { blockMin: 40, runNr: 28, expected: '2026-10-21', note: '5 km doorlopend op 8:00/km — het doel.' },
+  { blockMin: 8,  runNr: 11, expected: '2026-09-10' },
+  { blockMin: 12, runNr: 12, expected: '2026-09-12' },
+  { blockMin: 16, runNr: 13, expected: '2026-09-15' },
+  { blockMin: 20, runNr: 15, expected: '2026-09-19', note: 'Eerste doorlopende run, circa 2,5 km.' },
+  { blockMin: 25, runNr: 16, expected: '2026-09-22', note: 'Vanaf hier nieuw volume: langer dan de totale looptijd per sessie tot nu toe.' },
+  { blockMin: 31, runNr: 18, expected: '2026-09-26', note: '3,8 km doorlopend — de vloer die zij vroeg, een week voor de race. Loopt het makkelijk, dan door naar 4,0 km.' },
+  { blockMin: 32, runNr: 23, expected: '2026-10-07', note: '4,0 km.' },
+  { blockMin: 36, runNr: 24, expected: '2026-10-09', note: '4,5 km — de afstand die zij het liefst al in september had gelopen.' },
+  { blockMin: 40, runNr: 27, expected: '2026-10-16', note: '5 km doorlopend op 8:00/km — het doel.' },
 ];
 
 // Waar staat ze nu, en wat is de volgende stap? Gebaseerd op wat er
