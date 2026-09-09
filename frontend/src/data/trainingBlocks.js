@@ -8,23 +8,34 @@ export const TRAINING_BLOCKS = [
     adaptation: 'Weer wennen aan belasting na de zomer — korte run/walk, alles strikt zone B.',
     not: 'Geen tempo, geen lange duurlopen, geen zone C.',
   },
+  // De continuïteit is naar voren gehaald.
+  //
+  // Hier stond doorlopend hardlopen pas in het blok van 2 november tot 13
+  // december, met de 5 km als meetpunt op Ameland. Dat is te traag voor waar
+  // zij nu staat: de loopblokken groeiden met één minuut per week, en op dat
+  // tempo is 40 minuten aan één stuk pas in het voorjaar aan de orde.
+  //
+  // Wat er in de plaats komt is niet meer volume maar minder wandelpauze op
+  // een langzamer tempo — zie de continuïteitsladder in runningSchema.js. Het
+  // blok ECONOMY is daarmee het blok waarin de pauzes verdwijnen, niet het
+  // blok waarin ze korter worden.
   {
     id: 'aerobic', name: 'AEROBIC BASE', emoji: '🫁',
     start: '2026-09-01', end: '2026-10-03',
-    adaptation: 'Aerobe basis: zone B-volume, run/walk verlengen. Eindigt met de trailrace van 3 oktober (5 km).',
-    not: 'Geen snelheid, geen intervallen boven zone B.',
+    adaptation: 'Aerobe basis met continuïteit als hefboom: loopblokken van 8 naar 25 min, wandelpauzes eruit, tempo omlaag naar circa 8:00/km. Eerste doorlopende run (25 min, ±3 km) rond 26 september. Eindigt met de trailrace van 3 oktober.',
+    not: 'Geen snelheid, geen zone C. Elke stap op de ladder alleen bij een schone herstelrespons.',
   },
   {
-    id: 'economy', name: 'ECONOMY', emoji: '⚙️',
+    id: 'economy', name: 'CONTINU LOPEN', emoji: '🏃',
     start: '2026-10-05', end: '2026-10-30',
-    adaptation: 'Loopeconomie: langere loopblokken, kortere wandelpauzes. Eindigt met Bereloop Terschelling (30 okt).',
-    not: 'Geen nieuw volume vlak voor de race, geen zone C.',
+    adaptation: 'Doorlopend zonder wandelpauzes: 30 → 32 → 35 → 40 min. De 5 km achter elkaar valt rond 21 oktober. Bereloop Terschelling (30 okt) wordt de eerste race die doorlopend gaat.',
+    not: 'Geen tempowerk. Dit tempo van opbouwen is sneller dan +10% per week en alleen te verdedigen zolang het herstel groen blijft — bij een slechte respons wordt de stap herhaald.',
   },
   {
-    id: 'continuous', name: 'CONTINUOUS RUNNING', emoji: '🏃',
+    id: 'continuous', name: '5 KM VASTHOUDEN', emoji: '📌',
     start: '2026-11-02', end: '2026-12-13',
-    adaptation: 'Naar doorlopend hardlopen zonder wandelpauzes. Ameland 5 km (13 dec) als meetpunt.',
-    not: 'Geen tempowerk; volume max +10% per week.',
+    adaptation: 'De 5 km doorlopend vasthouden en gewoon maken, niet opnieuw opbouwen. Ameland 5 km (13 dec) als bevestiging.',
+    not: 'Geen nieuw volume erbovenop zolang de 5 km nog niet routine is.',
   },
   {
     id: '5kbase', name: '5K BASE', emoji: '📏',
