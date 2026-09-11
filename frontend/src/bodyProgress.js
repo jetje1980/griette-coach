@@ -163,6 +163,58 @@ export function saveObservation(date, obsId, value) {
   return all;
 }
 
+// ── Het gewicht dat bij een meting of foto hoort ────────────────
+//
+// Gewicht staat in de daglogs, maten in een eigen store en foto's in
+// IndexedDB. Drie plekken, en daardoor stonden ze nergens naast elkaar —
+// terwijl een taille van 73 cm zonder het gewicht van die dag maar de helft
+// van het verhaal is. Bij lichaamssamenstelling gaat het nu juist om die
+// twee samen: dezelfde taille bij twee kilo minder is iets anders dan
+// dezelfde taille bij hetzelfde gewicht.
+//
+// Je weegt jezelf niet altijd op de dag dat je de meetlat pakt, dus wordt er
+// in een venster gezocht. Wat er teruggekomt zegt er altijd bij hoe ver weg
+// het getal vandaan komt: een gewicht van drie dagen eerder is bruikbaar,
+// maar het is niet het gewicht van die dag en zo hoort het er ook te staan.
+export const WEIGHT_WINDOW_DAYS = 3;
+
+export function weightNear(date, logs = {}, { window = WEIGHT_WINDOW_DAYS } = {}) {
+  if (!date) return null;
+  const exact = logs[date]?.weight;
+  if (exact != null) return { weight: exact, date, offset: 0, exact: true };
+
+  let beste = null;
+  for (const log of Object.values(logs)) {
+    if (!log?.date || log.weight == null) continue;
+    const dagen = Math.round(
+      (new Date(`${date}T12:00:00`) - new Date(`${log.date}T12:00:00`)) / 86400000);
+    const afstand = Math.abs(dagen);
+    if (afstand > window) continue;
+    // Bij gelijke afstand wint de meting ervóór: die is al gebeurd op het
+    // moment dat de foto werd gemaakt.
+    if (!beste || afstand < Math.abs(beste.offset)
+      || (afstand === Math.abs(beste.offset) && dagen > 0)) {
+      beste = { weight: log.weight, date: log.date, offset: dagen, exact: false };
+    }
+  }
+  if (!beste) return null;
+  return {
+    ...beste,
+    note: beste.offset > 0
+      ? `${beste.offset} ${beste.offset === 1 ? 'dag' : 'dagen'} eerder`
+      : `${-beste.offset} ${-beste.offset === 1 ? 'dag' : 'dagen'} later`,
+  };
+}
+
+// Kort label voor in een tabel of onder een foto. Geeft null terug als er
+// niets te melden valt — dan hoort er een streepje te staan, geen nul.
+export function weightLabel(date, logs = {}, opts = {}) {
+  const w = weightNear(date, logs, opts);
+  if (!w) return null;
+  const kg = `${Number(w.weight).toFixed(1).replace('.', ',')} kg`;
+  return w.exact ? kg : `${kg} (${w.note})`;
+}
+
 // ── Objectieve maten naast het beeld ────────────────────────────
 // Alleen de metingen die er in dit verhaal toe doen. Vetpercentage
 // verschijnt uitsluitend als er een échte meting is ingevoerd — nooit als

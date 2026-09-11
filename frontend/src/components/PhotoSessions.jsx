@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { VIEWS } from '../photoAnalysis';
 import { formatNLLong } from '../datetime';
+import { weightNear } from '../bodyProgress';
 
 // Eén fotosessie is één rij.
 //
@@ -41,7 +42,7 @@ function korteDatum(datum) {
 }
 
 export default function PhotoSessions({
-  sessions = [], onOpen, onShoot, lege = null, stap = EERSTE_LADING,
+  sessions = [], onOpen, onShoot, lege = null, stap = EERSTE_LADING, logs = null,
 }) {
   const [zichtbaar, setZichtbaar] = useState(stap);
 
@@ -85,6 +86,23 @@ export default function PhotoSessions({
                 marginTop: 3 }}>
                 {aanwezig}/{VIEWS.length}
               </div>
+
+              {/* Het gewicht van die dag, bij de foto waar het bij hoort.
+                  Zonder dat getal zie je wél dat er iets verandert, maar niet
+                  of het van gewicht komt of van vorm — en dat is precies het
+                  onderscheid waar het bij lichaamssamenstelling om gaat. */}
+              {logs && (() => {
+                const w = weightNear(sessie.date, logs);
+                if (!w) return null;
+                return (
+                  <div data-foto-gewicht={sessie.date}
+                    title={w.exact ? `Gewogen op ${sessie.date}` : `Gewogen op ${w.date}, ${w.note}`}
+                    style={{ fontSize: 10, fontWeight: w.exact ? 800 : 600, marginTop: 4,
+                      color: w.exact ? 'var(--sage)' : 'var(--ghost)', whiteSpace: 'nowrap' }}>
+                    {Number(w.weight).toFixed(1).replace('.', ',')} kg{w.exact ? '' : '*'}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* De foto's van díe dag, naast elkaar. Past het niet op de
@@ -127,6 +145,10 @@ export default function PhotoSessions({
       {/* Wat er nog is, en hoe je erbij komt. Nooit stilzwijgend afkappen. */}
       <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 10,
         paddingTop: 8, borderTop: '1px solid var(--border)' }} data-fotos-teller>
+        {logs && <div style={{ marginBottom: 4 }}>
+          Een gewicht met * komt van een andere dag dan de foto — binnen drie dagen
+          ervoor of erna.
+        </div>}
         {zichtbaar >= alle.length
           ? `Alle ${alle.length} fotomomenten getoond.`
           : (

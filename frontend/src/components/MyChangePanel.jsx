@@ -311,7 +311,7 @@ export default function MyChangePanel({
         </button>
       }>Alle fotomomenten</Label>
       <div className="os-card" style={{ marginBottom: 12 }}>
-        <PhotoSessions sessions={sessions} onOpen={setZoom}
+        <PhotoSessions sessions={sessions} logs={logs} onOpen={setZoom}
           onShoot={(datum) => setShootDate(datum)}
           lege={<>Nog geen foto&apos;s. Eén serie van voor, zij, achter en gezicht is
             genoeg om te beginnen — over vier weken heb je er iets aan.</>} />

@@ -18,6 +18,7 @@ import CycleHistory from './CycleHistory';
 import { workoutOn, loadWorkouts, computePace } from '../workouts';
 import { strava } from '../integrations';
 import { store } from '../store';
+import { weightNear } from '../bodyProgress';
 import { todayLocal, startOfWeek, formatNLLong } from '../datetime';
 import { weekTrainingRows, nextOfferDate, STATUS_META } from '../trainingDay';
 import { ingestStravaWorkouts } from '../stravaIngest';
@@ -1966,6 +1967,11 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
                         {f.label}
                       </th>
                     ))}
+                    {/* Het gewicht van diezelfde dag. Een taille zonder
+                        gewicht ernaast is maar de helft van het verhaal. */}
+                    <th style={{ textAlign: 'right', padding: '6px 4px', color: 'var(--ghost)', fontWeight: 600 }}>
+                      Gewicht
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1977,6 +1983,19 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
                           {m[f.key] ? `${m[f.key]}` : '—'}
                         </td>
                       ))}
+                      {(() => {
+                        const w = weightNear(m.date, logs || {});
+                        return (
+                          <td data-maat-gewicht={m.date}
+                            style={{ textAlign: 'right', padding: '7px 4px',
+                              fontWeight: w?.exact ? 600 : 400,
+                              color: w ? (w.exact ? 'inherit' : 'var(--sub)') : 'var(--ghost)',
+                              whiteSpace: 'nowrap' }}
+                            title={w && !w.exact ? `Gewogen op ${w.date}, ${w.note}` : undefined}>
+                            {w ? `${Number(w.weight).toFixed(1).replace('.', ',')}${w.exact ? '' : '*'}` : '—'}
+                          </td>
+                        );
+                      })()}
                       <td style={{ textAlign: 'right', padding: '7px 0' }}>
                         <button onClick={async () => {
                           if (!window.confirm(`Meting van ${m.date} verwijderen?`)) return;
@@ -1989,6 +2008,14 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.6, marginTop: 6 }}
+              data-maten-teller>
+              {measurements.length > 8
+                ? `De laatste 8 van ${measurements.length} metingen. `
+                : `Alle ${measurements.length} ${measurements.length === 1 ? 'meting' : 'metingen'}. `}
+              Een gewicht met * komt van een andere dag dan de meting — binnen drie
+              dagen ervoor of erna. Zonder * is het van dezelfde dag.
             </div>
           </>
         )}

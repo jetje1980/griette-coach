@@ -186,8 +186,8 @@ function EnergySparkline({ logs }) {
 // ernaast. Eén sessie besloeg daardoor meerdere regels en miste een kwart van
 // de foto's. Twee weergaves van hetzelfde ding lopen altijd uiteen; er is er
 // nu één.
-function PhotoTimeline({ sessions }) {
-  return <PhotoSessions sessions={sessions} />;
+function PhotoTimeline({ sessions, logs }) {
+  return <PhotoSessions sessions={sessions} logs={logs} />;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1060,7 +1060,7 @@ function TabRoutines() {
 // ═══════════════════════════════════════════════════════════════
 // TAB 5: TIJDLIJN
 // ═══════════════════════════════════════════════════════════════
-function TabTijdlijn({ sessions }) {
+function TabTijdlijn({ sessions, logs }) {
   const tod = todayStr();
 
   // Eigen mijlpalen: toevoegen, bewerken (datum incl.), verwijderen
@@ -1170,7 +1170,7 @@ function TabTijdlijn({ sessions }) {
       {/* Photos */}
       <div className="os-section-label">Progressiefoto's</div>
       <div className="os-card">
-        <PhotoTimeline sessions={sessions} />
+        <PhotoTimeline sessions={sessions} logs={logs} />
       </div>
     </div>
   );
@@ -1535,7 +1535,7 @@ export default function ProgressieScreen({ logs, streak }) {
       {activeTab === 5 && <TabMoney />}
       {activeTab === 6 && <TabFreedom />}
       {activeTab === 7 && <TabRoutines />}
-      {activeTab === 8 && <TabTijdlijn sessions={sessions} />}
+      {activeTab === 8 && <TabTijdlijn sessions={sessions} logs={logs} />}
     </div>
   );
 }
