@@ -139,6 +139,56 @@ export const COMPARABILITY_PENALTY = {
   KORT_INTERVAL: 0.25,  // minder dan twee weken ertussen
 };
 
+// ── De toestand van die dag ─────────────────────────────────────
+//
+// Licht, kleding en tijdstip gingen al over de opname. Dit gaat over het
+// lichaam zelf op dat moment, en dat is de grotere storingsbron: vocht
+// vasthouden verandert een taille met centimeters, en dat is meer dan een
+// maand training oplevert. Wie dat niet meeweegt, leest vocht als vet.
+//
+// Elke toestand heeft een gewicht en — belangrijker — een `leesrichting`:
+// welke kant het getal op wordt geduwd. Die tekst gaat mee naar de
+// beeldvergelijker, zodat die niet zelf hoeft te raden wat een opmerking
+// betekent.
+//
+// Dit is kalibratie, geen diagnose. Er staat nergens wat een klacht ís,
+// alleen wat hij met de meting doet.
+export const DAY_CONDITIONS = [
+  { id: 'vocht', label: 'Vocht vasthouden / opgeblazen', penalty: 0.25,
+    leesrichting: 'Vocht zet vooral taille en navel op, met centimeters tegelijk, en maakt de contour zachter. Een toename hier is eerder vocht dan vet.' },
+  { id: 'menstruatie', label: 'Ongesteld of vlak ervoor', penalty: 0.20,
+    leesrichting: 'Rond de menstruatie schuift het vochtgehalte; omtrekken en beeld lopen dan een paar dagen mee omhoog.' },
+  { id: 'migraine', label: 'Migraine (laatste 48 uur)', penalty: 0.15,
+    leesrichting: 'Een migraine-episode gaat vaak samen met vochtverschuiving en slecht slapen; het beeld van die dag is niet representatief.' },
+  { id: 'ziek', label: 'Ziek / infectie', penalty: 0.20,
+    leesrichting: 'Bij ziekte verandert vochthuishouding en houding. Vergelijk deze dag niet als maatstaf.' },
+  { id: 'net_gegeten', label: 'Kort na een maaltijd', penalty: 0.20,
+    leesrichting: 'Een gevulde maag telt direct mee in de buikomtrek en op de foto.' },
+  { id: 'zout', label: 'Veel zout of alcohol gehad', penalty: 0.15,
+    leesrichting: 'Zout en alcohol houden vocht vast tot ruim een dag erna.' },
+  { id: 'kracht', label: 'Krachttraining laatste 48 uur', penalty: 0.15,
+    leesrichting: 'Na krachttraining staan spieren voller en kan er lichte zwelling zijn — dat oogt gunstiger, niet slanker.' },
+  { id: 'slecht_geslapen', label: 'Slecht geslapen', penalty: 0.10,
+    leesrichting: 'Een slechte nacht verandert vooral gezicht en houding, minder de omtrekken.' },
+];
+
+export const CONDITION_BY_ID = Object.fromEntries(DAY_CONDITIONS.map(c => [c.id, c]));
+
+// Meer dan dit kan de toestand van de dag nooit van de score afhalen. Zonder
+// plafond zet vier vinkjes de vergelijking op nul, en dan is er geen verschil
+// meer tussen "lastig te vergelijken" en "onmogelijk".
+export const CONDITION_PENALTY_CAP = 0.35;
+
+// Dezelfde toestand aan beide kanten is minder erg dan aan één kant.
+// Twee foto's die allebei op een opgeblazen dag zijn gemaakt, zijn onderling
+// juist beter vergelijkbaar dan een opgeblazen dag tegen een gewone dag.
+export const CONDITION_BOTH_SIDES_FACTOR = 0.3;
+
+export function conditionsOf(meta) {
+  const c = meta?.conditions;
+  return Array.isArray(c) ? c.filter(id => CONDITION_BY_ID[id]) : [];
+}
+
 export const CONFIDENCE = {
   HIGH: 'hoog',
   MEDIUM: 'redelijk',
@@ -181,6 +231,31 @@ export function comparability(dateA, dateB) {
   if (dagen < 14) {
     straf(COMPARABILITY_PENALTY.KORT_INTERVAL,
       `Er zit maar ${dagen} dagen tussen. Onder de twee weken zie je vooral vocht, licht en houding.`);
+  }
+
+  // De toestand van het lichaam op beide dagen. Dit weegt zwaarder dan het
+  // licht: vocht verandert een taille met centimeters.
+  const condA = conditionsOf(a);
+  const condB = conditionsOf(b);
+  const alleIds = [...new Set([...condA, ...condB])];
+  let toestandStraf = 0;
+  const toestandRedenen = [];
+  for (const id of alleIds) {
+    const c = CONDITION_BY_ID[id];
+    const inA = condA.includes(id), inB = condB.includes(id);
+    const beide = inA && inB;
+    toestandStraf += c.penalty * (beide ? CONDITION_BOTH_SIDES_FACTOR : 1);
+    toestandRedenen.push(beide
+      ? `${c.label}: op beide momenten — dat heft elkaar grotendeels op.`
+      : `${c.label} op ${inA ? dateA : dateB}, niet op de andere dag. ${c.leesrichting}`);
+  }
+  if (toestandStraf > 0) {
+    const werkelijk = Math.min(toestandStraf, CONDITION_PENALTY_CAP);
+    score -= werkelijk;
+    redenen.push(...toestandRedenen);
+    if (toestandStraf > CONDITION_PENALTY_CAP) {
+      redenen.push('Er speelde zoveel tegelijk dat dit als één grote storing telt, niet als een optelsom.');
+    }
   }
 
   score = Math.max(0, Math.min(1, +score.toFixed(2)));
@@ -398,6 +473,46 @@ export function buildComparisonRequest(track, photosByDate, { asOf = todayLocal(
   const eenzijdig = [...new Set([...aanwezig(refDatum), ...aanwezig(nuDatum)])]
     .filter(k => !gedeeld.includes(k));
 
+  // ── De context van beide dagen ────────────────────────────────
+  //
+  // Dit ontbrak, en dat is meer dan een gemis: de vergelijker kreeg twee
+  // reeksen foto's zonder te weten dat er op de ene dag vocht werd
+  // vastgehouden. Een taille die twee centimeter dikker oogt heeft dan een
+  // verklaring die niets met vet te maken heeft, en zonder die verklaring
+  // wordt het als voortgang of achteruitgang gelezen.
+  //
+  // Wat er meegaat: haar eigen opmerking woordelijk, de aangevinkte
+  // toestanden met hun leesrichting, en de cyclusdag als die bekend is.
+  const context = (datum) => {
+    const m = sessionMeta(datum);
+    const cond = conditionsOf(m);
+    const pos = cycleDayOf(datum, { asOf });
+    return {
+      date: datum,
+      note: m?.note?.trim() || null,
+      conditions: cond.map(id => ({
+        id, label: CONDITION_BY_ID[id].label, leesrichting: CONDITION_BY_ID[id].leesrichting,
+      })),
+      cycleDay: pos,
+      timeOfDay: m?.timeOfDay || null,
+      light: m?.light || null,
+    };
+  };
+  const ctxRef = context(refDatum);
+  const ctxNu = context(nuDatum);
+
+  const regels = [];
+  for (const [rol, c] of [['REFERENTIE', ctxRef], ['NU', ctxNu]]) {
+    const delen = [];
+    if (c.cycleDay != null) delen.push(`cyclusdag ${c.cycleDay}`);
+    if (c.conditions.length) delen.push(c.conditions.map(x => x.label.toLowerCase()).join(', '));
+    if (c.note) delen.push(`eigen opmerking: "${c.note}"`);
+    regels.push(delen.length
+      ? `${rol} ${c.date}: ${delen.join(' · ')}`
+      : `${rol} ${c.date}: niets vastgelegd over de toestand van die dag.`);
+    for (const x of c.conditions) regels.push(`   → ${x.leesrichting}`);
+  }
+
   return {
     ok: true,
     track: track.id,
@@ -407,6 +522,17 @@ export function buildComparisonRequest(track, photosByDate, { asOf = todayLocal(
     sharedViews: gedeeld,
     unpairedViews: eenzijdig,
     comparability: track.comparability,
+    context: { from: ctxRef, to: ctxNu },
+    contextLines: regels,
+    contextInstruction:
+      'Weeg de omstandigheden hierboven mee vóór je een verschil duidt. Vocht, ' +
+      'een volle maag of een migraine-episode veranderen omtrek en contour meer ' +
+      'dan weken training doen. Staat zoiets aan één kant wél en aan de andere ' +
+      'niet, benoem dat dan expliciet als mogelijke verklaring en verlaag je ' +
+      'zekerheid — schrijf het verschil niet toe aan vet, spier of voortgang ' +
+      'zolang die verklaring op tafel ligt. Dit is context voor de duiding, geen ' +
+      'reden om een verschil weg te praten dat er echt is, en geen aanleiding ' +
+      'voor een medische uitspraak.',
     asOf,
   };
 }

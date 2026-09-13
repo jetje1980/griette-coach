@@ -19,6 +19,8 @@ import { workoutOn, loadWorkouts, computePace } from '../workouts';
 import { strava } from '../integrations';
 import { store } from '../store';
 import { weightNear } from '../bodyProgress';
+import { DAY_CONDITIONS, sessionMeta, saveSessionMeta, conditionsOf } from '../photoAnalysis';
+import { cycleDayOf } from '../bodyReview';
 import { todayLocal, startOfWeek, formatNLLong } from '../datetime';
 import { weekTrainingRows, nextOfferDate, STATUS_META } from '../trainingDay';
 import { ingestStravaWorkouts } from '../stravaIngest';
@@ -807,6 +809,8 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
   const [maten, setMaten] = useState({ ...MAAT_LEEG });
   const [matenDate, setMatenDate] = useState(currentDate);
   const [savingMaten, setSavingMaten] = useState(false);
+  const [matenNotitie, setMatenNotitie] = useState('');
+  const [matenToestand, setMatenToestand] = useState([]);
   const todayStr = todayLocal();
   const [stravaStatus, setStravaStatus] = useState(null);
   const [stravaActivities, setStravaActivities] = useState([]);
@@ -931,6 +935,18 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
 
   // "Geen idee" is een antwoord, geen leeg veld — maar het sluit de andere
   // uit: als je weet dat het de cyclus is, weet je het.
+  // De context van de gekozen dag ophalen zodra die dag verandert, zodat je
+  // niet opnieuw intypt wat er al staat — en niet per ongeluk overschrijft.
+  useEffect(() => {
+    const m = sessionMeta(matenDate);
+    setMatenNotitie(m?.note || '');
+    setMatenToestand(conditionsOf(m));
+  }, [matenDate]);
+
+  function toggleToestand(id) {
+    setMatenToestand(arr => arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
+  }
+
   function toggleOorzaak(id) {
     const arr = log?.feeling_causes || [];
     const aan = arr.includes(id);
@@ -952,11 +968,24 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
       const n = parseFloat(v);
       if (Number.isFinite(n)) vals[f.key] = n;
     }
-    if (!Object.keys(vals).length) return;
     const datum = matenDate || currentDate;
+    // De context van die dag hoort bij de meting, ook als je alleen de
+    // opmerking bijwerkt zonder een nieuw getal.
+    const bestaandeMeta = sessionMeta(datum);
+    const contextGewijzigd = (matenNotitie.trim() !== (bestaandeMeta?.note || '').trim())
+      || JSON.stringify([...matenToestand].sort()) !== JSON.stringify(conditionsOf(bestaandeMeta).sort());
+    if (!Object.keys(vals).length && !contextGewijzigd) return;
     setSavingMaten(true);
     try {
-      const r = await store.saveMeasurements(datum, vals);
+      if (contextGewijzigd) {
+        saveSessionMeta(datum, {
+          note: matenNotitie.trim(),
+          conditions: [...matenToestand],
+        });
+      }
+      const r = Object.keys(vals).length
+        ? await store.saveMeasurements(datum, vals)
+        : { toegevoegd: [], gewijzigd: [], behouden: [], cloud: null };
       const updated = await store.getMeasurements();
       setMeasurements(updated);
 
@@ -970,6 +999,13 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
         delen.push(`gewijzigd: ${r.gewijzigd.map(g => `${naam(g.veld)} ${g.van} → ${g.naar}`).join(', ')}`);
       }
       if (r.behouden?.length) delen.push(`ongewijzigd bewaard: ${r.behouden.map(naam).join(', ')}`);
+      if (contextGewijzigd) {
+        const stukken = [];
+        if (matenToestand.length) stukken.push(`${matenToestand.length} bijzonderheid${matenToestand.length === 1 ? '' : 'en'}`);
+        if (matenNotitie.trim()) stukken.push('opmerking');
+        delen.push(stukken.length ? `context bewaard (${stukken.join(' + ')})` : 'context gewist');
+      }
+      if (!delen.length) delen.push('niets gewijzigd');
 
       if (r.cloud && r.cloud.ok === false) {
         flashMsg(`⚠ Meting voor ${formatNLLong(datum)} staat op dit toestel, maar niet online (${r.cloud.reason}). Je invoer is niet kwijt.`, 8000);
@@ -977,6 +1013,8 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
         flashMsg(`Meting voor ${formatNLLong(datum)} opgeslagen — ${delen.join(' · ')}`, 6000);
       }
       setMaten({ ...MAAT_LEEG });
+      // De opmerking blijft staan: die hoort bij de dag, niet bij deze
+      // invoerbeurt, en je wilt hem terugzien in plaats van opnieuw typen.
       // Terug naar de dag waar de invoer bij hoort, zodat je hem daar ziet
       // staan in plaats van hem op goed vertrouwen te moeten aannemen.
       setMatenDate(datum);
@@ -1950,6 +1988,45 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
             </div>
           ))}
         </div>
+        {/* ── Wat er die dag speelde ──────────────────────────────
+            Een taille van 73 zegt iets anders op een dag dat je vocht
+            vasthoudt. Dit staat bij de meting omdat je het dáár bedenkt, en
+            het gaat naar dezelfde dag-context die de beeldvergelijker leest —
+            niet naar een tweede plek die daarnaast leeft. */}
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--divide)' }}
+          data-maat-context>
+          <SectionLabel style={{ marginTop: 0 }}>Wat speelde er die dag?</SectionLabel>
+          <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.5, marginBottom: 7 }}>
+            Optioneel, en het weegt echt mee: vocht verandert je taille met
+            centimeters — meer dan een maand training. De coach en de
+            beeldvergelijker krijgen dit erbij en verlagen hun zekerheid als het
+            maar op één van twee momenten speelde.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}
+            data-maat-toestanden>
+            {DAY_CONDITIONS.map(c => (
+              <button key={c.id} data-toestand={c.id} title={c.leesrichting}
+                className={`os-toggle-chip ${matenToestand.includes(c.id) ? 'active' : ''}`}
+                onClick={() => toggleToestand(c.id)}
+                style={{ fontSize: 12 }}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <textarea className="os-input" rows={2} data-maat-opmerking
+            placeholder="Bijvoorbeeld: dag 9 cyclus, dag ervoor zware migraine, voel me opgeblazen"
+            value={matenNotitie} onChange={e => setMatenNotitie(e.target.value)}
+            style={{ resize: 'vertical', fontFamily: 'var(--font)', lineHeight: 1.55,
+              width: '100%', fontSize: 12.5 }} />
+          {cycleDayOf(matenDate) != null && (
+            <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginTop: 5 }}
+              data-maat-cyclusdag>
+              Cyclusdag {cycleDayOf(matenDate)} — die gaat automatisch mee, die hoef je
+              er niet bij te typen.
+            </div>
+          )}
+        </div>
+
         <button className="os-btn-save" onClick={saveMaten} disabled={savingMaten}>
           {savingMaten ? 'Opslaan…' : 'Maten opslaan'}
         </button>
@@ -1975,8 +2052,12 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
                   </tr>
                 </thead>
                 <tbody>
-                  {measurements.slice(0, 8).map((m, i) => (
-                    <tr key={i} style={{ borderTop: '1px solid var(--divide)' }}>
+                  {measurements.slice(0, 8).map((m, i) => {
+                    const meta = sessionMeta(m.date);
+                    const cond = conditionsOf(meta);
+                    return (
+                    <React.Fragment key={i}>
+                    <tr style={{ borderTop: '1px solid var(--divide)' }}>
                       <td style={{ padding: '7px 4px', color: 'var(--sub)' }}>{m.date?.slice(5)}</td>
                       {MAAT_FIELDS.map(f => (
                         <td key={f.key} style={{ textAlign: 'right', padding: '7px 4px', fontWeight: m[f.key] ? 600 : 400 }}>
@@ -2005,7 +2086,27 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
                           style={{ background: 'none', border: 'none', color: 'var(--ghost)', cursor: 'pointer', fontSize: 14 }}>×</button>
                       </td>
                     </tr>
-                  ))}
+                    {/* Wat er die dag speelde, direct onder het getal. Een
+                        taille van 73 leest anders met "vocht vasthouden"
+                        eronder, en die zin hoort er dus bij te staan. */}
+                    {(meta?.note || cond.length > 0) && (
+                      <tr data-maat-context-rij={m.date}>
+                        <td colSpan={MAAT_FIELDS.length + 3}
+                          style={{ padding: '0 4px 8px', fontSize: 10.5, lineHeight: 1.5,
+                            color: 'var(--sub)' }}>
+                          {cond.length > 0 && (
+                            <span style={{ color: 'var(--gold)', fontWeight: 700 }}>
+                              {cond.map(id => DAY_CONDITIONS.find(c => c.id === id)?.label).join(' · ')}
+                            </span>
+                          )}
+                          {cond.length > 0 && meta?.note ? ' — ' : ''}
+                          {meta?.note}
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

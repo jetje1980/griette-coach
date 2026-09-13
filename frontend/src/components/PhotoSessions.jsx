@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { VIEWS } from '../photoAnalysis';
+import { VIEWS, sessionMeta, conditionsOf, CONDITION_BY_ID } from '../photoAnalysis';
 import { formatNLLong } from '../datetime';
 import { weightNear } from '../bodyProgress';
 
@@ -105,6 +105,10 @@ export default function PhotoSessions({
               })()}
             </div>
 
+            {/* De foto's van díe dag, plus wat er die dag speelde.
+                Een zachtere contour leest anders met "vocht vasthouden"
+                ernaast, en die zin hoort dus in beeld te staan. */}
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
             {/* De foto's van díe dag, naast elkaar. Past het niet op de
                 breedte van een telefoon, dan schuift deze strook — de rij
                 wordt níét opgebroken in meerdere regels. */}
@@ -137,6 +141,24 @@ export default function PhotoSessions({
                   </div>
                 );
               })}
+            </div>
+            {(() => {
+              const meta = sessionMeta(sessie.date);
+              const cond = conditionsOf(meta);
+              if (!meta?.note && !cond.length) return null;
+              return (
+                <div data-foto-context={sessie.date}
+                  style={{ fontSize: 10, lineHeight: 1.5, color: 'var(--sub)', marginTop: 4 }}>
+                  {cond.length > 0 && (
+                    <span style={{ color: 'var(--gold)', fontWeight: 700 }}>
+                      {cond.map(id => CONDITION_BY_ID[id]?.label).join(' · ')}
+                    </span>
+                  )}
+                  {cond.length > 0 && meta?.note ? ' — ' : ''}
+                  {meta?.note}
+                </div>
+              );
+            })()}
             </div>
           </div>
         );
