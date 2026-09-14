@@ -382,18 +382,44 @@ export const CLASS_EXERCISES = {
       unit: 'herhalingen', cue: 'Band op ooghoogte, trek naar je gezicht, ellebogen hoog.',
       axis: 'bandweerstand', progress: 'Zwaardere band, dan langzamer terug.' },
   ],
+  // ── Core ───────────────────────────────────────────────────
+  //
+  // Dit blok is bewust het grootst. Wat een middel strakker laat ogen is
+  // niet het aantal crunches maar hoe goed je romp spanning vasthoudt: een
+  // diepe buikspier die je ribben laag houdt en je bekken op zijn plek. Dat
+  // train je met tegenhouden — niet meebuigen — en dus staan hier vooral
+  // anti-beweging-oefeningen: anti-holle rug, anti-zijwaarts, anti-draaien.
+  //
+  // Wat het niet doet staat in CORE_TRUTH hieronder, en die tekst hoort in
+  // de app te staan en niet alleen hier.
   core: [
     { id: 'c_deadbug', name: 'Dead bug', pattern: 'core', reps: 10,
       unit: 'per kant', cue: 'Onderrug tegen de grond, tegenovergestelde arm en been langzaam strekken.',
+      waarom: 'Leert je romp spanning houden terwijl je armen en benen bewegen — precies wat er bij hardlopen gebeurt.',
       axis: 'tempo', progress: 'Langzamer, dan been lager.' },
     { id: 'c_plank', name: 'Plank', pattern: 'core', reps: 30,
       unit: 'seconden', cue: 'Ellebogen onder je schouders, billen aan, geen holle rug.',
+      waarom: 'De basisvorm van tegenhouden: je romp mag niet doorzakken.',
       axis: 'houdtijd', progress: '30 → 45 → 60 s, daarna eenarmig tikken.' },
     { id: 'c_sideplank', name: 'Side plank', pattern: 'core', reps: 20,
       unit: 'seconden per kant', cue: 'Elleboog onder je schouder, heup hoog, lijf één lijn.',
+      waarom: 'De zijkant van je romp — die houdt je bekken recht als je op één been landt.',
       axis: 'houdtijd', progress: 'Langer, daarna bovenste been heffen.' },
+    { id: 'c_pallof', name: 'Pallof press met band', pattern: 'core', reps: 10,
+      unit: 'per kant', cue: 'Band opzij vastgemaakt, duw hem recht vooruit zonder mee te draaien.',
+      waarom: 'Anti-draaien. Dit is de oefening die het diepe korset aanspreekt dat je middel smaller laat ogen, zonder dat je je buik traint als een spier die dikker mag worden.',
+      axis: 'bandweerstand', progress: 'Zwaardere band, dan verder van het ankerpunt staan.' },
+    { id: 'c_hollow', name: 'Hollow hold', pattern: 'core', reps: 20,
+      unit: 'seconden', cue: 'Op je rug, onderrug tegen de grond, armen en benen laag maar niet los van die druk.',
+      waarom: 'Trekt je ribben naar je bekken toe — de houding die een middel platter laat ogen.',
+      axis: 'houdtijd', progress: 'Langer, daarna armen verder naar achteren.' },
+    { id: 'c_birddog', name: 'Bird dog', pattern: 'core', reps: 8,
+      unit: 'per kant', cue: 'Op handen en knieën, tegenovergestelde arm en been strekken zonder te kantelen.',
+      waarom: 'Rompstabiliteit en onderrug — het tegengif voor lang zitten.',
+      axis: 'tempo', progress: 'Drie tellen vasthouden, daarna elleboog-knie tikken ertussen.' },
     { id: 'c_carry', name: 'Farmer carry', pattern: 'core', reps: 40,
       unit: 'seconden', cue: 'Zwaar in beide handen, rechtop lopen, schouders laag.',
+      waarom: 'Rompspanning onder belasting, staand — het meest praktische wat er is.',
       axis: 'bandweerstand', progress: 'Zwaarder, daarna één kant tegelijk.' },
   ],
   finish: [
@@ -457,5 +483,92 @@ export function classPlan(klas, { phase = null, week = 1, band = null } = {}) {
     note: f.id === 'terugnemen'
       ? 'Terugneemweek: één set minder per blok en geen zwaardere band. Hier wordt de winst opgenomen.'
       : `${f.label}: ${sets} sets per hoofdblok, stop met ongeveer ${f.targetRir} herhalingen over.`,
+  };
+}
+
+// ── Core en een strakker middel: wat waar is ────────────────────
+//
+// Dit is de plek waar een trainingsapp makkelijk begint te liegen, dus staat
+// het hier expliciet. Zij zegt dat core belangrijk voor haar is en dat ze een
+// strakkere buik wil. Allebei terecht, en ze hangen minder samen dan de
+// fitnesswereld suggereert.
+//
+// Het eerlijke antwoord heeft drie delen, en het derde is het goede nieuws.
+export const CORE_TRUTH = {
+  kop: 'Wat coretraining wel en niet doet voor een strakker middel',
+  punten: [
+    {
+      id: 'geen_plaatselijk',
+      titel: 'Buikspieroefeningen verbranden geen buikvet',
+      tekst: 'Plaatselijk afvallen bestaat niet: waar je vet verliest bepaalt je lichaam, niet de oefening die je kiest. Duizend crunches maken je buik sterker, niet dunner.',
+    },
+    {
+      id: 'wel_houding',
+      titel: 'Maar je romp bepaalt wél hoe je middel eruitziet',
+      tekst: 'Een diepe buikspierlaag die je ribben laag en je bekken recht houdt, maakt zichtbaar verschil in hoe je staat en dus hoe je middel oogt — bij precies hetzelfde vetpercentage. Dat is geen illusie; dat is houding, en die is trainbaar.',
+    },
+    {
+      id: 'tegenhouden',
+      titel: 'Daarom tegenhouden in plaats van meebuigen',
+      tekst: 'De oefeningen hier zijn vooral anti-beweging: niet doorzakken, niet opzij kantelen, niet meedraaien. Dat traint de laag die als korset werkt. Meebuigen — crunches, sit-ups — traint vooral de spier die je juist naar voren bolt als hij dikker wordt.',
+    },
+    {
+      id: 'de_rest',
+      titel: 'De rest komt van eiwit, kracht en geduld',
+      tekst: 'Wat er over je romp heen ligt verandert met je lichaamssamenstelling, en die beweegt door voldoende eiwit, zware genoeg krachttraining en tijd. Niet door minder eten of meer buikspieren.',
+    },
+  ],
+  // Wat hier nadrukkelijk níét mag gebeuren, want dat is precies waar het bij
+  // haar eerder is misgegaan.
+  waarschuwing: 'Een strakker middel is nooit een reden om harder te trainen, minder te eten of minder te herstellen. Gaat dat wel zo, dan werkt het tegen je — zeker in de perimenopauze, waar spierbehoud het schaarse goed is.',
+};
+
+// Core zwaarder laten wegen.
+//
+// Zij heeft gezegd dat dit voor haar het belangrijkste blok is. Dat is een
+// legitieme voorkeur en geen reden om de rest te laten vallen: de andere
+// patronen blijven staan, het coreblok krijgt er een set en een tweede
+// oefening bij. Zonder die grens wordt het binnen een maand een buikschema.
+export const CORE_PRIORITY_EXTRA_SETS = 1;
+export const CORE_PRIORITY_EXTRA_EXERCISES = 1;
+
+export function withCorePriority(plan, { on = true } = {}) {
+  if (!plan || !on) return plan;
+  const coreItems = plan.items.filter(i => i.block === 'core');
+  if (!coreItems.length) return plan;
+
+  const gebruikt = new Set(coreItems.map(i => i.id));
+  const extra = (CLASS_EXERCISES.core || [])
+    .filter(e => !gebruikt.has(e.id))
+    .slice(0, CORE_PRIORITY_EXTRA_EXERCISES);
+
+  const items = [];
+  for (const it of plan.items) {
+    if (it.block !== 'core') { items.push(it); continue; }
+    const sets = it.sets + CORE_PRIORITY_EXTRA_SETS;
+    items.push({ ...it, sets,
+      prescription: `${sets}× ${it.amount} ${it.unit}` });
+  }
+  // De extra coreoefening komt direct achter het coreblok.
+  const laatsteCore = items.map(i => i.block).lastIndexOf('core');
+  const toegevoegd = extra.map(e => {
+    const isTijd = /seconden/.test(e.unit);
+    const sets = 2 + CORE_PRIORITY_EXTRA_SETS;
+    return {
+      block: 'core',
+      blockLabel: (CLASS_BLOCKS.find(b => b.id === 'core') || {}).label || 'Core',
+      ...e,
+      sets,
+      amount: e.reps,
+      band: plan.items.find(i => i.band)?.band || null,
+      prescription: `${sets}× ${e.reps} ${e.unit}`,
+      extra: true,
+    };
+  });
+  items.splice(laatsteCore + 1, 0, ...toegevoegd);
+
+  return {
+    ...plan, items, corePriority: true,
+    coreNote: `Core staat voorop: ${CORE_PRIORITY_EXTRA_SETS} set extra per coreoefening en ${toegevoegd.length} oefening erbij. De andere patronen blijven staan — zonder benen en rug wordt dit een buikschema, en daar wordt een middel niet strakker van.`,
   };
 }

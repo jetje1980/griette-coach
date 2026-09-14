@@ -190,6 +190,145 @@ export const TECHNIQUE = {
     'Duw hoog op je tenen, één seconde vast, dan volledig laten zakken.',
     'Zonder de rek onderin train je maar de helft van de beweging.',
   ] },
+  // ── Coach class: bands & mat ──────────────────────────────────
+  // Dezelfde opbouw als hierboven: opzet, uitvoering, valkuil. Deze
+  // oefeningen stonden in de lessen zonder techniekuitleg, dus zag je bij het
+  // opendoen van een les niets staan.
+  c_adem: { search: 'ademhaling ribben laag oefening', cues: [
+    'Lig op je rug, knieën gebogen, één hand op je ribben en één op je buik.',
+    'Adem rustig in door je neus; laat bij de uitademing je ribben naar beneden zakken.',
+    'Til je schouders niet op bij het inademen — dan adem je hoog in plaats van diep.',
+  ] },
+  c_kat: { search: 'kat koe oefening techniek', cues: [
+    'Op handen en knieën, handen onder je schouders, knieën onder je heupen.',
+    'Rol wervel voor wervel van bol naar hol, rustig en zonder te forceren.',
+    'Duw niet vanuit je onderrug alleen; de beweging hoort door je hele rug te lopen.',
+  ] },
+  c_heupcirkel: { search: 'heupcirkels staand mobiliteit', cues: [
+    'Sta op één been, houd je eventueel licht vast, knie van het andere been op heuphoogte.',
+    'Maak rustige cirkels vanuit je heup, niet vanuit je onderrug.',
+    'Kantel je bekken niet mee — liever een kleinere cirkel die klopt.',
+  ] },
+  c_glutebridge_w: { search: 'glute bridge techniek', cues: [
+    'Op je rug, voeten plat en heupbreed, hielen onder je knieën.',
+    'Duw door je hielen omhoog en knijp je bilspieren één tel vast bovenin.',
+    'Til niet vanuit je onderrug — als je die voelt in plaats van je billen, kom minder hoog.',
+  ] },
+  c_squat: { search: 'squat met band om knieen techniek', cues: [
+    'Band net boven je knieën, voeten iets breder dan je heupen, tenen licht naar buiten.',
+    'Zak tussen je voeten in en duw je knieën actief naar buiten tegen de band in.',
+    'Laat je knieën niet naar binnen vallen — dat is precies wat de band zichtbaar maakt.',
+  ] },
+  c_split: { search: 'split squat techniek', cues: [
+    'Grote stap naar voren, achterste hiel los, gewicht vooral op het voorste been.',
+    'Zak recht naar beneden tot je achterste knie bijna de grond raakt, romp rechtop.',
+    'Stap niet te klein: dan schuift het werk naar je knie in plaats van je bil.',
+  ] },
+  c_stepdown: { search: 'step down oefening techniek', cues: [
+    'Sta met één voet op een verhoging, andere voet zweeft ernaast.',
+    'Zak langzaam tot je hiel de grond tikt en kom terug omhoog via het standbeen.',
+    'Zak niet met een plof — de controle omlaag is de hele oefening.',
+  ] },
+  c_rdl_band: { search: 'romanian deadlift band techniek', cues: [
+    'Sta met beide voeten op de band, handvatten of uiteinden in je handen, knieën zacht.',
+    'Duw je heupen naar achteren met een lange rug, tot je rek voelt in je hamstrings.',
+    'Buig je knieën niet verder mee — dan wordt het een squat en verdwijnt de rek.',
+  ] },
+  c_goodmorning: { search: 'good morning band techniek', cues: [
+    'Band onder je voeten en over je schouders, voeten op heupbreedte.',
+    'Scharnier vanuit je heupen naar voren, rug lang, knieën licht gebogen.',
+    'Rond je rug niet; kom minder ver naar voren als dat gebeurt.',
+  ] },
+  c_singleleg_rdl: { search: 'single leg romanian deadlift techniek', cues: [
+    'Sta op één been, knie zacht, ander been licht van de grond.',
+    'Scharnier naar voren terwijl het vrije been naar achteren strekt, heupen recht naar de grond.',
+    'Laat je heup niet openklappen naar de zijkant — dan draai je in plaats van te scharnieren.',
+  ] },
+  c_hipthrust_band: { search: 'hip thrust band techniek', cues: [
+    'Schouderbladen op een bank of bank, band om je knieën, voeten plat.',
+    'Duw door je hielen omhoog tot je heupen op één lijn staan en knijp één tel.',
+    'Kom niet hoger door je onderrug te hollen — de beweging stopt waar je billen stoppen.',
+  ] },
+  c_clamshell: { search: 'clamshell oefening techniek', cues: [
+    'Op je zij, knieën gebogen, band om je knieën, heupen recht boven elkaar.',
+    'Open je bovenste knie zonder je bekken achterover te kantelen.',
+    'Rol niet naar achteren — leg desnoods je rug tegen een muur om te voelen wanneer dat gebeurt.',
+  ] },
+  c_kickback: { search: 'glute kickback techniek', cues: [
+    'Op handen en knieën, rug in een neutrale stand.',
+    'Strek één been naar achteren vanuit je bil, niet hoger dan je romp.',
+    'Hol je onderrug niet om hoger te komen — de hoogte doet er niet toe, de bil wel.',
+  ] },
+  c_pushup: { search: 'push up techniek knieen', cues: [
+    'Handen iets breder dan je schouders, lijf één rechte lijn van hoofd tot knie of hiel.',
+    'Zak tot je borst laag is, ellebogen ongeveer 45 graden van je lijf.',
+    'Laat je heupen niet zakken — de knievariant met een strakke romp is beter dan de tenenversie met een doorhang.',
+  ] },
+  c_bandpress: { search: 'band shoulder press techniek', cues: [
+    'Band onder je voeten, handen op schouderhoogte, ribben laag.',
+    'Duw recht omhoog tot je armen gestrekt zijn, oren vrij van je schouders.',
+    'Duw niet vanuit een holle rug; span je buik aan voor je begint.',
+  ] },
+  c_bandrow: { search: 'band row techniek', cues: [
+    'Zittend of staand, band om je voeten, armen gestrekt naar voren.',
+    'Trek je ellebogen langs je lijf naar achteren en knijp je schouderbladen samen.',
+    'Trek niet met je schouders omhoog — de beweging komt van je rug, niet van je nek.',
+  ] },
+  c_pullapart: { search: 'band pull apart techniek', cues: [
+    'Band met beide handen vast, armen gestrekt op borsthoogte voor je.',
+    'Trek de band uit elkaar tot je armen opzij staan, schouderbladen naar elkaar.',
+    'Buig je ellebogen niet — dan doen je armen het werk in plaats van je rug.',
+  ] },
+  c_facepull: { search: 'face pull band techniek', cues: [
+    'Band op ongeveer ooghoogte bevestigd, handvatten in beide handen.',
+    'Trek naar je gezicht met je ellebogen hoog en breed, handen langs je slapen.',
+    'Laat je ellebogen niet zakken — dan wordt het een row en mist je de achterkant van je schouder.',
+  ] },
+  c_deadbug: { search: 'dead bug oefening techniek', cues: [
+    'Op je rug, armen recht omhoog, knieën boven je heupen in een hoek van 90 graden.',
+    'Strek tegenovergestelde arm en been langzaam uit terwijl je onderrug tegen de grond blijft.',
+    'Komt je onderrug los, dan ga je te ver — strek minder ver en houd de druk.',
+  ] },
+  c_plank: { search: 'plank techniek', cues: [
+    'Ellebogen recht onder je schouders, onderarmen plat, voeten op heupbreedte.',
+    'Span je billen en buik aan tot je lijf één lijn is; adem gewoon door.',
+    'Til je billen niet omhoog en laat ze niet zakken — een korte goede plank telt meer dan een lange slappe.',
+  ] },
+  c_sideplank: { search: 'side plank techniek', cues: [
+    'Op je zij, elleboog recht onder je schouder, knieën of voeten op elkaar.',
+    'Duw je heup omhoog tot je lijf één lijn is van schouder tot knie of enkel.',
+    'Zak niet naar voren of achteren; je bovenste schouder hoort recht boven de onderste te blijven.',
+  ] },
+  c_pallof: { search: 'pallof press band techniek', cues: [
+    'Band opzij van je bevestigd op borsthoogte, beide handen tegen je borst, sta stevig.',
+    'Duw je handen recht vooruit en houd ze daar terwijl de band je probeert te draaien.',
+    'Laat je romp niet meedraaien — ga dichter bij het ankerpunt staan als dat niet lukt.',
+  ] },
+  c_hollow: { search: 'hollow hold techniek', cues: [
+    'Op je rug, onderrug stevig tegen de grond gedrukt, armen naast je oren of langs je lijf.',
+    'Til schouders en benen net los en houd die druk in je onderrug vast.',
+    'Komt je onderrug los, dan zijn je benen te laag — breng ze hoger en houd de druk.',
+  ] },
+  c_birddog: { search: 'bird dog oefening techniek', cues: [
+    'Op handen en knieën, rug neutraal, blik naar de grond.',
+    'Strek tegenovergestelde arm en been uit tot ze op romphoogte staan.',
+    'Kantel niet mee naar één kant — liever lager strekken en stil blijven.',
+  ] },
+  c_carry: { search: 'farmer carry techniek', cues: [
+    'Een zwaar gewicht in elke hand, schouders laag en naar achteren.',
+    'Loop rechtop met korte, rustige passen en een aangespannen romp.',
+    'Hang niet scheef en kijk niet naar beneden; adem gewoon door tijdens het lopen.',
+  ] },
+  c_calf: { search: 'kuitheffen techniek', cues: [
+    'Sta op de rand van een trede, hielen vrij, licht vasthouden voor balans.',
+    'Duw hoog op je tenen, één tel vasthouden, dan langzaam volledig laten zakken.',
+    'Sla de rek onderin niet over — daar zit de helft van de oefening.',
+  ] },
+  c_voetboog: { search: 'voetboog oefening short foot', cues: [
+    'Zit of sta met je voet plat op de grond, tenen ontspannen.',
+    'Trek je voetboog omhoog door je bal naar je hiel te trekken, zonder je tenen te krullen.',
+    'Krul je tenen wel, dan doe je het met de verkeerde spieren — begin dan zittend opnieuw.',
+  ] },
 };
 
 export function techniqueFor(exerciseId) {

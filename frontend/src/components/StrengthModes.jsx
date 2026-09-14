@@ -3,6 +3,7 @@ import {
   BANDS_MAT_PROGRAM, BAND_LEVELS, bandLabel, COACH_CLASSES, allClasses,
   loadFavouriteClasses, saveFavouriteClass, deleteFavouriteClass,
   FAVOURITE_SUGGESTIONS, detectProvider, PATTERNS, classPlan,
+  CORE_TRUTH, withCorePriority,
 } from '../data/strengthClasses';
 import { blockPosition } from '../data/strengthSchema';
 import { saveSession, loadSessions, sessionScore, deleteSession } from '../strength';
@@ -185,6 +186,15 @@ function CoachClasses({ currentDate, onSaved }) {
   const blok = useMemo(() => blockPosition({ currentDate }), [currentDate]);
   const fase = blok.phase;
   const weekNr = blok.known ? blok.week : 1;
+  // Core zwaarder laten wegen is haar keuze, en hij blijft staan.
+  const [corePrio, setCorePrio] = useState(() => {
+    try { return localStorage.getItem('gc_core_priority') === '1'; } catch { return false; }
+  });
+  function zetCorePrio(v) {
+    setCorePrio(v);
+    try { localStorage.setItem('gc_core_priority', v ? '1' : '0'); } catch { /* geen opslag */ }
+  }
+  const [coreUitleg, setCoreUitleg] = useState(false);
   const [tick, setTick] = useState(0);
   const [playing, setPlaying] = useState(null);
   const [logging, setLogging] = useState(null);
@@ -232,7 +242,8 @@ function CoachClasses({ currentDate, onSaved }) {
           nog steeds niet weten wat je moest doen. Nu staat de les
           uitgeschreven, met de aantallen van déze week van de golf. */}
       {(() => {
-        const plan = classPlan(c, { phase: fase, week: weekNr });
+        const basisPlan = classPlan(c, { phase: fase, week: weekNr });
+        const plan = withCorePriority(basisPlan, { on: corePrio });
         if (!plan?.items?.length) return null;
         return (
           <details style={{ marginTop: 7 }} data-lesplan={c.id}>
@@ -244,6 +255,12 @@ function CoachClasses({ currentDate, onSaved }) {
               marginTop: 5, marginBottom: 6 }}>
               {plan.note}
             </div>
+            {plan.coreNote && (
+              <div style={{ fontSize: 10.5, color: 'var(--gold)', lineHeight: 1.5,
+                marginBottom: 6 }} data-corenote>
+                {plan.coreNote}
+              </div>
+            )}
             {plan.items.map((it, i) => (
               <div key={`${it.id}_${i}`} data-lesoefening={it.id}
                 style={{ padding: '6px 0', borderTop: '1px solid var(--divide)' }}>
@@ -258,6 +275,16 @@ function CoachClasses({ currentDate, onSaved }) {
                 <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45, marginTop: 2 }}>
                   {it.cue}
                 </div>
+                {it.waarom && (
+                  <div style={{ fontSize: 10.5, color: 'var(--sage)', lineHeight: 1.45,
+                    marginTop: 2 }} data-waarom={it.id}>
+                    Waarvoor: {it.waarom}
+                  </div>
+                )}
+                {/* De drie aanwijzingen — opzet, uitvoering, valkuil — en een
+                    plek voor je eigen demovideo. Stond er voor deze
+                    oefeningen niet, want techniqueFor() kende ze niet. */}
+                <ExerciseTechnique exercise={it} />
                 <div style={{ fontSize: 10, color: 'var(--gold)', marginTop: 2 }}>
                   Zwaarder maken via {it.axis}: {it.progress}
                 </div>
@@ -291,6 +318,46 @@ function CoachClasses({ currentDate, onSaved }) {
       <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55 }}>
         Een begeleide les volgen kost minder beslissingen dan zelf oefeningen kiezen.
         Op een matige dag is dat het verschil tussen wel en niet trainen.
+      </div>
+
+      {/* ── Core voorop, en wat dat wel en niet oplevert ───────
+          Zij heeft gezegd dat core voor haar het belangrijkste is en dat ze
+          een strakker middel wil. Allebei terecht, en ze hangen minder samen
+          dan de fitnesswereld suggereert — dus staat dat er nu bij in plaats
+          van dat de app het laat rusten. */}
+      <div className="os-card" style={{ marginBottom: 12 }} data-corekaart>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input type="checkbox" checked={corePrio} data-core-prioriteit
+            onChange={e => zetCorePrio(e.target.checked)} />
+          <span style={{ fontSize: 12.5, fontWeight: 800 }}>Core voorop in elke les</span>
+        </label>
+        <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5, marginTop: 4 }}>
+          Een set extra per coreoefening en één oefening erbij. De benen, rug en
+          houding blijven staan — zonder die wordt het een buikschema, en daar
+          wordt een middel niet strakker van.
+        </div>
+        <button type="button" onClick={() => setCoreUitleg(v => !v)} data-core-uitleg-knop
+          style={{ background: 'none', border: 'none', padding: '6px 0 0', cursor: 'pointer',
+            fontSize: 11, color: 'var(--sage)', fontWeight: 700 }}>
+          {coreUitleg ? '▲' : '▶'} {CORE_TRUTH.kop}
+        </button>
+        {coreUitleg && (
+          <div data-core-uitleg style={{ marginTop: 6 }}>
+            {CORE_TRUTH.punten.map(p => (
+              <div key={p.id} style={{ marginTop: 7 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800 }}>{p.titel}</div>
+                <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.55, marginTop: 1 }}>
+                  {p.tekst}
+                </div>
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: 'var(--rust)', lineHeight: 1.55, marginTop: 9,
+              paddingTop: 7, borderTop: '1px solid var(--border)', fontWeight: 600 }}
+              data-core-waarschuwing>
+              {CORE_TRUTH.waarschuwing}
+            </div>
+          </div>
+        )}
       </div>
 
       <Label>Standaardlessen</Label>
