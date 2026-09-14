@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   BANDS_MAT_PROGRAM, BAND_LEVELS, bandLabel, COACH_CLASSES, allClasses,
   loadFavouriteClasses, saveFavouriteClass, deleteFavouriteClass,
-  FAVOURITE_SUGGESTIONS, detectProvider, PATTERNS,
+  FAVOURITE_SUGGESTIONS, detectProvider, PATTERNS, classPlan,
 } from '../data/strengthClasses';
+import { blockPosition } from '../data/strengthSchema';
 import { saveSession, loadSessions, sessionScore, deleteSession } from '../strength';
 import { ClassPlayer, StrengthFeedback } from './StrengthToday';
 import { todayLocal } from '../datetime';
@@ -179,6 +180,11 @@ function BandsMat({ currentDate, onSaved }) {
 
 // ── Coach classes en eigen lessen ───────────────────────────────
 function CoachClasses({ currentDate, onSaved }) {
+  // Dezelfde golf van vier weken als bij de gewichten. Twee opbouwen naast
+  // elkaar zouden elkaar tegenspreken, dus er is er één.
+  const blok = useMemo(() => blockPosition({ currentDate }), [currentDate]);
+  const fase = blok.phase;
+  const weekNr = blok.known ? blok.week : 1;
   const [tick, setTick] = useState(0);
   const [playing, setPlaying] = useState(null);
   const [logging, setLogging] = useState(null);
@@ -219,6 +225,47 @@ function CoachClasses({ currentDate, onSaved }) {
           {c.description}
         </div>
       )}
+
+      {/* ── Wat je werkelijk doet ────────────────────────────────
+          Hier stond alleen hoelang de les duurt en welke patronen erin
+          zitten. Dat is een inhoudsopgave, geen les: je kon ernaar kijken en
+          nog steeds niet weten wat je moest doen. Nu staat de les
+          uitgeschreven, met de aantallen van déze week van de golf. */}
+      {(() => {
+        const plan = classPlan(c, { phase: fase, week: weekNr });
+        if (!plan?.items?.length) return null;
+        return (
+          <details style={{ marginTop: 7 }} data-lesplan={c.id}>
+            <summary style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--sage)',
+              cursor: 'pointer' }}>
+              {plan.items.length} oefeningen · {plan.phaseLabel}
+            </summary>
+            <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5,
+              marginTop: 5, marginBottom: 6 }}>
+              {plan.note}
+            </div>
+            {plan.items.map((it, i) => (
+              <div key={`${it.id}_${i}`} data-lesoefening={it.id}
+                style={{ padding: '6px 0', borderTop: '1px solid var(--divide)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>{it.name}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--sage)',
+                    whiteSpace: 'nowrap' }}>{it.prescription}</span>
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 1 }}>
+                  {it.blockLabel}{it.band ? ` · ${it.band}` : ''}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45, marginTop: 2 }}>
+                  {it.cue}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--gold)', marginTop: 2 }}>
+                  Zwaarder maken via {it.axis}: {it.progress}
+                </div>
+              </div>
+            ))}
+          </details>
+        );
+      })()}
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
         <button className="btn-primary" onClick={() => setPlaying(c)}
           style={{ fontSize: 12, whiteSpace: 'normal' }}>

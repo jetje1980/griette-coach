@@ -300,3 +300,162 @@ export const FAVOURITE_SUGGESTIONS = [
   { title: 'Core & posture 20 min', duration: 20, focus: ['core', 'pull'], defaultBand: 'light' },
   { title: 'Recovery strength 15 min', duration: 15, focus: ['core'], defaultBand: null },
 ];
+
+// ── Wat je in een les werkelijk doet ────────────────────────────
+//
+// De lessen hierboven noemden blokken ("Legs / glutes", "Core") en
+// patronen, en verder niets. Je kon er dus naar kijken en nog steeds niet
+// weten wat je moest doen. Dat is wat hier wordt ingevuld: per blok een
+// concrete oefening, met een cue en een progressie-as.
+//
+// Bands & mat kent geen kilo's, dus loopt de opbouw langs andere assen —
+// precies de assen die bovenaan dit bestand al genoemd worden: bandweerstand,
+// herhalingen, houdtijd, bewegingsbereik, eenbenige varianten, tempo, rust.
+// Per oefening staat hier welke as de eerste is, zodat "zwaarder" iets
+// concreets betekent in plaats van "doe je best".
+export const CLASS_EXERCISES = {
+  prepare: [
+    { id: 'c_adem', name: 'Ademhaling + ribben laag', pattern: 'core', reps: 5,
+      unit: 'ademhalingen', cue: 'Lig op je rug, adem in door je neus, laat je ribben zakken bij de uitademing.',
+      axis: 'tempo', progress: 'Rustiger uitademen, langer maken.' },
+    { id: 'c_kat', name: 'Kat–koe', pattern: 'core', reps: 8,
+      unit: 'herhalingen', cue: 'Op handen en knieën, wervel voor wervel bollen en hollen.',
+      axis: 'bewegingsbereik', progress: 'Groter bereik, niet sneller.' },
+  ],
+  warmup: [
+    { id: 'c_heupcirkel', name: 'Heupcirkels', pattern: 'glutes', reps: 8,
+      unit: 'per kant', cue: 'Sta op één been, maak rustige cirkels met het andere — knie op heuphoogte.',
+      axis: 'bewegingsbereik', progress: 'Grotere cirkel, been hoger.' },
+    { id: 'c_glutebridge_w', name: 'Glute bridge (opwarmen)', pattern: 'glutes', reps: 12,
+      unit: 'herhalingen', cue: 'Voeten plat, duw door je hielen, knijp boven één tel.',
+      axis: 'herhalingen', progress: 'Meer herhalingen, dan minibandvariant.' },
+  ],
+  legs: [
+    { id: 'c_squat', name: 'Squat met band om de knieën', pattern: 'squat', reps: 12,
+      unit: 'herhalingen', cue: 'Band net boven de knieën, duw je knieën naar buiten tegen de band in.',
+      axis: 'bandweerstand', progress: 'Zwaardere band → meer herhalingen → langzamer zakken.' },
+    { id: 'c_split', name: 'Split squat', pattern: 'squat', reps: 8,
+      unit: 'per been', cue: 'Grote stap naar voren, achterste knie richting de grond, romp rechtop.',
+      axis: 'eenbenig', progress: 'Achterste voet verhoogd, daarna gewicht in de handen.' },
+    { id: 'c_stepdown', name: 'Step-down', pattern: 'squat', reps: 8,
+      unit: 'per been', cue: 'Sta op een verhoging, zak langzaam tot je hiel de grond raakt, kom terug.',
+      axis: 'bewegingsbereik', progress: 'Hogere verhoging, langzamer zakken.' },
+  ],
+  hinge: [
+    { id: 'c_rdl_band', name: 'Romanian deadlift met band', pattern: 'hinge', reps: 12,
+      unit: 'herhalingen', cue: 'Band onder je voeten, heupen naar achteren, rug lang, rek in de hamstrings.',
+      axis: 'bandweerstand', progress: 'Zwaardere band → breder staan op de band.' },
+    { id: 'c_goodmorning', name: 'Good morning met band', pattern: 'hinge', reps: 12,
+      unit: 'herhalingen', cue: 'Band over je schouders, scharnier vanuit je heupen, knieën zacht.',
+      axis: 'bandweerstand', progress: 'Zwaardere band, dan langzamer terug omhoog.' },
+    { id: 'c_singleleg_rdl', name: 'Eenbenige RDL', pattern: 'hinge', reps: 8,
+      unit: 'per been', cue: 'Eén been achteruit strekken terwijl je romp naar voren scharniert, heupen recht.',
+      axis: 'eenbenig', progress: 'Langer stilstaan onderin, daarna gewicht erbij.' },
+  ],
+  glutes: [
+    { id: 'c_hipthrust_band', name: 'Hip thrust met band', pattern: 'glutes', reps: 15,
+      unit: 'herhalingen', cue: 'Schouders op de bank, band om de knieën, boven één tel knijpen.',
+      axis: 'bandweerstand', progress: 'Zwaardere band → eenbenig.' },
+    { id: 'c_clamshell', name: 'Clamshell', pattern: 'glutes', reps: 15,
+      unit: 'per kant', cue: 'Op je zij, band om de knieën, bovenste knie openen zonder je bekken te kantelen.',
+      axis: 'bandweerstand', progress: 'Zwaardere band, dan boven twee tellen vasthouden.' },
+    { id: 'c_kickback', name: 'Glute kickback', pattern: 'glutes', reps: 12,
+      unit: 'per been', cue: 'Op handen en knieën, been naar achteren strekken zonder je onderrug te hollen.',
+      axis: 'houdtijd', progress: 'Boven langer vasthouden, daarna band erbij.' },
+  ],
+  push: [
+    { id: 'c_pushup', name: 'Push-up (knie of teen)', pattern: 'push', reps: 8,
+      unit: 'herhalingen', cue: 'Handen onder je schouders, lijf één lijn, volledige range.',
+      axis: 'bewegingsbereik', progress: 'Van knieën naar tenen, dan voeten verhoogd.' },
+    { id: 'c_bandpress', name: 'Band shoulder press', pattern: 'push', reps: 12,
+      unit: 'herhalingen', cue: 'Band onder je voeten, duw recht omhoog, ribben laag.',
+      axis: 'bandweerstand', progress: 'Zwaardere band, dan langzamer laten zakken.' },
+  ],
+  pull: [
+    { id: 'c_bandrow', name: 'Band row', pattern: 'pull', reps: 12,
+      unit: 'herhalingen', cue: 'Band om je voeten, trek je ellebogen langs je lijf, schouderbladen naar elkaar.',
+      axis: 'bandweerstand', progress: 'Zwaardere band → twee tellen vasthouden achterin.' },
+    { id: 'c_pullapart', name: 'Band pull-apart', pattern: 'pull', reps: 15,
+      unit: 'herhalingen', cue: 'Armen gestrekt voor je, band uit elkaar trekken tot borsthoogte.',
+      axis: 'herhalingen', progress: 'Meer herhalingen, dan zwaardere band.' },
+    { id: 'c_facepull', name: 'Face pull met band', pattern: 'pull', reps: 15,
+      unit: 'herhalingen', cue: 'Band op ooghoogte, trek naar je gezicht, ellebogen hoog.',
+      axis: 'bandweerstand', progress: 'Zwaardere band, dan langzamer terug.' },
+  ],
+  core: [
+    { id: 'c_deadbug', name: 'Dead bug', pattern: 'core', reps: 10,
+      unit: 'per kant', cue: 'Onderrug tegen de grond, tegenovergestelde arm en been langzaam strekken.',
+      axis: 'tempo', progress: 'Langzamer, dan been lager.' },
+    { id: 'c_plank', name: 'Plank', pattern: 'core', reps: 30,
+      unit: 'seconden', cue: 'Ellebogen onder je schouders, billen aan, geen holle rug.',
+      axis: 'houdtijd', progress: '30 → 45 → 60 s, daarna eenarmig tikken.' },
+    { id: 'c_sideplank', name: 'Side plank', pattern: 'core', reps: 20,
+      unit: 'seconden per kant', cue: 'Elleboog onder je schouder, heup hoog, lijf één lijn.',
+      axis: 'houdtijd', progress: 'Langer, daarna bovenste been heffen.' },
+    { id: 'c_carry', name: 'Farmer carry', pattern: 'core', reps: 40,
+      unit: 'seconden', cue: 'Zwaar in beide handen, rechtop lopen, schouders laag.',
+      axis: 'bandweerstand', progress: 'Zwaarder, daarna één kant tegelijk.' },
+  ],
+  finish: [
+    { id: 'c_calf', name: 'Kuitheffen', pattern: 'calves', reps: 15,
+      unit: 'herhalingen', cue: 'Volledige range, boven één tel vasthouden, langzaam zakken.',
+      axis: 'eenbenig', progress: 'Van twee benen naar één been.' },
+    { id: 'c_voetboog', name: 'Voetboog + tenen spreiden', pattern: 'calves', reps: 12,
+      unit: 'per voet', cue: 'Til je voetboog op zonder je tenen te krullen.',
+      axis: 'herhalingen', progress: 'Meer herhalingen, dan staand op één voet.' },
+  ],
+};
+
+export const findClassExercise = (id) =>
+  Object.values(CLASS_EXERCISES).flat().find(e => e.id === id) || null;
+
+// De les uitgeschreven: per blok één oefening, met de aantallen die bij deze
+// week van de golf horen. Dezelfde vier weken als bij de gewichten, zodat er
+// niet twee opbouwen naast elkaar bestaan.
+//
+// Welke oefening per blok? Niet willekeurig: de keuze rouleert met het
+// weeknummer, zodat je binnen een golf varieert zonder dat het elke keer
+// iets anders is. Dezelfde week geeft dezelfde les — je moet hem kunnen
+// herhalen.
+export function classPlan(klas, { phase = null, week = 1, band = null } = {}) {
+  if (!klas?.blocks?.length) return null;
+  const f = phase || { id: 'basis', label: 'Basis', setDelta: 0, repDelta: 0, targetRir: 3 };
+  const sets = Math.max(1, 2 + (f.setDelta || 0));
+  const items = [];
+
+  for (const blokId of klas.blocks) {
+    const opties = CLASS_EXERCISES[blokId];
+    if (!opties?.length) continue;
+    const oef = opties[(Math.max(1, week) - 1) % opties.length];
+    const isTijd = /seconden/.test(oef.unit);
+    // Herhalingen groeien met de fase; houdtijden met vijf seconden per stap.
+    const aantal = isTijd
+      ? Math.max(10, oef.reps + (f.repDelta || 0) * 5)
+      : Math.max(5, oef.reps + (f.repDelta || 0));
+    const blokSets = ['prepare', 'warmup', 'finish'].includes(blokId) ? 1 : sets;
+    items.push({
+      block: blokId,
+      blockLabel: (CLASS_BLOCKS.find(b => b.id === blokId) || {}).label || blokId,
+      ...oef,
+      sets: blokSets,
+      amount: aantal,
+      band: band || klas.defaultBand || null,
+      prescription: blokSets > 1
+        ? `${blokSets}× ${aantal} ${oef.unit}`
+        : `${aantal} ${oef.unit}`,
+    });
+  }
+
+  return {
+    classId: klas.id,
+    title: klas.title,
+    duration: klas.duration,
+    phase: f.id,
+    phaseLabel: f.label,
+    week,
+    items,
+    note: f.id === 'terugnemen'
+      ? 'Terugneemweek: één set minder per blok en geen zwaardere band. Hier wordt de winst opgenomen.'
+      : `${f.label}: ${sets} sets per hoofdblok, stop met ongeveer ${f.targetRir} herhalingen over.`,
+  };
+}

@@ -4,7 +4,9 @@ import { computeHeadCoach, computeNextSession } from './CoachAdvice';
 import { USER, MEDS, SUPPLEMENTS, PRN_MEDS } from '../config';
 import { RUNS } from '../data/runningSchema';
 import {
-  PROGRAMS, PATTERN_LABELS, suggestedProgram, lastPerformance, overloadAdvice,
+  PROGRAMS, PROGRAM_ORDER, PROGRAM_SIDE, estimatedMinutes,
+  blockPosition, phaseTarget, adjustedPhase, BLOCK_WEEKS,
+  PATTERN_LABELS, suggestedProgram, lastPerformance, overloadAdvice,
   upsertStrengthSession, getSessionFor, loadStrengthSessions, exerciseHistory,
   saveStrengthSessions,
 } from '../data/strengthSchema';
@@ -19,6 +21,7 @@ import { workoutOn, loadWorkouts, computePace } from '../workouts';
 import { strava } from '../integrations';
 import { store } from '../store';
 import { weightNear } from '../bodyProgress';
+import { peseState } from '../pese';
 import { DAY_CONDITIONS, sessionMeta, saveSessionMeta, conditionsOf } from '../photoAnalysis';
 import { cycleDayOf } from '../bodyReview';
 import { todayLocal, startOfWeek, formatNLLong } from '../datetime';
@@ -358,7 +361,7 @@ function AjoviTracker() {
 // ── Krachtmodule ─────────────────────────────────────────────────
 // Volwaardige krachttraining: programma A/B + strength snack, per oefening
 // gewicht/sets/reps/RIR/voltooid, historie en progressive-overloadadvies.
-function KrachtModule({ currentDate, saveFields, isFuture }) {
+function KrachtModule({ currentDate, saveFields, isFuture, logs = {} }) {
   const [program, setProgram] = useState(() => suggestedProgram());
   const [entries, setEntries] = useState({});
   const [savedMsg, setSavedMsg] = useState('');
@@ -367,6 +370,19 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
 
   const prog = PROGRAMS[program] || PROGRAMS.A;
   const sessionsCount = loadStrengthSessions().filter(s => s.program !== 'snack').length;
+
+  // Waar deze sessie in de golf van vier weken valt, en of het herstel die
+  // golf toelaat. Een piekweek na een slechte respons wordt een
+  // terugneemweek — dezelfde regel als overal elders in deze app.
+  const blok = useMemo(() => blockPosition({ currentDate: sessionDate }), [sessionDate]);
+  const herstelSchoon = useMemo(() => {
+    try { return peseState({ logs, currentDate: sessionDate }).state !== 'ROOD'; }
+    catch { return true; }
+  }, [logs, sessionDate]);
+  const faseAanpassing = useMemo(
+    () => adjustedPhase(blok.phase, { recovered: herstelSchoon }),
+    [blok.phase, herstelSchoon]);
+  const fase = faseAanpassing.phase;
 
   useEffect(() => { setSessionDate(currentDate); }, [currentDate]);
 
@@ -436,18 +452,60 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
         )}
       </div>
 
-      {/* Programma keuze */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-        {['A', 'B', 'snack'].map(p => (
-          <button key={p}
-            className={`os-scale-btn ${program === p ? 'active' : ''}`}
-            onClick={() => setProgram(p)}
-            style={{ flex: 1, padding: '10px 4px' }}>
-            <div style={{ fontSize: 16 }}>{PROGRAMS[p].emoji}</div>
-            <div style={{ fontSize: 10, marginTop: 2 }}>{p === 'snack' ? 'Snack' : `Programma ${p}`}</div>
-          </button>
-        ))}
+      {/* ── Hoeveel tijd heb je? ───────────────────────────────
+          Hier stonden drie knoppen: snack, A en B. Tussen tien minuten en
+          drie kwartier zat niets, en dat is nu juist de maat die op de
+          meeste dagen haalbaar is. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6,
+        marginBottom: 6 }} data-programmakeuze>
+        {PROGRAM_ORDER.map(p => {
+          const pr = PROGRAMS[p];
+          const min = pr.minutes || estimatedMinutes(pr);
+          return (
+            <button key={p} data-programma={p}
+              className={`os-scale-btn ${program === p ? 'active' : ''}`}
+              onClick={() => setProgram(p)}
+              style={{ padding: '8px 2px' }}>
+              <div style={{ fontSize: 14 }}>{pr.emoji}</div>
+              <div style={{ fontSize: 9.5, marginTop: 2, fontWeight: 700 }}>
+                {p === 'snack' ? 'Snack' : p === 'A' || p === 'B' ? `Vol ${p}` : p}
+              </div>
+              <div style={{ fontSize: 8.5, color: 'var(--ghost)', marginTop: 1 }}>
+                {min} min
+              </div>
+            </button>
+          );
+        })}
       </div>
+      {prog.focus && (
+        <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5, marginBottom: 10 }}
+          data-programma-focus>
+          {prog.focus}
+        </div>
+      )}
+
+      {/* ── Waar je in de opbouw zit ───────────────────────────
+          Progressie was tot nu toe alleen reactief: ging het makkelijk, dan
+          zwaarder. Dat is geen opbouw. Dit is de golf van vier weken waar
+          deze sessie in valt. */}
+      {blok.known && (
+        <div className="os-card" data-krachtfase
+          style={{ marginBottom: 10, padding: '9px 11px',
+            borderLeft: `4px solid ${fase.id === 'terugnemen' ? 'var(--gold)' : 'var(--sage)'}` }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800 }}>
+            Golf {blok.cycle} · week {blok.weekInCycle}/{BLOCK_WEEKS} — {fase.label}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5, marginTop: 3 }}>
+            {fase.note}
+          </div>
+          {faseAanpassing.adjusted && (
+            <div style={{ fontSize: 11, color: 'var(--rust)', lineHeight: 1.5, marginTop: 5,
+              fontWeight: 600 }} data-fase-aangepast>
+              {faseAanpassing.reason}
+            </div>
+          )}
+        </div>
+      )}
 
       {program === suggestedProgram() && program !== 'snack' && (
         <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, marginBottom: 8 }}>
@@ -483,6 +541,22 @@ function KrachtModule({ currentDate, saveFields, isFuture }) {
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 2 }}>{ex.cue}</div>
                 <ExerciseTechnique exercise={ex} />
+                {/* Wat er déze week hoort te staan, uit de golf. Het
+                    RIR-advies hieronder blijft: dat kijkt naar hoe het
+                    vorige keer ging, dit zegt waar je in de opbouw zit. */}
+                {(() => {
+                  const doel = phaseTarget(ex, fase, { lastEntry: last });
+                  if (!doel) return null;
+                  return (
+                    <div data-oefendoel={ex.id}
+                      style={{ fontSize: 12, marginTop: 5, lineHeight: 1.45,
+                        color: fase.id === 'terugnemen' ? 'var(--gold)' : 'var(--sage)',
+                        fontWeight: 700 }}>
+                      🎯 Deze week: {doel.label}
+                      <span style={{ fontWeight: 400, color: 'var(--sub)' }}> — {doel.why}</span>
+                    </div>
+                  );
+                })()}
                 <div style={{ fontSize: 12, color: 'var(--sage)', marginTop: 5, lineHeight: 1.45, fontWeight: 500 }}>
                   💡 {overloadAdvice(ex, last)}
                 </div>
@@ -1261,7 +1335,7 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
         {trainMode === 'kracht' && (
           <StrengthModes currentDate={currentDate} saveFields={saveFields} isFuture={isFuture}
             WeightsModule={() => (
-              <KrachtModule currentDate={currentDate} saveFields={saveFields} isFuture={isFuture} />
+              <KrachtModule currentDate={currentDate} saveFields={saveFields} isFuture={isFuture} logs={logs} />
             )} />
         )}
 
