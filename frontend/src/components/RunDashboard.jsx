@@ -154,6 +154,21 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
         </div>
 
         {/* Vroege waarschuwingen — het patroon van 2024-2025 */}
+        {/* Wat je hoort te weten maar geen alarm is. De ruil tussen tempo
+            en doorlopen staat hier, zodat een opgevolgde opdracht niet als
+            waarschuwing verschijnt. */}
+        {state.warnings?.notes?.length > 0 && (
+          <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}
+            data-loopnotities>
+            {state.warnings.notes.map(n => (
+              <div key={n.id} style={{ fontSize: 11.5, lineHeight: 1.45, marginBottom: 3 }}>
+                <strong style={{ color: 'var(--sage)' }}>{n.label}.</strong>{' '}
+                <span style={{ color: 'var(--sub)' }}>{n.detail}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {state.warnings?.signals?.length > 0 && (
           <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--rust)',
@@ -170,6 +185,14 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
               lineHeight: 1.5, marginTop: 5 }}>
               {state.warnings.verdict}
             </div>
+            {/* Waarop dit gebaseerd is. Een waarschuwing zonder noemer is
+                niet na te rekenen, en dan kun je hem ook niet weerleggen. */}
+            {state.economyBasis && (
+              <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5,
+                marginTop: 5 }} data-economie-basis>
+                {state.economyBasis}
+              </div>
+            )}
           </div>
         )}
       </div>

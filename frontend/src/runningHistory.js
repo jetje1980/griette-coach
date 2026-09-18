@@ -20,7 +20,7 @@ import { todayLocal, addDays, daysBetween } from './datetime';
 import { loadWorkouts } from './workouts';
 import { exertionalResponse } from './symptoms';
 import { loadHrSettings, saveHrSettings } from './goals';
-import { paceBreakdown, allBreakdowns } from './pace';
+import { paceBreakdown, allBreakdowns, runEconomyTrend } from './pace';
 
 // ── Trainingsfasen ──────────────────────────────────────────────
 export const PHASES = [
@@ -227,6 +227,47 @@ export const PROGRESSION_RULE =
   'Progressie vraagt herhaalde tolerantie over meerdere sessies, niet één geslaagde training.';
 
 // ── Vroege waarschuwingssignalen ────────────────────────────────
+// ── Langer doorlopen of werkelijk trager? ───────────────────────
+//
+// Het verschil tussen die twee is het hele punt. Wie van vier blokjes van
+// vier minuten naar twintig minuten aan één stuk gaat, loopt onvermijdelijk
+// langzamer bij dezelfde hartslag — en wordt daar juist beter van. Zonder
+// dit onderscheid leest elke opbouw richting doorlopend als achteruitgang.
+export function longestRunBlock(breakdown) {
+  const segs = (breakdown?.segments || []).filter(s => s.kind === 'run' && s.minutes > 0);
+  if (segs.length) return Math.max(...segs.map(s => s.minutes));
+  // Geen segmenten maar wel een sessie zonder wandelblokken: dan is de hele
+  // sessie het blok.
+  if (breakdown?.walkPace == null && breakdown?.workout?.duration) {
+    return Number(breakdown.workout.duration) || null;
+  }
+  return null;
+}
+
+// Groeit het langste doorlopende blok over de reeks? Vergeleken in dezelfde
+// helften als de rest van deze functie, zodat de twee uitspraken over
+// hetzelfde tijdvak gaan.
+export const CONTINUITY_GROWTH_MIN = 1.5;   // minuten; minder is ruis
+
+export function continuityTrend(rows = []) {
+  const met = rows.filter(r => r.longestBlockMin != null);
+  if (met.length < 4) {
+    return { known: false, growing: false,
+      note: 'Te weinig sessies met een af te lezen loopblok om te zien of je langer doorloopt.' };
+  }
+  const half = Math.floor(met.length / 2);
+  const gem = (a) => a.reduce((s, r) => s + r.longestBlockMin, 0) / a.length;
+  const van = gem(met.slice(0, half));
+  const naar = gem(met.slice(half));
+  return {
+    known: true,
+    growing: naar - van >= CONTINUITY_GROWTH_MIN,
+    fromMin: Math.round(van * 10) / 10,
+    toMin: Math.round(naar * 10) / 10,
+    deltaMin: Math.round((naar - van) * 10) / 10,
+  };
+}
+
 // Vijf trends die samen het patroon van 2024-2025 vormden. Twee of meer
 // tegelijk betekent: niet doorbouwen.
 export function earlyWarnings({ logs = {}, currentDate = todayLocal() } = {}) {
@@ -238,6 +279,9 @@ export function earlyWarnings({ logs = {}, currentDate = todayLocal() } = {}) {
       headache: headacheAfter(b.workout.date, logs),
       drift: b.workout.hrFirstHalf != null && b.workout.hrSecondHalf != null
         ? b.workout.hrSecondHalf - b.workout.hrFirstHalf : null,
+      // Het langste stuk dat ze aan één stuk liep. Dit is wat "5 km achter
+      // elkaar" werkelijk vraagt, en dus waartegen tempo mag inleveren.
+      longestBlockMin: longestRunBlock(b),
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -254,13 +298,58 @@ export function earlyWarnings({ logs = {}, currentDate = todayLocal() } = {}) {
   };
 
   const signals = [];
+  // Dingen die je hoort te weten maar die geen waarschuwing zijn.
+  const notes = [];
 
   // A. Economie gaat achteruit: zelfde hartslag, structureel trager
+  //
+  // ── TWEE FOUTEN DIE HIER ZATEN ───────────────────────────────
+  //
+  // 1. Een tweede getal over hetzelfde onderwerp.
+  //
+  //    Hier werd de economie opnieuw uitgerekend: twintig runs, in helften
+  //    geknipt, zonder filter op hartslag. Elders doet runEconomyTrend()
+  //    hetzelfde over veertig runs, in derden, én alleen binnen de
+  //    easy-band. Twee methodes over dezelfde vraag geven twee getallen, en
+  //    die stonden vervolgens in één kaart onder elkaar: "1 sec/km trager"
+  //    als trend en "16 sec/km trager" als waarschuwing. Dat is niet
+  //    verwarrend maar simpelweg fout — één van de twee moest weg, en dat
+  //    is deze.
+  //
+  //    De harde sessies waren daarbij de grootste boosdoener: zonder
+  //    hartslagfilter tellen snelle inspanningen op hoge hartslag gewoon
+  //    mee, en zodra die in de oudere helft zitten lijkt alles erna trager.
+  //
+  // 2. Erger: een opgevolgde opdracht werd als achteruitgang gelezen.
+  //
+  //    Het plan schrijft sinds september voor om bewust langzamer te lopen,
+  //    zodat de wandelpauzes eruit kunnen en de doorlopende blokken langer
+  //    worden. Wie dat doet, loopt trager bij dezelfde hartslag — precies
+  //    het patroon dat deze regel als alarm las. De coach waarschuwde dus
+  //    voor het gedrag dat hij zelf had gevraagd.
+  //
+  //    Langer doorlopen bij dezelfde hartslag is uithoudingsvermogen dat
+  //    toeneemt, niet economie die afneemt. Dat onderscheid staat nu hier.
+  // Signaal B hieronder vergelijkt tempo en hartslag over dezelfde helften;
+  // die gemiddelden blijven dus nodig.
   const pO = avg(older, 'pace'), pR = avg(recent, 'pace');
   const hO = avg(older, 'hr'), hR = avg(recent, 'hr');
-  if (pO && pR && hO && hR && pR > pO * 1.03 && Math.abs(hR - hO) <= 3) {
-    signals.push({ id: 'economy', label: 'Loopeconomie gaat achteruit',
-      detail: `Bij vergelijkbare hartslag ben je ${Math.round((pR - pO) * 60)} sec/km trager geworden.` });
+
+  const econ = runEconomyTrend({ currentDate });
+  const duur = continuityTrend(rows);
+  if (econ.enough && econ.gainSec < -5 && econ.hrDrift <= 3) {
+    if (duur.growing) {
+      // Wel benoemen, niet als waarschuwing. Zij hoort te weten dat dit de
+      // ruil is die ze bewust maakt.
+      notes.push({
+        id: 'economy_tradeoff',
+        label: 'Trager, maar langer door',
+        detail: `Je loopt ${Math.abs(econ.gainSec)} sec/km langzamer bij dezelfde hartslag (${econ.early.hr} → ${econ.late.hr}), terwijl je langste doorlopende blok groeide van ${duur.fromMin} naar ${duur.toMin} minuten. Dat is de ruil die het plan vraagt: langzamer lopen om de wandelpauzes eruit te krijgen. Uithoudingsvermogen dat toeneemt, geen economie die afneemt.`,
+      });
+    } else {
+      signals.push({ id: 'economy', label: 'Loopeconomie gaat achteruit',
+        detail: `Bij vergelijkbare hartslag ben je ${Math.abs(econ.gainSec)} sec/km trager geworden (${econ.early.hr} → ${econ.late.hr} bpm, ${econ.count} vergelijkbare sessies), zonder dat je doorlopende blokken langer werden.` });
+    }
   }
 
   // B. Cardiovasculaire prijs stijgt: zelfde tempo, hogere hartslag
@@ -294,7 +383,7 @@ export function earlyWarnings({ logs = {}, currentDate = todayLocal() } = {}) {
 
   const severe = signals.length >= 2;
   return {
-    enough: true, signals, count: signals.length, severe,
+    enough: true, signals, notes, count: signals.length, severe,
     verdict: severe
       ? 'Meerdere waarschuwingssignalen tegelijk. Niet doorbouwen: houd het niveau vast of schaal terug, en zoek eerst de oorzaak.'
       : signals.length === 1

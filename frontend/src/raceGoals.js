@@ -126,6 +126,12 @@ export function runningState({ logs = {}, currentDate = todayLocal() } = {}) {
     runHr: econ.enough ? econ.late.hr : null,
     economyGainSec: econ.enough ? econ.gainSec : null,
     economyHonest: econ.enough ? econ.honest : null,
+    // Waarop het economiegetal rust. Zonder noemer is een waarschuwing niet
+    // na te rekenen en dus ook niet te weerleggen — en zij had gelijk toen
+    // ze hem in twijfel trok.
+    economyBasis: econ.enough
+      ? `Gebaseerd op ${econ.count} sessies waarin het looptempo los van de wandelblokken te bepalen was, binnen je easy-hartslagband. Sessies met alleen kilometersplits tellen hier niet mee: daar is lopen niet van wandelen te scheiden.`
+      : econ.note,
 
     hrRange: hr.currentRange, hrCeiling: hr.ceiling, hrConfidence: hr.confidence,
     headache: head, pemFreeWeeks: pemFree.weeks, warnings,
