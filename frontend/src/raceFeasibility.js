@@ -25,6 +25,69 @@ import { fmtSec, fmtPaceSec } from './sessionMath';
 // student die een blok bouwt.
 export const REALISTIC_GAIN_SEC_PER_KM_PER_WEEK = 4;
 
+// ── Vooruitkijken zonder te beloven ─────────────────────────────
+//
+// Hoeveel van de weken tot racedag telt werkelijk mee? Niet allemaal: winst
+// vlakt af. Dit is een halveringsmodel — de eerste acht weken tellen vol,
+// de acht daarna half, en daarna nog een kwart. Geen natuurkunde, wel
+// eerlijker dan lineair doorrekenen.
+export const FULL_WEEKS = 8;
+
+export function effectiveWeeks(weeks) {
+  const w = Math.max(0, Number(weeks) || 0);
+  const vol = Math.min(w, FULL_WEEKS);
+  const half = Math.min(Math.max(0, w - FULL_WEEKS), FULL_WEEKS) * 0.5;
+  const kwart = Math.max(0, w - FULL_WEEKS * 2) * 0.25;
+  return +(vol + half + kwart).toFixed(2);
+}
+
+export function projectedFinish({ currentSec, weeks, distanceKm, state }) {
+  if (!currentSec || !distanceKm) return { available: false };
+
+  // Redenen om niets te projecteren. Stuk voor stuk: dan is vooruitgang
+  // geen aanname die je mag doen.
+  const blokkades = [];
+  if ((state?.pemFreeWeeks ?? 0) < 4) {
+    blokkades.push('je herstel is nog niet vier weken schoon');
+  }
+  if (state?.economyGainSec != null && state.economyGainSec < -5
+      && !state?.warnings?.notes?.some(n => n.id === 'economy_tradeoff')) {
+    blokkades.push('je loopeconomie gaat op dit moment achteruit');
+  }
+  if ((state?.warnings?.signals?.length ?? 0) >= 2) {
+    blokkades.push('er staan twee of meer waarschuwingssignalen');
+  }
+
+  const eff = effectiveWeeks(weeks);
+  if (blokkades.length || eff <= 0) {
+    return {
+      available: false, weeks: +Number(weeks || 0).toFixed(1), effectiveWeeks: eff,
+      blockers: blokkades,
+      note: blokkades.length
+        ? `Geen vooruitgang ingerekend: ${blokkades.join(' en ')}. Wat hieronder staat is je tijd als je vandaag zou lopen.`
+        : 'De race is te dichtbij om nog vooruitgang in te rekenen.',
+    };
+  }
+
+  const winstPerKm = REALISTIC_GAIN_SEC_PER_KM_PER_WEEK * eff;
+  const winstTotaal = winstPerKm * distanceKm;
+  // Nooit meer dan een vijfde van je huidige tijd wegprojecteren. Wie dat
+  // wel doet, belooft een ander lichaam.
+  const gedekt = Math.min(winstTotaal, currentSec * 0.2);
+  const doel = Math.max(60, currentSec - gedekt);
+
+  return {
+    available: true,
+    weeks: +Number(weeks).toFixed(1),
+    effectiveWeeks: eff,
+    gainSecPerKm: Math.round(winstPerKm),
+    finishSec: Math.round(doel),
+    gainSec: Math.round(currentSec - doel),
+    capped: winstTotaal > currentSec * 0.2,
+    note: `Bij ${REALISTIC_GAIN_SEC_PER_KM_PER_WEEK} sec/km winst per week, afvlakkend naarmate het verder weg ligt, kom je op racedag ongeveer ${Math.round((currentSec - doel) / 60)} minuten lager uit dan vandaag. Dat is een verwachting bij groen herstel, geen toezegging.`,
+  };
+}
+
 export const FEASIBILITY = {
   ON_TRACK: { id: 'ON_TRACK', label: 'Op koers',
     meaning: 'De voorspelling ligt op of onder je doeltijd.' },
@@ -93,6 +156,28 @@ export function raceFeasibility(goal, { logs = {}, currentDate = todayLocal(),
   const observedPerWeek = st.economyGainSec != null && st.economyHonest
     ? st.economyGainSec / 8 : null;      // de trend loopt over ~8 weken
 
+  // ── Een race over tien weken is niet dezelfde race als over twee ──
+  //
+  // Hier zat een gat dat zij opmerkte: de voorspelling kwam uit
+  // racePerformanceEstimate(), en dat model noemt de racedatum nergens. Het
+  // rekent volledig met je huidige vorm. Twee races over dezelfde afstand
+  // kregen daardoor exact dezelfde voorspelde tijd, of ze nu over twee weken
+  // of over tien weken zijn — en dan lijkt tien weken training niets op te
+  // leveren.
+  //
+  // Wat hier bij komt is geen belofte maar een band: bij een realistische
+  // winst van vier seconden per kilometer per week, wat levert dat op tegen
+  // racedag? Twee dingen houden het eerlijk:
+  //
+  //   · de winst wordt gehalveerd naarmate hij verder weg ligt (na acht
+  //     weken telt nog maar de helft mee), want lineair doorrekenen over een
+  //     kwartaal is fantasie;
+  //   · hij staat er alleen als het herstel het toelaat. Bij PEM-signalen of
+  //     een economie die werkelijk achteruitgaat wordt er niets geprojecteerd
+  //     — dan is "je tijd van vandaag" het eerlijkste antwoord dat er is.
+  const projectie = projectedFinish({
+    currentSec, weeks, distanceKm: goal.distanceKm, state: st });
+
   const coverage = goal.distanceKm && st.longestTolerated
     ? st.longestTolerated / goal.distanceKm : 0;
 
@@ -136,6 +221,7 @@ export function raceFeasibility(goal, { logs = {}, currentDate = todayLocal(),
     basis: forecast.basis, limits: forecast.limits,
     forecastSource: forecast.source, forecastConfidence: forecast.confidence,
     weeks: +weeks.toFixed(1),
+    projection: projectie,
     verdict, label: info.label, meaning: info.meaning,
 
     currentSec, currentLabel: fmtSec(currentSec),

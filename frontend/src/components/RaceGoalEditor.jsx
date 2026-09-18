@@ -7,6 +7,13 @@ import { todayLocal, addDays } from '../datetime';
 // Racedoelen invoeren zoals je ze denkt: afstand, gewenste eindtijd, datum.
 // Het tempo rekent de app uit. Jij hoeft nooit 35 door 5 te delen.
 
+// Seconden als mm:ss, want een racetijd lees je niet in seconden.
+function fmtSecShort(sec) {
+  if (sec == null) return '—';
+  const m = Math.floor(sec / 60), r = Math.round(sec % 60);
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
 const VERDICT_COLOR = {
   ON_TRACK: 'var(--sage)', CLOSE: 'var(--sage)',
   AMBITIOUS: 'var(--gold)', OUT_OF_REACH: 'var(--rust)', UNKNOWN: 'var(--ghost)',
@@ -182,6 +189,39 @@ export default function RaceGoalEditor({ logs = {}, currentDate = todayLocal() }
               {f.advice && (
                 <div style={{ fontSize: 11, color: 'var(--sub)', marginTop: 4, lineHeight: 1.45 }}>
                   {f.advice}
+                </div>
+              )}
+
+              {/* ── Vandaag tegenover racedag ──────────────────────
+                  De voorspelling rekende alleen met je huidige vorm en keek
+                  nooit naar hoe ver de race nog weg is. Twee races over
+                  dezelfde afstand kregen daardoor dezelfde tijd, of ze nu
+                  over twee of over tien weken zijn — en dan lijkt een heel
+                  trainingsblok niets op te leveren. */}
+              {f.projection && (
+                <div data-projectie={f.goal.id}
+                  style={{ marginTop: 7, paddingTop: 7, borderTop: '1px solid var(--divide)' }}>
+                  {f.projection.available ? (
+                    <>
+                      <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                        <span style={{ color: 'var(--ghost)' }}>Als je vandaag zou lopen: </span>
+                        <strong>{fmtSecShort(f.forecast?.likely?.finishSec)}</strong>
+                        <span style={{ color: 'var(--ghost)' }}> · verwacht op racedag: </span>
+                        <strong style={{ color: 'var(--sage)' }}>
+                          {fmtSecShort(f.projection.finishSec)}
+                        </strong>
+                      </div>
+                      <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5,
+                        marginTop: 3 }}>
+                        {f.projection.note}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 10.5, color: 'var(--gold)', lineHeight: 1.5 }}
+                      data-geen-projectie={f.goal.id}>
+                      {f.projection.note}
+                    </div>
+                  )}
                 </div>
               )}
 
