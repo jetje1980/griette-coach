@@ -369,7 +369,7 @@ export const RUNS = [
     runMin: 20, walkMin: 0, reps: 1, duration: 20,
     blockMin: 20, continuous: true,
     description: '20 min doorlopend — herstel Bereloop',
-    goal: 'Herstellen én de doorlopende vorm vasthouden voor Ameland 5 km (13 dec)',
+    goal: 'Herstellen én de doorlopende vorm vasthouden voor de Adventure Run van 12 december (5 km)',
   },
   {
     nr: 35, week: 12,

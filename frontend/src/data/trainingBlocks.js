@@ -10,8 +10,8 @@ export const TRAINING_BLOCKS = [
   },
   // De continuïteit is naar voren gehaald.
   //
-  // Hier stond doorlopend hardlopen pas in het blok van 2 november tot 13
-  // december, met de 5 km als meetpunt op Ameland. Dat is te traag voor waar
+  // Hier stond doorlopend hardlopen pas in het blok van november tot half
+  // december, met de 5 km op Ameland als meetpunt. Dat is te traag voor waar
   // zij nu staat: de loopblokken groeiden met één minuut per week, en op dat
   // tempo is 40 minuten aan één stuk pas in het voorjaar aan de orde.
   //
@@ -33,13 +33,13 @@ export const TRAINING_BLOCKS = [
   },
   {
     id: 'continuous', name: '5 KM VASTHOUDEN', emoji: '📌',
-    start: '2026-11-02', end: '2026-12-13',
-    adaptation: 'De 5 km doorlopend vasthouden en gewoon maken, niet opnieuw opbouwen. Ameland 5 km (13 dec) als bevestiging.',
+    start: '2026-11-02', end: '2026-12-12',
+    adaptation: 'De 5 km doorlopend vasthouden en gewoon maken, niet opnieuw opbouwen. De Adventure Run van 12 december (5 km op Ameland) als bevestiging.',
     not: 'Geen nieuw volume erbovenop zolang de 5 km nog niet routine is.',
   },
   {
     id: '5kbase', name: '5K BASE', emoji: '📏',
-    start: '2026-12-14', end: '2027-02-28',
+    start: '2026-12-13', end: '2027-02-28',
     adaptation: 'Consistente 5 km-basis: 2–3× per week doorlopend in zone B.',
     not: 'Geen race-tempo zolang herstel wisselend is.',
   },
@@ -70,7 +70,7 @@ export function getBlockFor(dateStr) {
 // ── Adaptieve blokverwachting ───────────────────────────────────
 // Kalenderdatums zijn de wens; werkelijke readiness bepaalt het tempo.
 // Herhaalde/teruggeschaalde sessies schuiven de verwachte einddatum op.
-// Races (Trail 3 okt, Bereloop 30 okt, Ameland 13 dec) blijven vast staan.
+// Races (Trail 3 okt, Bereloop 30 okt, Adventure Run 12 dec) blijven vast staan.
 export function blockExpectation(currentDate) {
   const block = getCurrentBlock(currentDate);
   if (!block) return null;

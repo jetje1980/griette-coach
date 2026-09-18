@@ -155,10 +155,13 @@ export const PERSONAL_EVENTS = [
   {
     id: 'ameland_5k',
     emoji: '🏝️🏃',
-    title: 'Ameland run 5 km',
-    startDate: '2026-12-13',
-    endDate: '2026-12-13',
-    description: 'Hardlopen 5 km op Ameland',
+    // Dit is dezelfde race als het doel "Adventure Run" in haar doelenlijst:
+    // 5 km op 12 december. Hier stond 13 december, en dat liep dus één dag
+    // uit de pas met het doel waar de coach op rekent.
+    title: 'Adventure Run 5 km (Ameland)',
+    startDate: '2026-12-12',
+    endDate: '2026-12-12',
+    description: 'Hardlopen 5 km op Ameland — Adventure Run',
     goal: 'Sterk en energiek over de finish',
     color: '#0EA5E9',
   },
