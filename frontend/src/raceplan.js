@@ -34,17 +34,31 @@ import { easyRunPace, prescribedPace } from './easyPace';
 import { runningState } from './raceGoals';
 import { loadRaceGoals, saveRaceGoal, resetRaceGoals, DEFAULT_GOALS } from './raceGoalModel';
 import { restDayDecision, MAX_WEEKLY_VOLUME_GROWTH } from './restday';
-import { RUNS } from './data/runningSchema';
+import { SESSIONS as LIBRARY } from './data/sessionLibrary';
 
 // ── Fasen, op de kalender ───────────────────────────────────────
+// De fase staat niet meer hier.
+//
+// Hier stonden BASE/SPECIFIC/TAPER met eigen drempels, terwijl
+// trainingBlocks.js, runningSchema.js en de continuïteitsladder elk hun
+// eigen versie hadden van "in welke fase zit ik". Vier bronnen voor één
+// vraag, en ze spraken elkaar tegen: op 15 november zei het blokplan
+// "5 km vasthouden", de ladder "40 minuten" en het weekschema niets.
+//
+// strategy.js is nu de enige plek. Deze regels blijven staan zodat alles
+// wat PHASE of de drempels importeerde blijft werken — maar ze verwijzen
+// naar die ene bron in plaats van hem te dupliceren.
+import { PHASE as STRATEGY_PHASE, TAPER_DAYS as STRATEGY_TAPER,
+  SPECIFIC_WEEKS as STRATEGY_SPECIFIC } from './strategy';
+
 export const PHASE = {
-  BASE: 'BASE',           // meer dan 6 weken: breedte bouwen
-  SPECIFIC: 'SPECIFIC',   // 10 dagen tot 6 weken: racetempo leren kennen
-  TAPER: 'TAPER',         // laatste 10 dagen: vers worden, niets meer winnen
+  BASE: STRATEGY_PHASE.BASE.id,
+  SPECIFIC: STRATEGY_PHASE.SPECIFIC.id,
+  TAPER: STRATEGY_PHASE.TAPER.id,
 };
 
-export const TAPER_DAYS = 10;
-export const SPECIFIC_WEEKS = 6;
+export const TAPER_DAYS = STRATEGY_TAPER;
+export const SPECIFIC_WEEKS = STRATEGY_SPECIFIC;
 
 // ── Trainingsdoelen ─────────────────────────────────────────────
 // Elke voorgestelde sessie heeft er precies één. Zonder doel is het geen
@@ -490,11 +504,16 @@ export function planNextSession({
         reps: proven.reps || 5, duration: proven.duration || 20 }
     : (() => {
         // Koude start: nog geen verdragen sessie met loopblokken. Dan is de
-        // veilige opbouw uit het schema het uitgangspunt — niet een aanname
-        // over wat je aankunt.
-        const first = RUNS[0];
-        return { runMin: first.runMin, walkMin: first.walkMin,
-          reps: first.reps, duration: first.duration };
+        // laagste vorm uit de bibliotheek het uitgangspunt — niet een
+        // aanname over wat je aankunt.
+        //
+        // Dit kwam uit RUNS[0], de eerste regel van een schema dat aan
+        // weeknummers hing. Nu komt het uit niveau 1 van de bibliotheek, en
+        // dat is een uitspraak over zwaarte in plaats van over volgorde.
+        const eerste = LIBRARY.filter(v => v.level === 1)
+          .sort((a, b) => a.minutes - b.minutes)[0];
+        return { runMin: eerste.runMin, walkMin: eerste.walkMin,
+          reps: eerste.reps, duration: eerste.minutes };
       })();
 
   // ── Doel kiezen ───────────────────────────────────────────────
