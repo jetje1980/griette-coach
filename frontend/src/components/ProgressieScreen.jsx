@@ -2,7 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { photoStore } from '../photoStore';
 import { dreamStore } from '../dreamStore';
 import { USER, PERSONAL_EVENTS } from '../config';
-import { runDistance } from '../data/runningSchema';
+// RUNS blijft nodig om een oud run_session-nummer uit je historie te kunnen
+// opzoeken. Het stuurt niets meer — de sessie van vandaag komt uit
+// coachPlan() — maar zonder deze lijst is je eigen trainingsverleden niet
+// meer te tonen.
+import { RUNS as LEGACY_RUNS, runDistance } from '../data/runningSchema';
 import { coachPlan } from '../coachPlan';
 import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
 import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
@@ -618,7 +622,7 @@ function TabHardlopen({ logs }) {
   const longestRun = Object.values(logs)
     .filter(l => l.run_done && l.run_session)
     .reduce((max, l) => {
-      const run = RUNS.find(r => r.nr === Number(l.run_session));
+      const run = LEGACY_RUNS.find(r => r.nr === Number(l.run_session));
       return run && run.duration > max ? run.duration : max;
     }, 0);
 
@@ -900,7 +904,7 @@ function TabHardlopen({ logs }) {
           <div className="os-section-label">Recente sessies</div>
           <div className="os-card">
             {recentRuns.map(l => {
-              const run = RUNS.find(r => r.nr === l.run_session);
+              const run = LEGACY_RUNS.find(r => r.nr === l.run_session);
               return (
                 <div key={l.date} className="os-detail-row">
                   <span className="os-dk">T{l.run_session} · {l.date.slice(5)}</span>
