@@ -14,7 +14,6 @@
 //   WAIT_FOR_RESPONSE  de vertraagde respons van de vorige sessie is nog
 //                      niet bekend; wachten is hier de beslissing
 
-import { RUNS } from './data/runningSchema';
 import { loadWorkouts, toleranceFor, workoutWasHeavy } from './workouts';
 import { exertionalResponse, readSymptoms, RED_FLAG_IDS } from './symptoms';
 import { loadStrengthSessions } from './data/strengthSchema';
@@ -498,4 +497,9 @@ export function pendingResponses(logs, currentDate) {
     .map(w => ({ date: w.date, sessionNr: w.plannedSessionId || null }));
 }
 
-export const PLANNED_RUN_SESSIONS = RUNS.length;
+// Hier stond het aantal sessies in het oude weekschema, als was dat het
+// aantal trainingen dat een mens doet. De bibliotheek kent geen eindig
+// aantal sessies meer: hij kent niveaus, en daar loop je niet doorheen maar
+// omhoog. Wat hier overblijft is wat het werkelijk moest zijn — hoeveel
+// loopdagen er in een week passen.
+export const PLANNED_RUNS_PER_WEEK = 3;

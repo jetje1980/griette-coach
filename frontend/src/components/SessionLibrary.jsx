@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { RUNS, runDistance } from '../data/runningSchema';
+import { runDistance } from '../data/runningSchema';
+import { SESSIONS, libraryShape, MAX_LEVEL } from '../data/sessionLibrary';
 import { sessionDetail } from '../data/sessionDetail';
 import { measuredPaces } from '../easyPace';
 import {
@@ -60,8 +61,13 @@ function SessionCard({ run, status, refresh, logs, onEditWorkout, paces }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
         cursor: 'pointer', background: 'var(--card)' }}
         onClick={() => setOpen(o => !o)}>
+        {/* Het niveau, niet een volgnummer. T14 zei "de veertiende in de
+            rij"; N7 zegt "zo zwaar is dit" — en dat is wat je wilt weten. */}
         <span style={{ fontSize: 12, fontWeight: 800, minWidth: 30,
-          color: status === 'current' ? 'var(--rust)' : 'var(--text)' }}>T{run.nr}</span>
+          color: status === 'current' ? 'var(--rust)' : 'var(--text)' }}
+          title={`Niveau ${run.level} van ${MAX_LEVEL}`}>
+          {run.level > 0 ? `N${run.level}` : '↺'}
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden',
             textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -179,9 +185,15 @@ export default function SessionLibrary({ logs, refresh, onEditWorkout }) {
   // uit planNextSession(). Wat hier staat zijn vormen om uit te putten,
   // gesorteerd van kort naar lang, met de sessies die je er al aan hebt
   // gehangen.
+  // Uit de nieuwe bibliotheek: vormen met een niveau in plaats van een
+  // weeknummer. Gesorteerd op niveau en dan op duur, zodat de lijst leest
+  // als een ladder in plaats van als een kalender.
   const geordend = useMemo(
-    () => [...RUNS].filter(r => !r.restDay).sort((a, b) => a.duration - b.duration),
+    () => [...SESSIONS].sort((a, b) => a.level - b.level || a.minutes - b.minutes)
+      .map(v => ({ ...v, nr: v.id, description: v.label, duration: v.minutes,
+        goal: v.note })),
     []);
+  const vorm = useMemo(() => libraryShape(), []);
   const zichtbaar = showAll ? geordend : geordend.slice(0, 6);
 
   return (
@@ -197,13 +209,14 @@ export default function SessionLibrary({ logs, refresh, onEditWorkout }) {
         <>
           <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55,
             marginBottom: 8 }}>
-            Geen volgorde en geen verplichting. Welke sessie je vandaag doet staat
-            hierboven en komt uit je herstel, je fase en je doelen — niet uit deze lijst.
-            Dit zijn de vormen waar de coach uit put als er nog geen bewezen
-            structuur van jezelf is.
+            {vorm.total} vormen op {MAX_LEVEL} niveaus, van één minuut lopen tot een
+            uur doorlopend. Geen volgorde en geen verplichting: welke sessie je
+            vandaag doet staat hierboven en komt uit je herstel, je fase en je
+            doelen. Het niveau zegt hoe zwaar een vorm is, niet wanneer hij
+            aan de beurt is.
           </div>
           {zichtbaar.map(run => (
-            <SessionCard key={run.nr} run={run} status="todo"
+            <SessionCard key={run.id} run={run} status="todo"
               logs={logs} refresh={refresh} onEditWorkout={onEditWorkout} paces={paces} />
           ))}
           <button className="os-toggle-chip" style={{ fontSize: 12, marginTop: 4 }}

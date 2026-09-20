@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import SubTabs from './SubTabs';
 import { computeHeadCoach, computeNextSession } from './CoachAdvice';
 import { USER, MEDS, SUPPLEMENTS, PRN_MEDS } from '../config';
-import { RUNS } from '../data/runningSchema';
+import { coachPlan } from '../coachPlan';
 import {
   PROGRAMS, PROGRAM_ORDER, PROGRAM_SIDE, estimatedMinutes,
   blockPosition, phaseTarget, adjustedPhase, BLOCK_WEEKS,
@@ -168,12 +168,8 @@ const MAAT_FIELDS = [
 const MAAT_LEEG = Object.fromEntries(MAAT_FIELDS.map(f => [f.key, '']));
 
 // ── Helpers ──────────────────────────────────────────────────────
-function getNextRunNr(logs) {
-  const done = Object.values(logs || {})
-    .filter(l => l.run_done && l.run_session).map(l => Number(l.run_session));
-  if (!done.length) return 1;
-  return Math.min(RUNS.length, Math.max(...done) + 1);
-}
+// De volgende sessie kwam uit "hoogste gedane nummer + 1". Dat is een
+// wachtrij; de keuze komt nu uit coachPlan(), die van alle sessies leert.
 
 function ScaleBtns({ value, opts, onSelect }) {
   return (
@@ -923,8 +919,10 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
   const r = READINESS_MAP[coach.decision] || READINESS_MAP.AMBER;
   // Adaptieve sessiekeuze — niet simpelweg "eerste niet-gedane sessie"
   const nextSession = computeNextSession(log, logs, currentDate);
-  const nextRunNr = nextSession.nr ?? getNextRunNr(logs);
-  const nextRun = nextSession.run || RUNS[getNextRunNr(logs) - 1];
+  const strategiePlan = coachPlan({ log, logs, currentDate });
+  const nextRunNr = nextSession.nr ?? strategiePlan.strategy.level;
+  const nextRun = nextSession.run
+    || (strategiePlan.choice.available ? strategiePlan.choice.session : null);
 
   const yestDate = (() => { const d = new Date(currentDate); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
   const yestTrained = logs?.[yestDate]?.run_done || logs?.[yestDate]?.core_done;

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { photoStore } from '../photoStore';
 import { dreamStore } from '../dreamStore';
 import { USER, PERSONAL_EVENTS } from '../config';
-import { RUNS , runDistance } from '../data/runningSchema';
+import { runDistance } from '../data/runningSchema';
+import { coachPlan } from '../coachPlan';
 import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
 import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
 import { protectedHours } from './WeekScreen';
@@ -27,7 +28,6 @@ import { todayLocal } from '../datetime';
 const SUBTABS = ['Overzicht', 'Body', 'Run', 'Strength', 'Fresh', 'Money', 'Freedom', 'Routines', 'Tijdlijn'];
 
 const TRAIL_DATE = '2026-10-03';
-const TOTAL_RUNS = 35;
 
 const todayStr = todayLocal;
 
@@ -38,13 +38,6 @@ function daysBetween(fromStr, toStr) {
 function avg(arr) {
   const v = arr.filter(x => x != null && !isNaN(x));
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
-}
-
-function getNextRunNr(logs) {
-  const done = Object.values(logs || {})
-    .filter(l => l.run_done && l.run_session).map(l => Number(l.run_session));
-  if (!done.length) return 1;
-  return Math.min(RUNS.length, Math.max(...done) + 1);
 }
 
 function getRunWeekStreak(logs) {
@@ -590,9 +583,9 @@ function TabHardlopen({ logs }) {
   const [showDetails, setShowDetails] = useState(false);
   const tod = todayStr();
   const completedRuns = Object.values(logs).filter(l => l.run_done).length;
-  const runPct = Math.min(100, (completedRuns / TOTAL_RUNS) * 100);
-  const nextRunNr = getNextRunNr(logs);
-  const nextRun = RUNS[nextRunNr - 1];
+  // De sessie van vandaag komt uit de strategie, niet uit een volgnummer.
+  const plan = coachPlan({ logs, currentDate: tod });
+  const nextRun = plan.choice.available ? plan.choice.session : null;
 
   const recentRuns = Object.values(logs)
     .filter(l => l.run_done && l.run_session)
@@ -687,18 +680,36 @@ function TabHardlopen({ logs }) {
       {/* Coachbesluit, forecast en de grafieken die het onderbouwen */}
       <RunForecastPanel log={logs[tod]} logs={logs} currentDate={tod} />
 
-      {/* Progress */}
-      <div className="os-section-label" style={{ marginTop: 0 }}>Schema-voortgang</div>
-      <div className="os-card">
+      {/* ── Waar sta je ────────────────────────────────────────
+          Hier stond "X van 35 sessies" met een balk die vol liep. Dat is
+          training als lijst die je afwerkt: sessie 14 komt na 13, ook als 13
+          slecht viel, en na 35 is er niets meer. Wat er nu staat is je
+          niveau — dat volgt uit je langste verdragen loopblok en raakt niet
+          op. */}
+      <div className="os-section-label" style={{ marginTop: 0 }}>Waar je staat</div>
+      <div className="os-card" data-niveaukaart>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
           <div style={{ fontSize: 40, fontWeight: 900, fontFamily: 'var(--font-serif)', color: 'var(--sage)' }}>
-            {completedRuns}
+            {plan.progress.level}
           </div>
-          <div style={{ fontSize: 16, color: 'var(--sub)' }}>/ {TOTAL_RUNS} sessies</div>
+          <div style={{ fontSize: 16, color: 'var(--sub)' }}>/ {plan.progress.maxLevel}</div>
+          <div style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: 'var(--sage)' }}>
+            {plan.strategy.label}
+          </div>
         </div>
-        <ProgressBar pct={runPct} color="var(--sage)" />
+        <ProgressBar pct={Math.min(100, plan.progress.level / plan.progress.maxLevel * 100)}
+          color="var(--sage)" />
+        <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 7 }}>
+          {plan.progress.note} {plan.strategy.aim}
+        </div>
+        {plan.strategy.planMismatch && (
+          <div style={{ fontSize: 11, color: 'var(--gold)', lineHeight: 1.5, marginTop: 5 }}
+            data-planafwijking>
+            {plan.strategy.planMismatch}
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 12, color: 'var(--sub)' }}>
-          <span>{TOTAL_RUNS - completedRuns} sessies te gaan</span>
+          <span>{completedRuns} runs gelopen</span>
           {totalKm > 0 && <span>{totalKm.toFixed(1)} km totaal</span>}
         </div>
         {(totals.actualKm > 0 || totals.estKm > 0) && (
@@ -839,13 +850,22 @@ function TabHardlopen({ logs }) {
           <div className="os-card" style={{ borderLeft: '3px solid var(--sage)' }}>
             <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
-              T{nextRunNr}/{TOTAL_RUNS}
+              Niveau {plan.choice.level} · {plan.choice.purpose?.replace('_', ' ').toLowerCase()}
             </div>
-            {nextRun.goal && (
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, fontFamily: 'var(--font-serif)' }}>
-                {nextRun.goal}
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, fontFamily: 'var(--font-serif)' }}>
+              {nextRun.label}
+            </div>
+            {nextRun.note && (
+              <div style={{ fontSize: 12.5, color: 'var(--sub)', lineHeight: 1.45, marginBottom: 4 }}>
+                {nextRun.note}
               </div>
             )}
+            {/* Waarom juist deze vorm. Een advies zonder reden is niet te
+                weerleggen, en dat hoort zij wel te kunnen. */}
+            <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.5, marginBottom: 4 }}
+              data-sessiereden>
+              {plan.choice.why}
+            </div>
             <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.4, marginBottom: 4 }}>
               {nextRun.description}
             </div>

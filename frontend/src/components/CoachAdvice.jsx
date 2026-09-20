@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { USER } from '../config';
-import { RUNS } from '../data/runningSchema';
+import { coachPlan } from '../coachPlan';
+import { sessionsAtLevel } from '../data/sessionLibrary';
 import { planNextSession, PURPOSE } from '../raceplan';
 import { lastRunWorkout, workoutWasHeavy, toleranceFor, workoutsForSession } from '../workouts';
 import { restDayDecision } from '../restday';
@@ -17,14 +18,13 @@ function avg(arr) {
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
 }
 
-// Volgende logische sessie: hoogste gedane + 1 (niet "eerste gat" — wie
-// midden in het schema instapt, hoeft niet terug naar T1)
-function getNextRunNr(logs) {
-  const doneNrs = Object.values(logs || {})
-    .filter(l => l.run_done && l.run_session)
-    .map(l => Number(l.run_session));
-  if (!doneNrs.length) return 1;
-  return Math.min(RUNS.length, Math.max(...doneNrs) + 1);
+// De volgende sessie was "hoogste gedane nummer + 1, en niet verder dan 35".
+// Dat is een wachtrij: het weet niet hoe de vorige viel, het weet niets van
+// je doel, en na de laatste is er niets meer. De keuze komt nu uit
+// coachPlan(), die van álle sessies leert en een reden meelevert.
+function volgendeVorm(logs, currentDate) {
+  const plan = coachPlan({ logs, currentDate });
+  return plan.choice.available ? { ...plan.choice.session, why: plan.choice.why } : null;
 }
 
 // ─── HEAD COACH decision engine ─────────────────────────────────────────────
@@ -125,8 +125,7 @@ export function computeHeadCoach(log, logs, currentDate) {
   if (dayCapacity === 'minimum' && decision === 'GREEN') decision = 'AMBER';
 
   // ── training recommendation ───────────────────────────────────────────────
-  const nextNr  = getNextRunNr(logs);
-  const nextRun = RUNS.find(r => r.nr === nextNr) || RUNS[RUNS.length - 1];
+  const nextRun = volgendeVorm(logs, currentDate);
 
   let trainingDesc, sessionLabel;
 
@@ -134,7 +133,7 @@ export function computeHeadCoach(log, logs, currentDate) {
     // Geen sessienummer meer: dat suggereerde een volgorde die er niet is.
     sessionLabel = 'Looptraining';
     trainingDesc = nextRun
-      ? `${nextRun.description} — ${nextRun.duration} min | ${easyHrLine()}`
+      ? `${nextRun.label} — ${nextRun.minutes} min | ${easyHrLine()}`
       : 'Geplande loopsessie — Zone B strikt';
   } else if (decision === 'AMBER') {
     sessionLabel = 'Aangepaste sessie';
@@ -361,31 +360,33 @@ export function computeNextSession(log, logs, currentDate) {
 
   const gated = !!(coach.gate && coach.gate.action !== 'RUN_TODAY');
 
-  const lastDone = Object.values(logs || {})
-    .filter(l => l.run_done && l.run_session)
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
-  const lastNr = lastDone ? Number(lastDone.run_session) : 0;
-  const nextNr = getNextRunNr(logs);
+  // De adaptieve toestanden werkten met sessienummers: "twee stappen terug
+  // in het schema". Dat schema was een rij van 35, dus twee stappen terug
+  // kon van alles betekenen — de sprong tussen nummer 20 en 18 is niet
+  // dezelfde als die tussen 4 en 2. Niveaus zijn wél een schaal, en een
+  // stap erop betekent overal hetzelfde.
+  const strategiePlan = coachPlan({ log, logs, currentDate });
+  const huidigNiveau = strategiePlan.strategy.level;
 
-  let nr, note;
+  let niveau, note;
   switch (state) {
     case 'HOLD':
-      nr = lastNr || nextNr;
+      niveau = huidigNiveau;
       note = coach.pendingRecoveryCheck
         ? 'Vul eerst je herstelcheck in (hoe reageerde je lichaam op de vorige training?) — daarna geef ik de volgende sessie vrij.'
         : 'Zelfde niveau als je laatste sessie — bewust niet opbouwen vandaag.';
       break;
     case 'REPEAT':
-      nr = lastNr || nextNr;
-      note = 'Herhaal de vorige sessie — de vorige keer was (net) te zwaar.';
+      niveau = huidigNiveau;
+      note = 'Herhaal de vorm van de vorige keer — die was (net) te zwaar.';
       break;
     case 'DELOAD':
-      nr = Math.max(1, (lastNr || nextNr) - 2);
-      note = 'Twee stappen terug in het schema — bewust lichter, dit is goed herstelbeleid.';
+      niveau = Math.max(1, huidigNiveau - 2);
+      note = 'Twee niveaus lichter — bewust terugnemen, dit is goed herstelbeleid.';
       break;
     case 'TEST':
-      nr = Math.max(1, (lastNr || 2) - 1);
-      note = 'Testsessie na een pauze: één stap onder je laatste niveau. Stop direct bij signalen.';
+      niveau = Math.max(1, huidigNiveau - 1);
+      note = 'Testsessie na een pauze: één niveau onder je huidige. Stop direct bij signalen.';
       break;
     case 'SWAP':
       return {
@@ -396,10 +397,17 @@ export function computeNextSession(log, logs, currentDate) {
       };
     case 'BUILD':
     default:
-      nr = nextNr;
-      note = 'Je bent klaar voor de volgende stap in de opbouw.';
+      niveau = strategiePlan.choice.available ? strategiePlan.choice.level : huidigNiveau;
+      note = strategiePlan.choice.available ? strategiePlan.choice.why
+        : 'Je bent klaar voor de volgende stap in de opbouw.';
   }
-  nr = Math.min(RUNS.length, Math.max(1, nr));
+  niveau = Math.max(1, niveau);
+  // De vorm die bij dit niveau hoort, gekozen met dezelfde regels als altijd:
+  // niet wat aan de beurt is, maar wat past en niet recent stukliep.
+  const vorm = niveau === (strategiePlan.choice.level ?? -1) && strategiePlan.choice.available
+    ? strategiePlan.choice.session
+    : (sessionsAtLevel(niveau)[0] || strategiePlan.choice.session || null);
+  const nr = niveau;
 
   // Staat lopen op slot, dan is er vandaag geen sessienummer. De sessie
   // die straks vrijkomt geven we wél mee als vooruitblik — zonder die
@@ -413,7 +421,7 @@ export function computeNextSession(log, logs, currentDate) {
       purpose: preview.purpose, purposeLabel: PURPOSE[preview.purpose]?.label || null,
       race: preview.race, targetPace: preview.targetPace, why: preview.why,
       timeline: preview.timeline, planInputs: preview.inputs,
-      previewNr: nr, previewRun: preview.run || RUNS[nr - 1],
+      previewNr: nr, previewRun: preview.run || vorm,
       gate: g, action: g.action,
       note: g.blockers[0] || g.headline,
       releasedBy: g.released,
@@ -426,7 +434,7 @@ export function computeNextSession(log, logs, currentDate) {
   // doel, belastbaarheid de zwaarte. Het schemanummer blijft alleen bestaan
   // als koppeling naar je historie — het bepaalt niet meer wát je traint.
   const plan = planNextSession({ log, logs, currentDate, gate: coach.gate });
-  const run = plan.run || RUNS[nr - 1];
+  const run = plan.run || vorm;
 
   return {
     state, nr, run, adaptive: coach.adaptive,

@@ -22,7 +22,6 @@ import { loadWorkouts, saveWorkout, computePace } from './workouts';
 import { segmentsFromStreams, toLaps } from './streamSegments';
 import { paceBreakdown } from './pace';
 import { store } from './store';
-import { RUNS } from './data/runningSchema';
 import { todayLocal, addDays, localDayOf } from './datetime';
 import { strava } from './integrations';
 
@@ -115,7 +114,10 @@ function resolveSessionNr(date, logs, alreadyAssigned) {
     ...alreadyAssigned.filter(x => x.date < date).map(x => x.nr),
   ];
   const highest = doneBefore.length ? Math.max(...doneBefore) : 0;
-  return Math.min(RUNS.length, highest + 1);
+  // Niet meer afgetopt op de lengte van het oude schema: er is geen laatste
+  // sessie meer om tegenaan te lopen. Het nummer is nog slechts een
+  // volgnummer voor historie, geen plek in een wachtrij.
+  return highest + 1;
 }
 
 // Alleen aanvullen wat leeg is; wat jij zelf hebt ingevuld blijft staan.
