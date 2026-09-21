@@ -37,13 +37,19 @@ export default function CockpitCard({
     try {
       const poort = restDayDecision({ log: log || {}, logs, currentDate });
       const vrij = poort.action === 'RUN_TODAY';
-      const plan = vrij ? coachPlan({ log: log || {}, logs, currentDate }) : null;
+      // De sessie wordt altijd berekend, ook als lopen op slot staat. Zij
+      // wil kunnen zien wát er straks klaarstaat — anders weet je wel dat je
+      // moet wachten maar niet waarop, en dat maakt wachten zwaarder dan
+      // nodig.
+      const plan = coachPlan({ log: log || {}, logs, currentDate });
       return {
         vrij,
         reden: vrij
           ? (poort.summary || poort.headline)
           : (poort.blockers?.[0] || poort.headline || 'Vandaag geen loopprikkel.'),
         sessie: plan?.choice?.available ? plan.choice.session.label : null,
+        sessieMinuten: plan?.choice?.available ? plan.choice.session.minutes : null,
+        sessieWaarom: plan?.choice?.available ? plan.choice.session.note : null,
         vanaf: poort.earliestRunDate ? formatNLLong(poort.earliestRunDate) : 'zodra je herstel het toelaat',
         dagen: poort.daysUntilRun ?? 0,
       };
@@ -127,14 +133,7 @@ export default function CockpitCard({
           <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 2 }}>
             {loopPoort.reden}
           </div>
-          {loopPoort.vrij ? (
-            loopPoort.sessie && (
-              <div style={{ fontSize: 11.5, marginTop: 4 }}>
-                <span style={{ color: 'var(--ghost)' }}>De sessie die vrijkomt: </span>
-                <strong>{loopPoort.sessie}</strong>
-              </div>
-            )
-          ) : (
+          {!loopPoort.vrij && (
             <div style={{ fontSize: 11.5, marginTop: 4 }}>
               <span style={{ color: 'var(--ghost)' }}>Weer vrij vanaf: </span>
               <strong>{loopPoort.vanaf}</strong>
@@ -142,6 +141,35 @@ export default function CockpitCard({
                 <span style={{ color: 'var(--ghost)' }}>
                   {' '}({loopPoort.dagen} {loopPoort.dagen === 1 ? 'dag' : 'dagen'})
                 </span>
+              )}
+            </div>
+          )}
+
+          {/* De sessie zelf, ook als je er nog dagen op moet wachten. */}
+          {loopPoort.sessie && (
+            <div data-volgende-sessie style={{ marginTop: 5, paddingTop: 5,
+              borderTop: '1px solid var(--divide)' }}>
+              <div style={{ fontSize: 11.5 }}>
+                <span style={{ color: 'var(--ghost)' }}>
+                  {loopPoort.vrij ? 'De sessie die vrijkomt: ' : 'De sessie die dan klaarstaat: '}
+                </span>
+                <strong>{loopPoort.sessie}</strong>
+                {loopPoort.sessieMinuten && (
+                  <span style={{ color: 'var(--ghost)' }}> · {loopPoort.sessieMinuten} min</span>
+                )}
+              </div>
+              {loopPoort.sessieWaarom && (
+                <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45,
+                  marginTop: 2 }}>
+                  {loopPoort.sessieWaarom}
+                </div>
+              )}
+              {!loopPoort.vrij && (
+                <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45,
+                  marginTop: 2 }}>
+                  Dit is de sessie op basis van vandaag. Valt er tussendoor een
+                  respons tegen, dan kiest de coach opnieuw.
+                </div>
               )}
             </div>
           )}
