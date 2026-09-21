@@ -2,15 +2,64 @@
 // Bewegingspatronen: squat/lunge · hinge · glutes · push · pull · core/carry · calves/feet
 // Historie per oefening in localStorage (gc_strength_sessions) + progressive-overloadadvies.
 
+// ── De zeven soorten oefeningen, in het Nederlands ──────────────
+//
+// Hier stond "Squat/Lunge", "Hinge", "Push", "Pull", "Core/Carry". Dat zijn
+// de namen die in een sportschool worden gebruikt, en als je ze niet kent
+// zegt een label je niets — je ziet een woord en weet nog steeds niet welk
+// deel van je lichaam je traint of waarvoor het dient.
+//
+// Elk soort heeft nu een gewone naam, een zin die zegt wat het is, en een
+// zin die zegt waarom het voor jou op het lijstje staat.
 export const PATTERN_LABELS = {
-  squat:  'Squat/Lunge',
-  hinge:  'Hinge',
-  glutes: 'Hip thrust/Glutes',
-  push:   'Push',
-  pull:   'Pull',
-  core:   'Core/Carry',
-  calves: 'Calves/Feet',
+  squat:  'Zakken en staan',
+  hinge:  'Scharnieren vanuit de heup',
+  glutes: 'Bilspieren',
+  push:   'Duwen',
+  pull:   'Trekken',
+  core:   'Romp stabiel houden',
+  calves: 'Kuiten en voeten',
 };
+
+export const PATTERN_INFO = {
+  squat: {
+    label: 'Zakken en staan',
+    wat: 'Door je knieën zakken en weer omhoog komen — squats, lunges, step-ups.',
+    waarom: 'Dit is de beweging van traplopen en opstaan uit een stoel. Het draagt je hardlopen en geeft je botten een prikkel.',
+  },
+  hinge: {
+    label: 'Scharnieren vanuit de heup',
+    wat: 'Je heupen naar achteren duwen met een lange rug, terwijl je knieën bijna gestrekt blijven — deadlifts en good mornings.',
+    waarom: 'Traint je hamstrings, billen en onderrug: de achterkant die je afzet bij elke pas.',
+  },
+  glutes: {
+    label: 'Bilspieren',
+    wat: 'Je heupen strekken tegen weerstand in — hip thrusts, bruggetjes, kickbacks.',
+    waarom: 'Sterke billen houden je bekken recht en beschermen je knieën als je moe wordt.',
+  },
+  push: {
+    label: 'Duwen',
+    wat: 'Iets van je af duwen — push-ups, schouderdrukken.',
+    waarom: 'Bovenlichaam en botdichtheid in je polsen en schouders, precies waar het in de perimenopauze om gaat.',
+  },
+  pull: {
+    label: 'Trekken',
+    wat: 'Iets naar je toe trekken — roeibewegingen, band pull-aparts.',
+    waarom: 'Je rug en houding. Het tegengif voor zitten en voorovergebogen lopen.',
+  },
+  core: {
+    label: 'Romp stabiel houden',
+    wat: 'Je romp op zijn plek houden terwijl armen of benen bewegen — planks, dead bugs, dragen.',
+    waarom: 'Houdt je vorm heel als je moe wordt, en bepaalt hoe je middel eruitziet bij hetzelfde gewicht.',
+  },
+  calves: {
+    label: 'Kuiten en voeten',
+    wat: 'Op je tenen komen en je voetboog aanspannen.',
+    waarom: 'Je kuiten en voeten dragen elke stap. Ze zijn de meest vergeten schakel bij hardlopen.',
+  },
+};
+
+export const patternInfo = (id) => PATTERN_INFO[id] || null;
 
 export const PROGRAM_A = {
   id: 'A',
@@ -253,40 +302,77 @@ export function suggestedProgram() {
 
 // ── Progressive overload advies ─────────────────────────────────
 // Vorige keer: goblet squat 8 kg, 3×10, RIR 3 → Voorstel: 9 kg 3×8–10 OF 8 kg 3×11.
+// ── Het advies in gewone woorden ────────────────────────────────
+//
+// Hier stond RIR in elke zin: "RIR 2–3", "RIR 0 is te zwaar", "noteer je
+// RIR". Dat is vaktaal, en wie hem niet kent leest een advies dat niet
+// uitlegt wat er moet gebeuren. Drie letters die je moet opzoeken staan
+// tussen jou en je training in.
+//
+// RIR betekent "reps in reserve": hoeveel herhalingen je er nog bij had
+// gekund. Dat begrip is bruikbaar — alleen de afkorting niet. Dus staat er
+// nu wat het is: "stop met twee of drie herhalingen over".
+export const RESERVE_UITLEG =
+  'Hoeveel herhalingen je er nog bij had gekund toen je stopte. Nul betekent: '
+  + 'er kon er geen één meer bij. Twee of drie over is voor jou het doel — dan '
+  + 'heb je genoeg geprikkeld zonder je herstel op te eten.';
+
+// Hoe je een aantal "reps over" in gewone taal zegt.
+export function reserveTekst(n) {
+  if (n == null) return 'niet genoteerd';
+  if (n === 0) return 'niets meer over — dit was tot het uiterste';
+  if (n === 1) return 'één herhaling over';
+  if (n >= 4) return `${n} herhalingen over — dit was licht`;
+  return `${n} herhalingen over`;
+}
+
 export function overloadAdvice(exercise, last) {
+  const vorm = (sets, reps) => `${sets} series van ${reps}`;
+
   if (!last) {
     return exercise.bodyweight
-      ? `Eerste keer — start met ${exercise.defaultSets}×${exercise.defaultReps}, houd 2–3 reps reserve (RIR 2–3).`
-      : `Eerste keer — kies een gewicht waarmee ${exercise.defaultReps} herhalingen lukken met 2–3 reps reserve (RIR 2–3).`;
+      ? `Eerste keer — begin met ${vorm(exercise.defaultSets, exercise.defaultReps)} en stop `
+        + 'telkens met twee of drie herhalingen over.'
+      : `Eerste keer — ${vorm(exercise.defaultSets, exercise.defaultReps)}. Kies een gewicht `
+        + `waarmee die ${exercise.defaultReps} herhalingen lukken en je er nog twee of drie `
+        + 'over hebt.';
   }
   const w    = parseFloat(last.weight) || 0;
   const reps = parseInt(last.reps, 10) || exercise.defaultReps;
   const sets = parseInt(last.sets, 10) || exercise.defaultSets;
   const rir  = last.rir != null ? Number(last.rir) : null;
   const prev = w > 0
-    ? `Vorige keer: ${w} kg, ${sets}×${reps}${rir != null ? `, RIR ${rir}` : ''}.`
-    : `Vorige keer: ${sets}×${reps}${rir != null ? `, RIR ${rir}` : ''} (lichaamsgewicht).`;
+    ? `Vorige keer: ${w} kg, ${vorm(sets, reps)}${rir != null ? `, ${reserveTekst(rir)}` : ''}.`
+    : `Vorige keer: ${vorm(sets, reps)} met je eigen gewicht${rir != null ? `, ${reserveTekst(rir)}` : ''}.`;
 
   if (last.done === false) {
-    return `${prev} Niet afgemaakt — herhaal hetzelfde, eventueel ${Math.max(5, reps - 2)} reps per set.`;
+    return `${prev} Niet afgemaakt — doe hetzelfde nog eens, eventueel `
+      + `${Math.max(5, reps - 2)} herhalingen per serie.`;
   }
   if (rir == null) {
-    return `${prev} Herhaal en noteer je RIR, dan kan ik gericht adviseren.`;
+    return `${prev} Doe hetzelfde nog eens en noteer hoeveel herhalingen je overhad — `
+      + 'dan kan ik gericht adviseren.';
   }
   if (rir >= 3) {
     if (w > 0) {
-      return `${prev} Voorstel: ${w + 1} kg ${sets}×${Math.max(6, reps - 2)}–${reps} OF ${w} kg ${sets}×${reps + 1}.`;
+      return `${prev} Je had er nog ruim wat over, dus er kan iets bij: `
+        + `${w + 1} kg met ${vorm(sets, `${Math.max(6, reps - 2)}–${reps}`)}, `
+        + `of ${w} kg met ${vorm(sets, reps + 1)}.`;
     }
-    return `${prev} Voorstel: ${sets}×${reps + 2} OF een zwaardere variant (bijv. voeten verhoogd / extra gewicht).`;
+    return `${prev} Er kan iets bij: ${vorm(sets, reps + 2)}, of een zwaardere variant `
+      + '(bijvoorbeeld je voeten verhoogd of gewicht erbij).';
   }
   if (rir >= 1) {
-    return `${prev} Houd dit — zelfde ${w > 0 ? 'gewicht' : 'variant'}, probeer alle sets strak op ${reps}${rir === 2 ? ` of ${reps + 1}` : ''} reps.`;
+    return `${prev} Dit zit goed — houd ${w > 0 ? 'hetzelfde gewicht' : 'dezelfde variant'} aan `
+      + `en probeer alle series strak op ${reps}${rir === 2 ? ` of ${reps + 1}` : ''} herhalingen.`;
   }
-  // RIR 0 — te zwaar
+  // Niets meer over: te zwaar voor goed herstel.
   if (w > 0) {
-    return `${prev} RIR 0 is te zwaar voor herstel — terug naar ${Math.max(1, w - 1)} kg of ${Math.max(5, reps - 2)} reps.`;
+    return `${prev} Tot het uiterste gaan kost je meer herstel dan het oplevert — `
+      + `terug naar ${Math.max(1, w - 1)} kg of ${Math.max(5, reps - 2)} herhalingen.`;
   }
-  return `${prev} RIR 0 is te zwaar — doe ${Math.max(5, reps - 3)} reps of een lichtere variant.`;
+  return `${prev} Tot het uiterste gaan kost je meer herstel dan het oplevert — `
+    + `doe ${Math.max(5, reps - 3)} herhalingen of een lichtere variant.`;
 }
 
 // ── De opbouw over weken ────────────────────────────────────────

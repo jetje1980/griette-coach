@@ -2,7 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { headCoachDecision, explainConflicts } from '../headCoach';
 import { recordPrediction } from '../predictionLog';
 import { logAction } from '../leverage';
-import { todayLocal } from '../datetime';
+import { todayLocal, formatNLLong } from '../datetime';
+import { restDayDecision } from '../restday';
+import { coachPlan } from '../coachPlan';
 import { todayState, whatIsMissing, UI_STATE, STATE_META } from '../todayState';
 
 // Het enige dat Vandaag standaard toont.
@@ -26,6 +28,27 @@ export default function CockpitCard({
   const [why, setWhy] = useState(false);
   const [conflicts, setConflicts] = useState(false);
   const [actionDone, setActionDone] = useState(null);
+
+  // De loopoort en de sessie die eruit volgt, uit dezelfde twee bronnen als
+  // de rest van de app: restDayDecision zegt of er gelopen mag worden,
+  // coachPlan welke vorm dat dan is.
+  const loopPoort = useMemo(() => {
+    if (isFuture) return null;
+    try {
+      const poort = restDayDecision({ log: log || {}, logs, currentDate });
+      const vrij = poort.action === 'RUN_TODAY';
+      const plan = vrij ? coachPlan({ log: log || {}, logs, currentDate }) : null;
+      return {
+        vrij,
+        reden: vrij
+          ? (poort.summary || poort.headline)
+          : (poort.blockers?.[0] || poort.headline || 'Vandaag geen loopprikkel.'),
+        sessie: plan?.choice?.available ? plan.choice.session.label : null,
+        vanaf: poort.earliestRunDate ? formatNLLong(poort.earliestRunDate) : 'zodra je herstel het toelaat',
+        dagen: poort.daysUntilRun ?? 0,
+      };
+    } catch { return null; }
+  }, [log, logs, currentDate, isFuture]);
 
   const result = useMemo(
     () => (hasData && !isFuture)
@@ -86,6 +109,44 @@ export default function CockpitCard({
 
       {/* 1. Eén status, die hetzelfde zegt als de actie eronder */}
       <div className="os-v-status">{meta.word} — {ui.headline}</div>
+
+      {/* ── Mag ik vandaag hardlopen? ──────────────────────────
+          Dit stond nergens compleet. Op Vandaag las je alleen wát er
+          vrijgegeven was ("kracht is vrijgegeven"); dat hardlopen op slot
+          stond, waaróm, en wanneer het terugkomt, stond op Lichaam →
+          Training — als je daar ging kijken. Twee schermen voor één vraag.
+          Nu staat het antwoord hier, met de reden en de datum erbij. */}
+      {loopPoort && (
+        <div data-looppoort style={{ marginBottom: 9, padding: '8px 10px', borderRadius: 8,
+          background: 'var(--surface)',
+          borderLeft: `4px solid ${loopPoort.vrij ? 'var(--sage)' : 'var(--gold)'}` }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800 }}>
+            {loopPoort.vrij ? '🏃 Hardlopen is vandaag vrijgegeven'
+              : '🔒 Hardlopen staat vandaag op slot'}
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 2 }}>
+            {loopPoort.reden}
+          </div>
+          {loopPoort.vrij ? (
+            loopPoort.sessie && (
+              <div style={{ fontSize: 11.5, marginTop: 4 }}>
+                <span style={{ color: 'var(--ghost)' }}>De sessie die vrijkomt: </span>
+                <strong>{loopPoort.sessie}</strong>
+              </div>
+            )
+          ) : (
+            <div style={{ fontSize: 11.5, marginTop: 4 }}>
+              <span style={{ color: 'var(--ghost)' }}>Weer vrij vanaf: </span>
+              <strong>{loopPoort.vanaf}</strong>
+              {loopPoort.dagen > 0 && (
+                <span style={{ color: 'var(--ghost)' }}>
+                  {' '}({loopPoort.dagen} {loopPoort.dagen === 1 ? 'dag' : 'dagen'})
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 2. De actie zelf */}
       {ui.sub && (

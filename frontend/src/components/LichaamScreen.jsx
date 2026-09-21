@@ -6,7 +6,8 @@ import { coachPlan } from '../coachPlan';
 import {
   PROGRAMS, PROGRAM_ORDER, PROGRAM_SIDE, estimatedMinutes,
   blockPosition, phaseTarget, adjustedPhase, BLOCK_WEEKS,
-  PATTERN_LABELS, suggestedProgram, lastPerformance, overloadAdvice,
+  PATTERN_LABELS, patternInfo, RESERVE_UITLEG,
+  suggestedProgram, lastPerformance, overloadAdvice,
   upsertStrengthSession, getSessionFor, loadStrengthSessions, exerciseHistory,
   saveStrengthSessions,
 } from '../data/strengthSchema';
@@ -531,11 +532,23 @@ function KrachtModule({ currentDate, saveFields, isFuture, logs = {} }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, fontSize: 14 }}>{ex.name}</span>
                   <span style={{ fontSize: 10, background: 'var(--border)', color: 'var(--sub)',
-                    borderRadius: 4, padding: '1px 6px', fontWeight: 600 }}>
+                    borderRadius: 4, padding: '1px 6px', fontWeight: 600 }}
+                    title={patternInfo(ex.pattern)?.wat}>
                     {PATTERN_LABELS[ex.pattern]}
                   </span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--ghost)', marginTop: 2 }}>{ex.cue}</div>
+                {/* Wat voor soort oefening dit is en waarvoor hij er staat.
+                    Het labeltje hierboven zei "Hinge"; dat is vaktaal en
+                    vertelt je niet welk deel van je lichaam je traint. */}
+                {patternInfo(ex.pattern) && (
+                  <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5,
+                    marginTop: 3 }} data-patroonuitleg={ex.pattern}>
+                    <strong>{patternInfo(ex.pattern).label}.</strong>{' '}
+                    {patternInfo(ex.pattern).wat}{' '}
+                    <span style={{ color: 'var(--sage)' }}>{patternInfo(ex.pattern).waarom}</span>
+                  </div>
+                )}
                 <ExerciseTechnique exercise={ex} />
                 {/* Wat er déze week hoort te staan, uit de golf. Het
                     RIR-advies hieronder blijft: dat kijkt naar hoe het
@@ -588,7 +601,8 @@ function KrachtModule({ currentDate, saveFields, isFuture, logs = {} }) {
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 4, marginTop: 8, alignItems: 'center' }}>
-                      <span style={{ fontSize: 10, color: 'var(--ghost)', marginRight: 4 }}>RIR</span>
+                      <span style={{ fontSize: 10, color: 'var(--ghost)', marginRight: 4 }}
+                        title={RESERVE_UITLEG}>Over</span>
                       {[0, 1, 2, 3, 4].map(n => (
                         <button key={n}
                           className={`os-toggle-chip ${e.rir === n ? 'active green' : ''}`}
@@ -653,7 +667,7 @@ function KrachtModule({ currentDate, saveFields, isFuture, logs = {} }) {
                     <span className="os-dk">{h.date?.slice(5)}</span>
                     <span className="os-dv">
                       {h.weight ? `${h.weight} kg · ` : ''}{h.sets || '?'}×{h.reps || '?'}
-                      {h.rir != null ? ` · RIR ${h.rir}` : ''}{h.done ? ' ✓' : ''}
+                      {h.rir != null ? ` · ${h.rir} over` : ''}{h.done ? ' ✓' : ''}
                     </span>
                   </div>
                 ))}
