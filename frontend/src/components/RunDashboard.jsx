@@ -7,6 +7,7 @@ import { fmtPace, loadWorkouts } from '../workouts';
 import { loadHrModel, intensityRelease } from '../hrModel';
 import { todayLocal } from '../datetime';
 import RaceGoalEditor from './RaceGoalEditor';
+import TrainingContext from './TrainingContext';
 
 // Progressie → Run, radicaal simpel.
 //
@@ -46,6 +47,10 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
   const [showHistory, setShowHistory] = useState(false);
   const [showCpet, setShowCpet] = useState(false);
   const [calApplied, setCalApplied] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
+  const [ctxTick, setCtxTick] = useState(0);
+  const [openSessie, setOpenSessie] = useState(null);
+  const [alleOpen, setAlleOpen] = useState(false);
 
   const state = useMemo(() => runningState({ logs, currentDate }), [logs, currentDate]);
   const head = useMemo(() => headacheTrend({ logs, currentDate }), [logs, currentDate]);
@@ -63,6 +68,43 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
     (w.activityType === 'run' || w.activityType == null) && w.date <= currentDate);
   const lastResponse = lastRun
     ? exertionalResponse({ workoutDate: lastRun.date, logs, currentDate }) : null;
+
+  // De waarschuwingen komen uit runningState, één bron. Vult zij omstandig-
+  // heden in, dan moet de lezing meteen meeveranderen — anders vul je iets
+  // in en zegt het scherm nog hetzelfde, en dan vul je het nooit meer in.
+  const warnings = useMemo(
+    () => (ctxTick ? earlyWarnings({ logs, currentDate }) : state.warnings),
+    [state, logs, currentDate, ctxTick]);
+  const reading = warnings?.reading;
+
+  // De laatste runs, met hun context. Vijf is genoeg: verder terug vul je
+  // niets meer in omdat je het niet meer weet.
+  const recenteRuns = useMemo(() => loadWorkouts()
+    .filter(w => (w.activityType === 'run' || w.activityType == null) && w.date <= currentDate)
+    .slice(0, 5), [currentDate, ctxTick]);
+
+  // Welke vragen horen bij wat er nu gesignaleerd is? Ongevraagd stelt de
+  // app ze niet — een vragenlijst na elke run is een vragenlijst die je na
+  // twee weken overslaat. Maar klapt zij een sessie zélf open, dan vraagt ze
+  // om in te vullen, en dan ligt de hele set klaar.
+  const vragenSignalen = useMemo(() => {
+    const ids = (warnings?.signals || []).map(s => s.id);
+    if (reading?.askQuestions && !ids.includes('economy')) ids.push('economy');
+    return ids.length ? ids : ['economy'];
+  }, [warnings, reading]);
+
+  // De economielezing staat compleet in zijn eigen blok hierboven. Hem daar
+  // en in de signalenlijst herhalen leest als twee verschillende bevindingen.
+  const andereNotities = (warnings?.notes || [])
+    .filter(n => !['economy_context', 'economy_tradeoff'].includes(n.id));
+  const andereSignalen = (warnings?.signals || []).filter(s => s.id !== 'economy');
+
+  // Precies de sessies waarover de uitspraak gaat. Vragen stellen over een
+  // training die niet in de vergelijking zat, is ruis vragen.
+  const comparedDates = useMemo(() => {
+    const p = reading?.econ?.points || [];
+    return p.map(x => x.date).sort((a, b) => b.localeCompare(a)).slice(0, 8);
+  }, [reading]);
 
   return (
     <div>
@@ -118,25 +160,84 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
         </span>
       }>Trend</Label>
       <div className="os-card" style={{ marginBottom: 12 }}>
-        {/* Loopeconomie */}
-        <div style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 8 }}>
-          {state.economyGainSec != null ? (
+        {/* ── Loopeconomie, in context ────────────────────────────
+            Hier stond één regel: "X sec/km trager bij vergelijkbare
+            hartslag." Dat getal kwam uit twee gemiddelden en werd gelezen
+            als een uitspraak over haar lichaam, terwijl het net zo goed
+            cyclusfase, een slechte nacht, zand of wind kon zijn. Zij viel
+            daarover, en zij had gelijk.
+
+            Nu staat er de gelaagde lezing: wat er te zien is, wat het kan
+            verklaren, en pas als er niets overblijft de conclusie. Onder zes
+            vergelijkbare sessies valt het woord "achteruit" niet. */}
+        <div style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 8 }} data-economie-lezing={reading?.level || 'geen'}>
+          {reading?.available ? (
             <>
-              <strong style={{ color: state.economyGainSec > 0 && state.economyHonest
-                ? 'var(--sage)' : 'var(--text)' }}>
-                {state.economyGainSec > 0 ? `${state.economyGainSec} sec/km sneller`
-                  : state.economyGainSec < 0 ? `${Math.abs(state.economyGainSec)} sec/km trager`
-                  : 'tempo stabiel'}
-              </strong>{' '}bij vergelijkbare hartslag.
-              {!state.economyHonest && ' De hartslag steeg mee — dat is harder werken, geen economie.'}
+              <strong style={{ color: reading.level === 'achteruit' ? 'var(--rust)'
+                : reading.level === 'vooruit' ? 'var(--sage)'
+                : reading.level === 'ruil' ? 'var(--sage)' : 'var(--text)' }}>
+                {reading.label}.
+              </strong>{' '}
+              <span style={{ color: 'var(--sub)' }}>{reading.detail}</span>
             </>
           ) : (
             <span style={{ color: 'var(--ghost)' }}>
-              Nog geen loopeconomie-trend. Daarvoor zijn drie runs nodig waarin de loopblokken
-              te scheiden zijn van de wandelblokken.
+              {reading?.note || `Nog geen loopeconomie-trend. Daarvoor zijn runs nodig waarin de
+                loopblokken te scheiden zijn van de wandelblokken.`}
             </span>
           )}
         </div>
+
+        {/* Wat de vergelijking scheef trekt, met zoveel woorden. Ook als het
+            de conclusie niet verandert hoort zij te zien wat er meewoog. */}
+        {reading?.confounders?.items?.length > 0 && (
+          <div style={{ marginBottom: 8, paddingLeft: 9,
+            borderLeft: '2px solid var(--border)' }} data-verstoringen={reading.confounders.items.length}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
+              textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>
+              Wat hierin meespeelt
+            </div>
+            {reading.confounders.items.map(c => (
+              <div key={c.id} style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.45,
+                marginBottom: 2 }}>{c.tekst}</div>
+            ))}
+          </div>
+        )}
+        {reading?.confounders?.notes?.length > 0 && (
+          <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.45, marginBottom: 8 }}
+            data-eigen-lezingen>
+            {reading.confounders.notes.map(n => (
+              <div key={n.date} style={{ marginBottom: 2 }}>
+                <span style={{ color: 'var(--ghost)' }}>{n.date.slice(5)}, jouw lezing:</span>{' '}
+                “{n.note}”
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* De vraag terug. Een coach die iets signaleert en niets vraagt,
+            raadt. Elke vergeleken sessie krijgt hier zijn eigen vragen. */}
+        {reading?.askQuestions && (
+          <div style={{ marginBottom: 8 }} data-economie-navraag>
+            <div style={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.45 }}>
+              {reading.vraag}
+            </div>
+            {/* Eén plek om in te vullen, en dat is de sessielijst hieronder.
+                Hier stond ook een invulblok; dan bestonden er twee velden
+                voor dezelfde dag, en wat je in het ene vulde zag je in het
+                andere niet staan. Twee invoervelden voor één feit is een
+                manier om data kwijt te raken. */}
+            <div onClick={() => { setAskOpen(v => !v); setAlleOpen(true); }}
+              style={{ fontSize: 11, color: 'var(--muted)', cursor: 'pointer', marginTop: 4,
+                display: 'flex', justifyContent: 'space-between' }}>
+              <span data-navraag-knop>
+                Omstandigheden invullen bij je laatste sessies, hieronder
+                {comparedDates.length ? ` (${comparedDates.length} vergeleken)` : ''}
+              </span>
+              <span>↓</span>
+            </div>
+          </div>
+        )}
 
         {/* Hoofdpijntrend — de belangrijkste hersteltrend */}
         <div style={{ fontSize: 12.5, lineHeight: 1.5, paddingTop: 8,
@@ -157,10 +258,10 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
         {/* Wat je hoort te weten maar geen alarm is. De ruil tussen tempo
             en doorlopen staat hier, zodat een opgevolgde opdracht niet als
             waarschuwing verschijnt. */}
-        {state.warnings?.notes?.length > 0 && (
+        {andereNotities.length > 0 && (
           <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}
             data-loopnotities>
-            {state.warnings.notes.map(n => (
+            {andereNotities.map(n => (
               <div key={n.id} style={{ fontSize: 11.5, lineHeight: 1.45, marginBottom: 3 }}>
                 <strong style={{ color: 'var(--sage)' }}>{n.label}.</strong>{' '}
                 <span style={{ color: 'var(--sub)' }}>{n.detail}</span>
@@ -169,33 +270,81 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
           </div>
         )}
 
-        {state.warnings?.signals?.length > 0 && (
+        {warnings?.signals?.length > 0 && (
           <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--rust)',
               textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
               Waarschuwingssignalen
             </div>
-            {state.warnings.signals.map(s => (
+            {andereSignalen.map(s => (
               <div key={s.id} style={{ fontSize: 11.5, lineHeight: 1.45, marginBottom: 3 }}>
                 <strong>{s.label}.</strong>{' '}
                 <span style={{ color: 'var(--sub)' }}>{s.detail}</span>
               </div>
             ))}
-            <div style={{ fontSize: 11.5, color: 'var(--text)', fontWeight: 600,
-              lineHeight: 1.5, marginTop: 5 }}>
-              {state.warnings.verdict}
-            </div>
-            {/* Waarop dit gebaseerd is. Een waarschuwing zonder noemer is
-                niet na te rekenen, en dan kun je hem ook niet weerleggen. */}
-            {state.economyBasis && (
-              <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5,
-                marginTop: 5 }} data-economie-basis>
-                {state.economyBasis}
+            {andereSignalen.length < warnings.signals.length && (
+              <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.45,
+                marginBottom: 3 }}>
+                De loopeconomie staat hierboven, met de omstandigheden erbij.
               </div>
             )}
+            <div style={{ fontSize: 11.5, color: 'var(--text)', fontWeight: 600,
+              lineHeight: 1.5, marginTop: 5 }}>
+              {warnings.verdict}
+            </div>
           </div>
         )}
       </div>
+
+      {/* ── SESSIES IN CONTEXT ────────────────────────────────── */}
+      {/* Een geanalyseerde training zonder cyclusdag is een halve analyse.
+          Tempo bij dezelfde hartslag beweegt mee met de fase waarin je zit,
+          dus hoort die dag naast het tempo te staan en niet drie schermen
+          verderop. Hier staat per sessie wat de app weet, en kan zij
+          aanvullen wat de app niet kan weten. */}
+      {recenteRuns.length > 0 && (
+        <>
+          <Label>Je laatste sessies, met de omstandigheden erbij</Label>
+          <div className="os-card" style={{ marginBottom: 12 }} data-sessies-context>
+            {recenteRuns.map(w => {
+              const open = alleOpen || openSessie === w.date;
+              return (
+                <div key={w.id || w.date} style={{ padding: '9px 0',
+                  borderTop: '1px solid var(--border)' }} data-sessierij={w.date}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8,
+                    flexWrap: 'wrap', marginBottom: 4 }}>
+                    <span style={{ fontSize: 11.5, color: 'var(--ghost)', minWidth: 42 }}>
+                      {w.date.slice(5)}
+                    </span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600,
+                      fontVariantNumeric: 'tabular-nums' }}>
+                      {w.distance != null ? `${String(+(+w.distance).toFixed(1)).replace('.', ',')} km` : '— km'}
+                      {w.duration != null ? ` · ${Math.round(w.duration)} min` : ''}
+                      {w.averageHR ? ` · HR ${w.averageHR}` : ''}
+                    </span>
+                  </div>
+                  <TrainingContext date={w.date} logs={logs} currentDate={currentDate}
+                    toon={open ? 'volledig' : 'kort'}
+                    signals={open ? vragenSignalen : []}
+                    refresh={ctxTick}
+                    onSaved={() => setCtxTick(t => t + 1)} />
+                  <div onClick={() => { setAlleOpen(false); setOpenSessie(open ? null : w.date); }}
+                    style={{ fontSize: 10.5, color: 'var(--muted)', cursor: 'pointer',
+                      marginTop: 5 }} data-sessie-open={w.date}>
+                    {open ? '▲ sluiten' : '▼ omstandigheden invullen of aanpassen'}
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5,
+              marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+              De cyclusdag komt uit je eigen menstruatieregistratie en wordt niet gevraagd.
+              Staat er “onbekend”, dan is er geen startdatum vóór die sessie bekend — dat is
+              een leemte in de data, geen nul.
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── HARTSLAGBAND ──────────────────────────────────────── */}
       <Label>Je hartslagband nu</Label>

@@ -21,6 +21,7 @@ import { loadWorkouts } from './workouts';
 import { exertionalResponse } from './symptoms';
 import { loadHrSettings, saveHrSettings } from './goals';
 import { paceBreakdown, allBreakdowns, runEconomyTrend } from './pace';
+import { economyReading } from './economyReading';
 
 // ── Trainingsfasen ──────────────────────────────────────────────
 export const PHASES = [
@@ -335,22 +336,27 @@ export function earlyWarnings({ logs = {}, currentDate = todayLocal() } = {}) {
   const pO = avg(older, 'pace'), pR = avg(recent, 'pace');
   const hO = avg(older, 'hr'), hR = avg(recent, 'hr');
 
-  const econ = runEconomyTrend({ currentDate });
+  // De economie-uitspraak komt nu uit economyReading(). Die weegt cyclus,
+  // slaap, ondergrond, weer en haar eigen opmerkingen mee voordat er
+  // "achteruitgang" staat — en zegt het niet onder zes vergelijkbare
+  // sessies. Hier stond een versie die uit twee gemiddelden een conclusie
+  // trok; dat is precies waar zij over viel, en terecht.
   const duur = continuityTrend(rows);
-  if (econ.enough && econ.gainSec < -5 && econ.hrDrift <= 3) {
-    if (duur.growing) {
-      // Wel benoemen, niet als waarschuwing. Zij hoort te weten dat dit de
-      // ruil is die ze bewust maakt.
-      notes.push({
-        id: 'economy_tradeoff',
-        label: 'Trager, maar langer door',
-        detail: `Je loopt ${Math.abs(econ.gainSec)} sec/km langzamer bij dezelfde hartslag (${econ.early.hr} → ${econ.late.hr}), terwijl je langste doorlopende blok groeide van ${duur.fromMin} naar ${duur.toMin} minuten. Dat is de ruil die het plan vraagt: langzamer lopen om de wandelpauzes eruit te krijgen. Uithoudingsvermogen dat toeneemt, geen economie die afneemt.`,
-      });
-    } else {
-      signals.push({ id: 'economy', label: 'Loopeconomie gaat achteruit',
-        detail: `Bij vergelijkbare hartslag ben je ${Math.abs(econ.gainSec)} sec/km trager geworden (${econ.early.hr} → ${econ.late.hr} bpm, ${econ.count} vergelijkbare sessies), zonder dat je doorlopende blokken langer werden.` });
+  const lezing = economyReading({ logs, currentDate,
+    continuityGrowing: duur.growing,
+    continuityFrom: duur.fromMin, continuityTo: duur.toMin });
+
+  if (lezing.available) {
+    if (lezing.level === 'achteruit') {
+      signals.push({ id: 'economy', label: lezing.label, detail: lezing.detail,
+        vraag: lezing.vraag, askQuestions: true });
+    } else if (['ruil', 'onverklaard', 'onvoldoende_context', 'waarneming'].includes(lezing.level)) {
+      notes.push({ id: lezing.level === 'ruil' ? 'economy_tradeoff' : 'economy_context',
+        label: lezing.label, detail: lezing.detail,
+        vraag: lezing.vraag, askQuestions: !!lezing.askQuestions });
     }
   }
+  const econ = lezing.econ || { enough: false };
 
   // B. Cardiovasculaire prijs stijgt: zelfde tempo, hogere hartslag
   if (pO && pR && hO && hR && hR > hO + 4 && Math.abs(pR - pO) < pO * 0.03) {
@@ -384,6 +390,10 @@ export function earlyWarnings({ logs = {}, currentDate = todayLocal() } = {}) {
   const severe = signals.length >= 2;
   return {
     enough: true, signals, notes, count: signals.length, severe,
+    // De volledige economielezing gaat mee naar buiten. Het scherm hoort
+    // hem niet opnieuw uit te rekenen: twee berekeningen van hetzelfde
+    // leverden eerder twee verschillende getallen in één kaart op.
+    reading: lezing,
     verdict: severe
       ? 'Meerdere waarschuwingssignalen tegelijk. Niet doorbouwen: houd het niveau vast of schaal terug, en zoek eerst de oorzaak.'
       : signals.length === 1

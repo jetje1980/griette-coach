@@ -43,6 +43,9 @@ import { longCovidRisk, attributeSymptoms, peseState } from './pese';
 import { cycleIntelligence, PATTERN_CONFIDENCE } from './cyclePatterns';
 import { trainingBalance, progressionProposal, compositionGuard, RISK } from './progression';
 import { coachDecision, decisionAsText } from './decision';
+import { economyReading } from './economyReading';
+import { sessionContextFor, contextLines } from './sessionContext';
+import { earlyWarnings, continuityTrend } from './runningHistory';
 
 // Alle daglogs uit de opslag, in de vorm { datum: log }.
 function daglogsUitOpslag(asOf) {
@@ -243,13 +246,31 @@ function trainingContext(asOf) {
 
   const dagen = series('run_done', { asOf, since: addDays(asOf, -27) }).length;
 
+  // De omstandigheden per sessie. Zonder cyclusdag, slaap, ondergrond en haar
+  // eigen opmerking is "trager bij dezelfde hartslag" een getal zonder
+  // betekenis — en ging de coach er toch iets over zeggen.
+  const logs = daglogsUitOpslag(asOf);
+  const duur = continuityTrend(earlyWarnings({ logs, currentDate: asOf }).rows || []);
+  const lezing = economyReading({ logs, currentDate: asOf,
+    continuityGrowing: duur.growing, continuityFrom: duur.fromMin, continuityTo: duur.toMin });
+
   return {
     sessionCount: sessies.length,
-    last3: laatste3.map(s => ({
-      date: s.date, distanceKm: s.distance ?? null, durationMin: s.duration ?? null,
-      avgHr: s.avg_hr ?? null, maxHr: s.max_hr ?? null, rpe: s.rpe ?? null,
-      legs: s.legs ?? null, couldDoMore: s.could_do_more ?? null,
-    })),
+    last3: laatste3.map(s => {
+      const ctx = sessionContextFor(s.date, { logs, asOf });
+      return {
+        date: s.date, distanceKm: s.distance ?? null, durationMin: s.duration ?? null,
+        avgHr: s.avg_hr ?? null, maxHr: s.max_hr ?? null, rpe: s.rpe ?? null,
+        legs: s.legs ?? null, couldDoMore: s.could_do_more ?? null,
+        cycleDay: ctx.cycleDay, contextLines: contextLines(ctx), ownNote: ctx.note,
+      };
+    }),
+    economy: lezing.available ? {
+      level: lezing.level, label: lezing.label, detail: lezing.detail,
+      question: lezing.vraag || null,
+      confounders: (lezing.confounders?.items || []).map(c => c.tekst),
+      ownReadings: (lezing.confounders?.notes || []).map(n => `${n.date}: "${n.note}"`),
+    } : { level: 'geen', note: lezing.note || 'nog geen economievergelijking mogelijk' },
     runDays28: dagen,
     // Zwemmen en fietsen zijn ook belasting, ook al zijn ze geen looptraining.
     swimMin28: series('swim_duration', { asOf, since: addDays(asOf, -27) })
@@ -580,9 +601,37 @@ export function contextAsText(ctx) {
       // waarde kan de coach niet zien of een "rustige" sessie ergens toch
       // door zone C is gegaan — en dat is precies wat je wilt weten.
       zeg(`  ${s.date}: ${s.distanceKm ?? '?'} km · ${s.durationMin ?? '?'} min · HR ${s.avgHr ?? '?'}${s.maxHr != null ? ` (max ${s.maxHr})` : ''} · RPE ${s.rpe ?? '?'}${s.legs ? ` · benen ${s.legs}` : ''}`);
+      // De cyclusdag hoort bij de sessie, niet drie secties lager. Tempo bij
+      // dezelfde hartslag beweegt mee met de fase, en een analyse die dat
+      // niet naast elkaar zet, kan het ook niet meewegen.
+      // De cyclusdag en haar eigen lezing krijgen hun eigen regel; die hier
+      // nog eens meenemen levert dezelfde zin twee keer op.
+      const rest = s.contextLines.filter(r => !/^cyclusdag|^eigen opmerking/.test(r));
+      zeg(`    omstandigheden: ${s.cycleDay != null ? `cyclusdag ${s.cycleDay}` : 'cyclusdag onbekend'}` +
+        `${rest.length ? ` · ${rest.join(' · ')}` : ''}`);
+      if (s.ownNote) zeg(`    HAAR EIGEN LEZING van deze sessie: "${s.ownNote}"`);
     }
     zeg(`  loopdagen laatste 4 weken: ${ctx.training.runDays28}`);
     zeg(`  overige belasting 4 weken: zwemmen ${ctx.training.swimMin28} min · fietsen ${ctx.training.bikeMin28} min`);
+
+    // ── Loopeconomie ───────────────────────────────────────────
+    // Dit blok bestaat omdat de app eerder "loopeconomie gaat achteruit"
+    // zei op grond van twee gemiddelden. Het niveau hieronder is een
+    // gelaagd oordeel, geen getal: onder zes vergelijkbare sessies, of
+    // zolang cyclus/slaap/ondergrond het kunnen verklaren, is er geen
+    // uitspraak over haar vorm.
+    const E = ctx.training.economy;
+    zeg(`  loopeconomie — lezing: ${E.level}${E.label ? ` (${E.label})` : ''}`);
+    if (E.detail) zeg(`    ${E.detail}`);
+    if (E.note) zeg(`    ${E.note}`);
+    for (const c of (E.confounders || [])) zeg(`    verstorende factor: ${c}`);
+    for (const n of (E.ownReadings || [])) zeg(`    haar eigen lezing — ${n}`);
+    if (E.question) zeg(`    openstaande vraag aan haar: ${E.question}`);
+    zeg('    REGEL: zeg NOOIT dat haar loopeconomie achteruitgaat op grond van één');
+    zeg('    training of een totaalscore. Alleen bij lezing "achteruit" mag dat woord');
+    zeg('    vallen, en dan nog met de cyclusfase, de slaap, de voorgaande sessies en');
+    zeg('    haar eigen lezing erbij. Bij elk ander niveau: benoem wat je ziet, noem');
+    zeg('    de mogelijke verklaring, en vraag na wat je niet weet.');
   } else zeg(`  ${ctx.training.note}`);
   zeg('');
 
