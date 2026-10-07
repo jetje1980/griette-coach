@@ -1850,7 +1850,12 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
         localStorage.setItem('gc_cycle_history', JSON.stringify(next));
         localStorage.setItem('gc_cycle_start', currentDate);
       } catch { /* storage niet beschikbaar */ }
-      saveFields({ cycle_day_one: true, bleeding: log?.bleeding || 'normaal' });
+      // Beide velden. `cycle_day_one` is wat dit scherm altijd schreef;
+      // `menstruation_start` is het veld waar de tijdlijn, de trainingen, de
+      // metingen en de coachprompt op rekenen. Eén van de twee schrijven
+      // betekende dat de helft van de app je cyclus niet kende.
+      saveFields({ cycle_day_one: true, menstruation_start: true,
+        bleeding: log?.bleeding || 'normaal' });
       flashMsg('Dag 1 vastgelegd');
     }
 

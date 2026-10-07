@@ -115,7 +115,12 @@ function uitDaglogs() {
     // Cyclus en perimenopauze. Deze velden bestonden al in de daglog maar
     // bereikten de coach maar half; hier krijgen ze een eigen domein zodat ze
     // met vergelijkbare cyclusdagen te vergelijken zijn (§26).
-    if (l.menstruation_start) push(DOMAIN.CYCLE, 'menstruation_start', true);
+    // Twee velden, één feit. De knop in de Cyclus-tab schrijft
+    // `cycle_day_one`, oudere invoer `menstruation_start`. Alleen het
+    // tweede lezen liet de helft van haar cyclusstarts onzichtbaar.
+    if (l.menstruation_start || l.cycle_day_one) {
+      push(DOMAIN.CYCLE, 'menstruation_start', true);
+    }
     for (const m of ['bloating', 'puffiness', 'breast_tenderness', 'cravings',
       'hot_flashes', 'night_sweats', 'heavy_legs', 'mood'])
       push(DOMAIN.CYCLE, m, l[m]);
@@ -209,20 +214,58 @@ function uitKracht() {
   return uit;
 }
 
+// ── Menstruatiestarts ───────────────────────────────────────────
+//
+// WAT ER MIS WAS
+//
+// De Cyclus-tab liet netjes "cyclusdag 14" zien, en overal elders in de app
+// stond "cyclusdag onbekend" — bij trainingen, bij metingen, en in de
+// coachprompt. Zij vroeg hoe dat kon, en terecht.
+//
+// Twee leesfouten, beide stil:
+//
+//   1. gc_cycle_history bevat platte datumstrings ("2026-08-09"), zoals
+//      CycleHistory en de knop "Nieuwe menstruatie gestart?" ze wegschrijven.
+//      Hier werd `c.start || c.date` gelezen — undefined voor een string, dus
+//      élke historische start werd overgeslagen.
+//   2. gc_cycle_start staat als ruwe tekst in de opslag, niet als JSON.
+//      lees() haalt het door JSON.parse, dat gooit, en de fallback is null.
+//      Dus ook de huidige start kwam niet door.
+//
+// Netto wist de tijdlijn nul startdatums terwijl er vier stonden. Geen
+// foutmelding, want "geen menstruatiedata" is een geldige toestand — en
+// precies daarom viel het niet op.
+//
+// Deze functie leest nu alle vormen waarin een start kan zijn opgeslagen.
+// Dat is geen nette oplossing maar een eerlijke: haar gegevens staan er al
+// in, en die mogen niet opnieuw ingevoerd hoeven worden omdat twee stukken
+// code het ooit anders opschreven.
+function datumUit(x) {
+  if (typeof x === 'string') return /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : null;
+  const d = x?.start || x?.date || null;
+  return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+}
+
 function uitCyclus() {
   const uit = [];
-  for (const c of lees('gc_cycle_history', [])) {
-    const d = c?.start || c?.date;
-    if (!d) continue;
+  const gezien = new Set();
+  const voegToe = (d, meta = null) => {
+    if (!d || gezien.has(d)) return;
+    gezien.add(d);
     uit.push(obs({ observedAt: d, domain: DOMAIN.CYCLE, metric: 'menstruation_start',
-      value: true, source: 'cycle', certainty: CERTAINTY.REPORTED,
-      meta: c.length != null ? { cycleLength: c.length } : null }));
+      value: true, source: 'cycle', certainty: CERTAINTY.REPORTED, meta }));
+  };
+
+  for (const c of lees('gc_cycle_history', [])) {
+    voegToe(datumUit(c), c?.length != null ? { cycleLength: c.length } : null);
   }
-  const start = lees('gc_cycle_start', null);
-  if (typeof start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(start)) {
-    uit.push(obs({ observedAt: start, domain: DOMAIN.CYCLE, metric: 'menstruation_start',
-      value: true, source: 'cycle', certainty: CERTAINTY.REPORTED }));
-  }
+
+  // Ruwe tekst eerst: zo schrijft de app deze sleutel weg. Pas als dat geen
+  // datum is, is het misschien JSON.
+  let start = null;
+  try { start = localStorage.getItem('gc_cycle_start'); } catch { start = null; }
+  voegToe(datumUit(start) || datumUit(lees('gc_cycle_start', null)));
+
   return uit;
 }
 

@@ -26,6 +26,7 @@
 
 import { todayLocal } from './datetime';
 import { cycleDayOf } from './bodyReview';
+import { series } from './timeline';
 
 const KEY = 'gc_session_context';
 
@@ -120,9 +121,25 @@ export function sessionContextFor(date, { logs = {}, asOf = todayLocal() } = {})
   let cyclusdag = null;
   try { cyclusdag = cycleDayOf(date, { asOf }); } catch { cyclusdag = null; }
 
+  // Is de dag onbekend, dan hoort erbij te staan waaróm. "Onbekend" zonder
+  // reden leest als een fout in de app — en dat was het ook: haar
+  // cyclusstarts stonden er wel, maar werden niet gelezen. Nu dat is
+  // opgelost blijft er één legitieme reden over, en die staat er dan.
+  let cyclusReden = null;
+  if (cyclusdag == null) {
+    let starts = [];
+    try {
+      starts = [...new Set(series('menstruation_start', { asOf }).map(o => o.observedAt))].sort();
+    } catch { starts = []; }
+    cyclusReden = starts.length === 0
+      ? 'Er is nog geen menstruatiestart vastgelegd. Zet er één bij Lichaam → Cyclus, ook met terugwerkende kracht; dan verschijnt de cyclusdag hier en overal.'
+      : `Deze sessie ligt vóór je eerste vastgelegde menstruatiestart (${starts[0]}), dus er is geen dag 1 om vanaf te tellen.`;
+  }
+
   return {
     date,
     cycleDay: cyclusdag,
+    cycleDayUnknownWhy: cyclusReden,
     // Slaap komt uit je ochtendcheck-in als je die invulde; alleen als die
     // ontbreekt is de vraag zinvol.
     sleepHours: log?.sleep_hours ?? null,

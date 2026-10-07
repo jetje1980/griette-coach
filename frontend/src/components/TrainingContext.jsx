@@ -83,6 +83,16 @@ export default function TrainingContext({
         )}
       </div>
 
+      {/* Waarom onbekend. Zonder deze regel leest "cyclusdag onbekend" als
+          een fout in de app — en zij vroeg terecht hoe dat kon, want in de
+          Cyclus-tab stond haar cyclusdag wél. */}
+      {ctx.cycleDay == null && ctx.cycleDayUnknownWhy && (
+        <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45, marginTop: 3 }}
+          data-cyclus-waarom>
+          {ctx.cycleDayUnknownWhy}
+        </div>
+      )}
+
       {/* Ook ingeklapt: wat er al staat. Anders zie je niet welke sessie nog
           een antwoord mist, en vul je ze allemaal opnieuw of geen enkele. */}
       {bekend.length > 1 && (
