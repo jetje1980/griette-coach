@@ -8,6 +8,7 @@ import { loadHrModel, intensityRelease } from '../hrModel';
 import { todayLocal } from '../datetime';
 import RaceGoalEditor from './RaceGoalEditor';
 import TrainingContext from './TrainingContext';
+import { economyAnalysis } from '../economyAnalysis';
 
 // Progressie → Run, radicaal simpel.
 //
@@ -99,6 +100,13 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
     .filter(n => !['economy_context', 'economy_tradeoff'].includes(n.id));
   const andereSignalen = (warnings?.signals || []).filter(s => s.id !== 'economy');
 
+  // De volledige weging: meting, vorm van de sessies, omstandigheden en het
+  // advies dat daaruit volgt. Dezelfde functie die de coachprompt vult, zodat
+  // het scherm en de AI niet twee verhalen vertellen.
+  const analyse = useMemo(() => {
+    try { return economyAnalysis({ logs, currentDate }); } catch { return null; }
+  }, [logs, currentDate, ctxTick]);
+
   // Precies de sessies waarover de uitspraak gaat. Vragen stellen over een
   // training die niet in de vergelijking zat, is ruis vragen.
   const comparedDates = useMemo(() => {
@@ -188,19 +196,60 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
           )}
         </div>
 
-        {/* Wat de vergelijking scheef trekt, met zoveel woorden. Ook als het
-            de conclusie niet verandert hoort zij te zien wat er meewoog. */}
-        {reading?.confounders?.items?.length > 0 && (
+        {/* De hele weging, en niet alleen wat de conclusie veranderde.
+            Een factor die stil wordt overgeslagen lijkt achteraf te zijn
+            meegewogen, terwijl dat niet gebeurde. Dus staat er ook bij wat
+            niét van toepassing was en wat niet is vastgelegd. */}
+        {analyse?.available && analyse.factors?.length > 0 && (
           <div style={{ marginBottom: 8, paddingLeft: 9,
-            borderLeft: '2px solid var(--border)' }} data-verstoringen={reading.confounders.items.length}>
+            borderLeft: '2px solid var(--border)' }} data-weging={analyse.factors.length}>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
               textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>
-              Wat hierin meespeelt
+              Wat ik heb meegewogen
             </div>
-            {reading.confounders.items.map(c => (
-              <div key={c.id} style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.45,
-                marginBottom: 2 }}>{c.tekst}</div>
+            {analyse.factors.map(f => (
+              <div key={f.id} style={{ fontSize: 11, lineHeight: 1.45, marginBottom: 3 }}
+                data-factor={f.id} data-gewicht={f.weight}>
+                <span style={{ fontWeight: 700, color: f.weight === 'groot' ? 'var(--gold)'
+                  : f.weight === 'matig' ? 'var(--sub)' : 'var(--ghost)' }}>
+                  {f.naam}
+                </span>
+                <span style={{ fontSize: 9.5, color: 'var(--ghost)', marginLeft: 5,
+                  border: '1px solid var(--border)', borderRadius: 99, padding: '0 5px' }}>
+                  {f.weightLabel}
+                </span>
+                <div style={{ color: 'var(--sub)' }}>{f.text}</div>
+              </div>
             ))}
+          </div>
+        )}
+
+        {/* Het advies dat uit de zwaarst wegende factor volgt. Een analyse
+            zonder handeling laat haar met een getal zitten. */}
+        {analyse?.available && analyse.advice?.length > 0 && (
+          <div style={{ marginBottom: 8 }} data-economie-advies={analyse.verdict}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
+              textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>
+              Wat ik je zou adviseren
+            </div>
+            {analyse.advice.map((r, i) => (
+              <div key={i} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5,
+                marginBottom: 3, display: 'flex', gap: 6 }}>
+                <span style={{ color: 'var(--sage)' }}>·</span><span>{r}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* De vorm van de sessies, met getallen. Dit is de as die eerder
+            helemaal ontbrak: werd de wandelpauze korter, dan is trager
+            lopen de prijs van een dichtere sessie. */}
+        {analyse?.form?.available && (
+          <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5,
+            marginBottom: 8 }} data-sessievorm>
+            Vorm van de sessies: wandelpauze {String(analyse.form.pauseFrom).replace('.', ',')} → {String(analyse.form.pauseTo).replace('.', ',')} min ·
+            blok {String(analyse.form.blockFrom).replace('.', ',')} → {String(analyse.form.blockTo).replace('.', ',')} min ·
+            echt lopen {analyse.form.runShareFrom}% → {analyse.form.runShareTo}% van de sessie
           </div>
         )}
         {reading?.confounders?.notes?.length > 0 && (

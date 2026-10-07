@@ -350,8 +350,10 @@ export function earlyWarnings({ logs = {}, currentDate = todayLocal() } = {}) {
     if (lezing.level === 'achteruit') {
       signals.push({ id: 'economy', label: lezing.label, detail: lezing.detail,
         vraag: lezing.vraag, askQuestions: true });
-    } else if (['ruil', 'onverklaard', 'onvoldoende_context', 'waarneming'].includes(lezing.level)) {
-      notes.push({ id: lezing.level === 'ruil' ? 'economy_tradeoff' : 'economy_context',
+    } else if (['ruil', 'dichter', 'onverklaard', 'onvoldoende_context', 'waarneming']
+      .includes(lezing.level)) {
+      notes.push({ id: ['ruil', 'dichter'].includes(lezing.level)
+        ? 'economy_tradeoff' : 'economy_context',
         label: lezing.label, detail: lezing.detail,
         vraag: lezing.vraag, askQuestions: !!lezing.askQuestions });
     }

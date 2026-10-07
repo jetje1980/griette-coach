@@ -44,6 +44,7 @@ import { cycleIntelligence, PATTERN_CONFIDENCE } from './cyclePatterns';
 import { trainingBalance, progressionProposal, compositionGuard, RISK } from './progression';
 import { coachDecision, decisionAsText } from './decision';
 import { economyReading } from './economyReading';
+import { economyAnalysis, analysisAsText } from './economyAnalysis';
 import { sessionContextFor, contextLines } from './sessionContext';
 import { earlyWarnings, continuityTrend } from './runningHistory';
 
@@ -271,6 +272,12 @@ function trainingContext(asOf) {
       confounders: (lezing.confounders?.items || []).map(c => c.tekst),
       ownReadings: (lezing.confounders?.notes || []).map(n => `${n.date}: "${n.note}"`),
     } : { level: 'geen', note: lezing.note || 'nog geen economievergelijking mogelijk' },
+    // De volledige weging: meting, vorm van de sessies, omstandigheden, haar
+    // eigen lezing, en het advies dat daaruit volgt. Zonder dit gaf het model
+    // advies over een getal in plaats van over een situatie.
+    economyAnalysis: (() => {
+      try { return economyAnalysis({ logs, currentDate: asOf }); } catch { return null; }
+    })(),
     runDays28: dagen,
     // Zwemmen en fietsen zijn ook belasting, ook al zijn ze geen looptraining.
     swimMin28: series('swim_duration', { asOf, since: addDays(asOf, -27) })
@@ -615,25 +622,31 @@ export function contextAsText(ctx) {
     zeg(`  overige belasting 4 weken: zwemmen ${ctx.training.swimMin28} min · fietsen ${ctx.training.bikeMin28} min`);
 
     // ── Loopeconomie ───────────────────────────────────────────
-    // Dit blok bestaat omdat de app eerder "loopeconomie gaat achteruit"
-    // zei op grond van twee gemiddelden. Het niveau hieronder is een
-    // gelaagd oordeel, geen getal: onder zes vergelijkbare sessies, of
-    // zolang cyclus/slaap/ondergrond het kunnen verklaren, is er geen
-    // uitspraak over haar vorm.
+    // Eén regel met het niveau, en daarna de hele weging in een eigen
+    // sectie. Hier stond alleen die ene regel; daarmee kon het model zien
+    // wát er stond maar niet waaróp het rustte, en dus ook geen advies
+    // geven dat uit de factoren volgde.
     const E = ctx.training.economy;
     zeg(`  loopeconomie — lezing: ${E.level}${E.label ? ` (${E.label})` : ''}`);
     if (E.detail) zeg(`    ${E.detail}`);
     if (E.note) zeg(`    ${E.note}`);
-    for (const c of (E.confounders || [])) zeg(`    verstorende factor: ${c}`);
-    for (const n of (E.ownReadings || [])) zeg(`    haar eigen lezing — ${n}`);
     if (E.question) zeg(`    openstaande vraag aan haar: ${E.question}`);
     zeg('    REGEL: zeg NOOIT dat haar loopeconomie achteruitgaat op grond van één');
     zeg('    training of een totaalscore. Alleen bij lezing "achteruit" mag dat woord');
-    zeg('    vallen, en dan nog met de cyclusfase, de slaap, de voorgaande sessies en');
-    zeg('    haar eigen lezing erbij. Bij elk ander niveau: benoem wat je ziet, noem');
-    zeg('    de mogelijke verklaring, en vraag na wat je niet weet.');
+    zeg('    vallen. De volledige weging staat in de sectie LOOPECONOMIE — DIEPE');
+    zeg('    ANALYSE hieronder; gebruik die en niet dit ene woord.');
   } else zeg(`  ${ctx.training.note}`);
   zeg('');
+
+  // ── De diepe analyse van de loopeconomie ──────────────────────
+  // Direct onder HARDLOPEN, want de uitspraak hangt aan die sessies. Dit is
+  // het blok waarin elke kandidaat-verklaring een gewicht heeft gekregen —
+  // ook de verklaringen die niet van toepassing bleken, want een factor die
+  // stil wordt overgeslagen lijkt achteraf meegewogen.
+  if (ctx.training.economyAnalysis) {
+    zeg(analysisAsText(ctx.training.economyAnalysis));
+    zeg('');
+  }
 
   zeg('KRACHT:');
   if (ctx.strength.known) {

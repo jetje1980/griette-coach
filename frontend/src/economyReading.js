@@ -37,6 +37,7 @@ import { todayLocal, daysBetween } from './datetime';
 import { runEconomyTrend } from './pace';
 import { cycleDayOf } from './bodyReview';
 import { sessionContextFor, contextLines } from './sessionContext';
+import { densityTrend } from './sessionDensity';
 
 // Onder dit aantal vergelijkbare sessies doet de app geen uitspraak over
 // economie. Twee reeksen van drie is geen trend maar twee weken.
@@ -131,6 +132,10 @@ export function economyReading({ logs = {}, currentDate = todayLocal(),
   const vroegD = punten.slice(0, helft).map(p => p.date);
   const laatD = punten.slice(helft).map(p => p.date);
   const stoor = confounders({ earlyDates: vroegD, lateDates: laatD, logs, currentDate });
+  // De vorm van de sessies zelf: werden de wandelpauzes korter, de blokken
+  // langer, het loopaandeel groter? Zij wees hierop en ze heeft gelijk —
+  // zonder dit is "trager bij dezelfde hartslag" niet te interpreteren.
+  const vorm = densityTrend({ earlyDates: vroegD, lateDates: laatD, currentDate });
 
   const trager = econ.gainSec < -5;
   const sneller = econ.gainSec > 5;
@@ -139,7 +144,7 @@ export function economyReading({ logs = {}, currentDate = todayLocal(),
   // 1. Te weinig om iets te vinden.
   if (econ.count < MIN_SESSIONS_FOR_VERDICT) {
     return {
-      level: 'waarneming', available: true, econ, confounders: stoor,
+      level: 'waarneming', available: true, econ, confounders: stoor, density: vorm,
       label: 'Nog te weinig om een trend te noemen',
       detail: `${basis}. Dat is te weinig voor een uitspraak: onder ${MIN_SESSIONS_FOR_VERDICT} vergelijkbare sessies is dit een waarneming, geen trend.`,
       askQuestions: false,
@@ -149,29 +154,50 @@ export function economyReading({ logs = {}, currentDate = todayLocal(),
   // 2. Stabiel of sneller: geen probleem om te verklaren.
   if (!trager) {
     return {
-      level: sneller ? 'vooruit' : 'stabiel', available: true, econ, confounders: stoor,
+      level: sneller ? 'vooruit' : 'stabiel', available: true, econ, confounders: stoor, density: vorm,
       label: sneller ? 'Je wordt economischer' : 'Stabiel',
-      detail: sneller
+      // Stabiel tempo terwijl de sessies dichter werden is geen stilstand.
+      // Hetzelfde tempo met minder rust ertussen is winst die het kale
+      // getal niet laat zien — en die zij wel verdient te horen.
+      detail: (sneller
         ? `${basis}. Hetzelfde werk voor je hart levert meer snelheid op.`
-        : `Looptempo en hartslag zijn stabiel over ${econ.count} sessies. In deze fase is consistentie de winst.`,
+        : `Looptempo en hartslag zijn stabiel over ${econ.count} sessies.`)
+        + (vorm.available && (vorm.denser || vorm.blockLonger)
+          ? ` En dat terwijl de vorm zwaarder werd: ${vorm.lines.join(' ')} Hetzelfde tempo bij minder rust is vooruitgang die niet in het tempo zichtbaar is.`
+          : sneller ? '' : ' In deze fase is consistentie de winst.'),
       askQuestions: false,
     };
   }
 
-  // 3. Trager, maar de blokken groeien: de ruil die het plan vraagt.
+  // 3. Trager, maar de sessies werden dichter: minder pauze, langere
+  //    blokken, meer loopaandeel. Dat is de vorm die veranderde en niet het
+  //    vermogen dat afnam — en het staat zo in de bibliotheek beschreven.
+  if (vorm.available && (vorm.denser || vorm.blockLonger)) {
+    return {
+      level: 'dichter', available: true, econ, confounders: stoor, density: vorm,
+      label: vorm.toContinuous ? 'Trager, maar je loopt nu doorlopend'
+        : vorm.denser ? 'Trager, maar met minder rust ertussen'
+        : 'Trager, maar met langere blokken',
+      detail: `${basis}. ${vorm.lines.join(' ')} ${vorm.why || ''}`.trim(),
+      vraag: 'Klopt dat met wat je zelf merkte — voelde het zwaarder in plaats van langzamer?',
+      askQuestions: true,
+    };
+  }
+
+  // 4. Trager, maar de blokken groeien: de ruil die het plan vraagt.
   if (continuityGrowing) {
     return {
-      level: 'ruil', available: true, econ, confounders: stoor,
+      level: 'ruil', available: true, econ, confounders: stoor, density: vorm,
       label: 'Trager, maar langer door',
       detail: `${basis}, terwijl je langste doorlopende blok groeide van ${continuityFrom} naar ${continuityTo} minuten. Dat is de ruil die het plan vraagt: langzamer lopen om de wandelpauzes eruit te krijgen. Uithoudingsvermogen dat toeneemt, geen economie die afneemt.`,
       askQuestions: false,
     };
   }
 
-  // 4. Trager, en er zijn zware verstoringen: dat is de eerste verklaring.
+  // 5. Trager, en er zijn zware verstoringen: dat is de eerste verklaring.
   if (stoor.groot > 0) {
     return {
-      level: 'onverklaard', available: true, econ, confounders: stoor,
+      level: 'onverklaard', available: true, econ, confounders: stoor, density: vorm,
       label: 'Trager — maar niet vergelijkbaar',
       detail: `${basis}. Voordat dit vormverlies heet: de twee reeksen zijn niet goed vergelijkbaar. ${stoor.items.filter(x => x.zwaarte === 'groot').map(x => x.tekst).join(' ')}`,
       vraag: 'Weet jij wat er anders was? Dan weegt dat mee.',
@@ -179,14 +205,14 @@ export function economyReading({ logs = {}, currentDate = todayLocal(),
     };
   }
 
-  // 5. Trager, geen zware verstoring gevonden — maar er is niet naar
+  // 6. Trager, geen zware verstoring gevonden — maar er is niet naar
   //    gevraagd. Dat is iets anders dan "er was niets".
   const genoegContext = [...vroegD, ...laatD]
     .map(d => sessionContextFor(d, { logs, asOf: currentDate }))
     .filter(c => c.hasAnswers).length;
   if (genoegContext < Math.ceil(econ.count / 3)) {
     return {
-      level: 'onvoldoende_context', available: true, econ, confounders: stoor,
+      level: 'onvoldoende_context', available: true, econ, confounders: stoor, density: vorm,
       label: 'Trager — maar ik weet te weinig van de omstandigheden',
       detail: `${basis}. Van ${genoegContext} van de ${econ.count} sessies weet ik waar en wanneer je liep. Zonder dat kan ik niet zeggen of dit je vorm is of de omstandigheden.`,
       vraag: 'Vul bij een paar recente runs in hoe laat je liep, hoe je sliep en waar je liep — dan kan ik dit scheiden.',
@@ -194,11 +220,11 @@ export function economyReading({ logs = {}, currentDate = todayLocal(),
     };
   }
 
-  // 6. Alles afgepeld en het blijft staan.
+  // 7. Alles afgepeld en het blijft staan.
   return {
-    level: 'achteruit', available: true, econ, confounders: stoor,
+    level: 'achteruit', available: true, econ, confounders: stoor, density: vorm,
     label: 'Loopeconomie gaat achteruit',
-    detail: `${basis}, zonder dat je doorlopende blokken langer werden en zonder dat cyclus, slaap, ondergrond of weer het verklaren. Dit is het signaal dat telt.`,
+    detail: `${basis}, zonder dat je blokken langer werden, zonder dat je wandelpauzes korter werden${vorm.available && vorm.pauseFrom != null ? ` (${vorm.pauseFrom} → ${vorm.pauseTo} min pauze)` : ''}, en zonder dat cyclus, slaap, ondergrond of weer het verklaren. Dit is het signaal dat telt.`,
     vraag: 'Zie jij zelf nog iets wat dit verklaart?',
     askQuestions: true,
   };
