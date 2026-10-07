@@ -764,7 +764,10 @@ function NextSessionForecastCard({ log, logs, currentDate }) {
     [log, logs, currentDate]);
   const f = useMemo(() => nextSessionForecast({
     run: next?.run || next?.previewRun, logs, currentDate, gate: coach.gate,
-  }), [next?.run?.nr, next?.previewRun?.nr, logs, currentDate, coach.gate?.action]);
+    // Op de id van de vorm, niet op `nr`: dat veld is null sinds de sessie
+    // uit de bibliotheek komt, en dan verversde deze berekening nooit meer.
+  }), [next?.run?.libraryId, next?.run?.description, next?.previewRun?.libraryId,
+    logs, currentDate, coach.gate?.action]);
 
   if (!f.available) {
     return (

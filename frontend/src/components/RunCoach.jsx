@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { planNextSession } from '../raceplan';
+import { nextSession } from '../coachPlan';
+import { computeNextSession } from './CoachAdvice';
 import { restDayDecision } from '../restday';
 import { recoveryBudget, budgetLine } from '../recoveryBudget';
 import { activeRunGoals } from '../runGoalModel';
@@ -497,7 +498,15 @@ export default function RunCoach({ log = {}, logs = {}, currentDate = todayLocal
   const { plan, budget, statuses, limiter, easy, runGate } = useMemo(() => {
     const runGate = restDayDecision({ log, logs, currentDate, coach: {} });
     const b = recoveryBudget({ log, logs, currentDate, runGate });
-    const p = planNextSession({ log, logs, currentDate });
+    // Eén bron voor de sessie van vandaag, inclusief de adaptieve toestand.
+    //
+    // Hier stond planNextSession(), die zijn eigen vorm afleidde. Daarna las
+    // dit scherm nextSession() maar zonder de adaptieve terugname — en dan
+    // staat er nog steeds een andere sessie dan op Vandaag. Het hele
+    // voorschrift komt nu uit de beslissing zelf.
+    const beslissing = computeNextSession(log || {}, logs, currentDate);
+    const p = beslissing.prescription
+      || nextSession({ log: log || {}, logs, currentDate });
     const goals = activeRunGoals({ currentDate });
     const { rows, driving } = allRunGoalStatuses({ goals, logs, currentDate, budget: b });
     // Het gemeten easy-tempo: nodig om te tonen op hoeveel sessies het

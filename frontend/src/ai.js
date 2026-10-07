@@ -11,7 +11,7 @@ import { easyHrLine } from './hrModel';
 import { activeRunGoals } from './runGoalModel';
 import { allRunGoalStatuses, STATUS_META } from './runGoalStatus';
 import { buildCoachContext, contextAsText } from './coachContext';
-import { planNextSession } from './raceplan';
+import { computeNextSession } from './components/CoachAdvice';
 const MODEL = 'claude-sonnet-4-6';
 const EDGE_FN = `${SUPABASE_URL}/functions/v1/coach-ai`;
 
@@ -521,7 +521,7 @@ Werkingsfase: ${huidigePrik.nr <= 5 ? 'opbouwfase — eetlustremming nog niet op
       ...regels,
       `Deze regels zijn de uitkomst van runGoalStatus, racePerformance en hrModel.`,
       `NIET zelf een finishtijd, tempo, hartslag of haalbare afstand schatten en niet deze getallen overrulen.`,
-      `Er bestaat geen vaste sessievolgorde meer: welke training volgt komt uit planNextSession, niet uit een nummer.`,
+      `Er bestaat geen vaste sessievolgorde meer: welke training volgt komt uit de sessiebibliotheek, gekozen op wat zij verdraagt en hoe eerdere sessies vielen — niet uit een nummer.`,
     ].join('\n');
   })();
 
@@ -869,20 +869,27 @@ ${JSON.stringify(schema, null, 2)}`;
     // een vaste 10 als terugval. Daarmee gaf de AI een plek in een reeks door
     // die niet meer bestaat. planNextSession() weet wat er werkelijk volgt en
     // waarom — en die reden hoort in het plan te staan.
+    // En hij komt uit dezelfde beslissing als de schermen, inclusief de
+    // adaptieve toestand. Hier stond planNextSession() los; daarmee kreeg de
+    // AI een vórm te zien die op geen enkel scherm stond, en gaf hij advies
+    // over een training die zij niet voor zich had.
     const volgende = (() => {
       try {
-        const p = planNextSession({ log: logs[todayLocal()] || {}, logs, currentDate: todayLocal() });
-        if (!p?.run) return null;
+        const vandaag = todayLocal();
+        const b = computeNextSession(logs[vandaag] || {}, logs, vandaag);
+        const run = b.run || b.previewRun;
+        if (!run) return null;
         return {
-          vorm: p.run.description,
-          duur: p.run.duration,
-          doel: p.run.goal || null,
-          reden: p.reason || null,
+          vorm: run.description,
+          duur: run.duration,
+          doel: run.goal || null,
+          reden: b.note || b.prescription?.reason || null,
+          opSlot: !b.run,
         };
       } catch { return null; }
     })();
     const loopRegel = volgende
-      ? `EERSTVOLGENDE LOOPTRAINING VOLGENS DE PLANNER: ${volgende.vorm} (${volgende.duur} min)${volgende.doel ? ` — doel: ${volgende.doel}` : ''}${volgende.reden ? `\nWaarom die: ${volgende.reden}` : ''}`
+      ? `EERSTVOLGENDE LOOPTRAINING VOLGENS DE PLANNER: ${volgende.vorm} (${volgende.duur} min)${volgende.doel ? ` — doel: ${volgende.doel}` : ''}${volgende.opSlot ? '\nLET OP: lopen staat vandaag op slot; dit is de sessie die daarna klaarstaat.' : ''}${volgende.reden ? `\nWaarom die: ${volgende.reden}` : ''}\nDit is exact de sessie die zij in de app ziet staan. Noem geen andere vorm, geen ander aantal blokken en geen andere wandelpauze.`
       : 'EERSTVOLGENDE LOOPTRAINING: de planner geeft vandaag geen looptraining vrij.';
 
     const prompt = `${context}

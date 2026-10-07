@@ -338,7 +338,14 @@ function buildRun({ purpose, base, targetPace, hrZone, race, walkPace }) {
   let duration = base.duration;
   const levers = [];
 
-  switch (purpose) {
+  // Is de vorm al gekozen, dan wordt hij hier niet omgerekend. De hefbomen
+  // hieronder verschuiven bloklengte, pauze en aantal — dat gaf een derde
+  // vorm, die noch op Vandaag noch in Progressie stond. Het doel bepaalt
+  // nog steeds tempo, hartslag en dosering; alleen de blokstructuur staat
+  // vast, want die kwam uit de bibliotheek en is daar al op doel gekozen.
+  const vast = !!base.fromForm;
+
+  switch (vast ? '__VAST__' : purpose) {
     case 'DURABILITY': {
       // Eén variabele omhoog: meer loopminuten, zelfde tempo. De groei
       // blijft binnen de weekgrens van 10%.
@@ -390,6 +397,10 @@ function buildRun({ purpose, base, targetPace, hrZone, race, walkPace }) {
       duration = Math.round(reps * (runMin + walkMin));
       break;
     }
+    case '__VAST__':
+      // De vorm komt uit de bibliotheek en blijft zoals hij is.
+      duration = duration ?? Math.round(reps * runMin + walkMin * Math.max(0, reps - 1));
+      break;
     case 'EASY_ECONOMY':
     default:
       // Hetzelfde nog een keer goed uitvoeren ís de opbouw.
@@ -407,7 +418,21 @@ function buildRun({ purpose, base, targetPace, hrZone, race, walkPace }) {
     run: {
       nr: null,
       purpose,
-      description: `${fmtBlock(runMin)} lopen / ${fmtBlock(walkMin)} wandelen × ${reps}`,
+      // Eén tekst voor één sessie. Komt de vorm uit de bibliotheek, dan is
+      // zijn eigen label de tekst — ook omdat een doorlopende sessie hier
+      // anders als "40 min lopen / 0 min wandelen × 1" zou verschijnen.
+      libraryId: base.fromForm?.id || null,
+      label: base.fromForm?.label || null,
+      note: base.fromForm?.note || null,
+      level: base.fromForm?.level ?? null,
+      continuous: !!base.fromForm?.continuous,
+      // De tekst volgt de getallen, altijd. Bij een onaangeroerde vorm uit
+      // de bibliotheek komt daar exact het bibliotheeklabel uit; is er op
+      // een amberdag een blok af gegaan, dan staat dát er — en niet het
+      // label van de vorm die het had moeten zijn.
+      description: base.fromForm?.continuous
+        ? `${fmtBlock(runMin)} doorlopend`
+        : `${fmtBlock(runMin)} lopen / ${fmtBlock(walkMin)} wandelen × ${reps}`,
       runMin, walkMin, reps,
       duration,
       hrZone,
@@ -431,7 +456,20 @@ function fmtBlock(min) {
 export function planNextSession({
   log = {}, logs = {}, currentDate = todayLocal(),
   gate = null, state = null, forcePurpose = null, ignoreGate = false,
+  // De vorm van vandaag, als die al gekozen is. Dit bestand koos er zelf
+  // ook één uit `provenStructure`, en de sessiebibliotheek koos een andere
+  // — met als gevolg dat Vandaag "5 min lopen / 2 min wandelen × 4" zei en
+  // Progressie "5 min lopen / 1 min wandelen × 5". Twee antwoorden op één
+  // vraag, en zij zag dat. Wordt `form` meegegeven, dan is dát de vorm en
+  // doet deze module alleen nog wat ze als enige kan: doel, tempo,
+  // hartslagvoorschrift, poort en dosering eromheen.
+  form = null,
 } = {}) {
+  // Een meegegeven `null` omzeilt de standaardwaarden hierboven, en verderop
+  // wordt `log.symptom_pem` gelezen. Dat is geen theoretisch geval: het
+  // haalde de hele app onderuit toen de kopregel deze route ging lopen.
+  log = log || {};
+  logs = logs || {};
   const timeline = raceTimeline({ currentDate });
   const st = state || runningState({ logs, currentDate });
   const hrSettings = loadHrSettings();
@@ -497,9 +535,14 @@ export function planNextSession({
 
   // ── Uitgangspunt: wat je aantoonbaar verdraagt ────────────────
   const proven = provenStructure({ logs, currentDate });
-  const derivedFrom = proven ? 'capability' : 'schema';
+  const derivedFrom = form ? 'library' : proven ? 'capability' : 'schema';
 
-  const base = proven
+  const base = form
+    ? { runMin: form.runMin, walkMin: form.walkMin,
+        reps: form.reps, duration: form.minutes ?? form.duration ?? null,
+        // Een meegegeven vorm wordt niet herschikt. Zie buildRun().
+        fromForm: form }
+    : proven
     ? { runMin: proven.runMin, walkMin: proven.walkMin || 2,
         reps: proven.reps || 5, duration: proven.duration || 20 }
     : (() => {

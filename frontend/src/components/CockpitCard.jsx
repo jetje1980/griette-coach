@@ -4,7 +4,7 @@ import { recordPrediction } from '../predictionLog';
 import { logAction } from '../leverage';
 import { todayLocal, formatNLLong } from '../datetime';
 import { restDayDecision } from '../restday';
-import { coachPlan } from '../coachPlan';
+import { computeNextSession } from './CoachAdvice';
 import { todayState, whatIsMissing, UI_STATE, STATE_META } from '../todayState';
 
 // Het enige dat Vandaag standaard toont.
@@ -31,7 +31,7 @@ export default function CockpitCard({
 
   // De loopoort en de sessie die eruit volgt, uit dezelfde twee bronnen als
   // de rest van de app: restDayDecision zegt of er gelopen mag worden,
-  // coachPlan welke vorm dat dan is.
+  // nextSession welke vorm dat dan is.
   const loopPoort = useMemo(() => {
     if (isFuture) return null;
     try {
@@ -41,15 +41,24 @@ export default function CockpitCard({
       // wil kunnen zien wát er straks klaarstaat — anders weet je wel dat je
       // moet wachten maar niet waarop, en dat maakt wachten zwaarder dan
       // nodig.
-      const plan = coachPlan({ log: log || {}, logs, currentDate });
+      // computeNextSession(): dezelfde beslissing als op Vandaag en in
+      // Progressie, inclusief de adaptieve toestand. Dit is de startpagina,
+      // en juist hier stond een andere sessie dan op de andere tabs —
+      // omdat dit scherm het kale plan las en de rest de beslissing.
+      const beslissing = computeNextSession(log || {}, logs, currentDate);
+      const vorm = beslissing.run || beslissing.previewRun || null;
       return {
         vrij,
         reden: vrij
           ? (poort.summary || poort.headline)
           : (poort.blockers?.[0] || poort.headline || 'Vandaag geen loopprikkel.'),
-        sessie: plan?.choice?.available ? plan.choice.session.label : null,
-        sessieMinuten: plan?.choice?.available ? plan.choice.session.minutes : null,
-        sessieWaarom: plan?.choice?.available ? plan.choice.session.note : null,
+        sessie: vorm?.description || null,
+        sessieMinuten: vorm?.duration ?? null,
+        sessieWaarom: vorm?.note || null,
+        // Neemt de coach vandaag bewust terug, dan hoort dat hier te staan.
+        // Een lichtere sessie zonder uitleg leest als een fout.
+        terugname: beslissing.state && beslissing.state !== 'BUILD'
+          ? beslissing.note : null,
         vanaf: poort.earliestRunDate ? formatNLLong(poort.earliestRunDate) : 'zodra je herstel het toelaat',
         dagen: poort.daysUntilRun ?? 0,
       };
@@ -162,6 +171,12 @@ export default function CockpitCard({
                 <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45,
                   marginTop: 2 }}>
                   {loopPoort.sessieWaarom}
+                </div>
+              )}
+              {loopPoort.terugname && (
+                <div style={{ fontSize: 10.5, color: 'var(--gold)', lineHeight: 1.45,
+                  marginTop: 2 }} data-terugname>
+                  {loopPoort.terugname}
                 </div>
               )}
               {!loopPoort.vrij && (

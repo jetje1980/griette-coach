@@ -179,6 +179,11 @@ for (const s of SESSIONS) {
   s.label = s.continuous
     ? `${s.runMin} min doorlopend`
     : `${s.runMin} min lopen / ${String(s.walkMin).replace('.', ',')} min wandelen × ${s.reps}`;
+  // Eén naam voor één begrip. De schermen lazen `duration`, de bibliotheek
+  // heette `minutes`, en dus stond er in Progressie geen tijd bij de sessie
+  // terwijl die er wel was.
+  s.duration = s.minutes;
+  s.description = s.label;
 }
 
 export const MAX_LEVEL = Math.max(...SESSIONS.map(s => s.level));

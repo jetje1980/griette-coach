@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { USER } from '../config';
-import { coachPlan } from '../coachPlan';
+import { coachPlan, nextSession, adaptiveLevel } from '../coachPlan';
 import { sessionsAtLevel } from '../data/sessionLibrary';
-import { planNextSession, PURPOSE } from '../raceplan';
+import { PURPOSE } from '../raceplan';
 import { lastRunWorkout, workoutWasHeavy, toleranceFor, workoutsForSession } from '../workouts';
 import { restDayDecision } from '../restday';
 import { todayLocal, addDays } from '../datetime';
@@ -22,9 +22,17 @@ function avg(arr) {
 // Dat is een wachtrij: het weet niet hoe de vorige viel, het weet niets van
 // je doel, en na de laatste is er niets meer. De keuze komt nu uit
 // coachPlan(), die van álle sessies leert en een reden meelevert.
-function volgendeVorm(logs, currentDate) {
-  const plan = coachPlan({ logs, currentDate });
-  return plan.choice.available ? { ...plan.choice.session, why: plan.choice.why } : null;
+// Let op: dit leest bewust nextSession() en niet coachPlan() alleen. De
+// kopregel noemde hier het kale bibliotheeklabel, terwijl de sessiekaart
+// eronder de gedoseerde vorm toonde — op een amberdag stonden er dus twee
+// verschillende sessies boven elkaar op hetzelfde scherm.
+function volgendeVorm(log, logs, currentDate, level = null) {
+  const plan = nextSession({ log, logs, currentDate, ignoreGate: true, level });
+  if (!plan.session) return null;
+  return { ...plan.session, why: plan.choiceWhy,
+    description: plan.run?.description || plan.session.label,
+    duration: plan.run?.duration ?? plan.session.minutes,
+    doseAdjust: plan.run?.doseAdjust || null };
 }
 
 // ─── HEAD COACH decision engine ─────────────────────────────────────────────
@@ -125,7 +133,7 @@ export function computeHeadCoach(log, logs, currentDate) {
   if (dayCapacity === 'minimum' && decision === 'GREEN') decision = 'AMBER';
 
   // ── training recommendation ───────────────────────────────────────────────
-  const nextRun = volgendeVorm(logs, currentDate);
+  const nextRun = volgendeVorm(log || {}, logs, currentDate);
 
   let trainingDesc, sessionLabel;
 
@@ -133,12 +141,18 @@ export function computeHeadCoach(log, logs, currentDate) {
     // Geen sessienummer meer: dat suggereerde een volgorde die er niet is.
     sessionLabel = 'Looptraining';
     trainingDesc = nextRun
-      ? `${nextRun.label} — ${nextRun.minutes} min | ${easyHrLine()}`
+      ? `${nextRun.description} — ${nextRun.duration} min | ${easyHrLine()}`
       : 'Geplande loopsessie — Zone B strikt';
   } else if (decision === 'AMBER') {
+    // Hier stond een eigen rekensom: 70% van de bloklengte en 70% van het
+    // aantal blokken. Dat is twee assen tegelijk omlaag en het leverde een
+    // vorm op die nergens anders bestond. De dosering van een amberdag zit
+    // in de sessie zelf (één as: minder blokken), dus wordt die hier
+    // gelezen in plaats van opnieuw bedacht.
     sessionLabel = 'Aangepaste sessie';
     trainingDesc = nextRun
-      ? `Korter: ${Math.round((nextRun.runMin || 1) * 0.7)} min lopen / ${nextRun.walkMin || 2} min wandelen × ${Math.max(3, Math.round((nextRun.reps || 5) * 0.7))} — ${easyHrLine()}`
+      ? `${nextRun.description} — ${nextRun.duration} min | ${easyHrLine()}`
+        + (nextRun.doseAdjust ? ` · ${nextRun.doseAdjust.lever}` : '')
       : 'Lichte wandeling 20-30 min — geen hardlopen';
   } else if (decision === 'BLUE') {
     sessionLabel = 'Hersteldag';
@@ -337,6 +351,28 @@ export function computeHeadCoach(log, logs, currentDate) {
   };
   const c = COLORS[decision];
 
+  // ── De kopregel noemt de sessie die er werkelijk staat ───────
+  //
+  // Hierboven is `trainingDesc` gezet vóórdat de adaptieve toestand bekend
+  // was. Neemt de coach vandaag bewust een niveau terug, dan noemde de
+  // banner dus de sessie van een gewone dag en de kaart eronder de echte.
+  // Twee sessies op één scherm. Nu wordt de regel pas afgemaakt als de
+  // toestand vaststaat.
+  if ((decision === 'GREEN' || decision === 'AMBER')
+      && (!gate || gate.action === 'RUN_TODAY')) {
+    try {
+      const basis = coachPlan({ log: log || {}, logs, currentDate });
+      const niveau = adaptiveLevel(adaptiveState, {
+        current: basis.strategy.level,
+        chosen: basis.choice.available ? basis.choice.level : basis.strategy.level });
+      const vorm = volgendeVorm(log || {}, logs, currentDate, niveau);
+      if (vorm) {
+        trainingDesc = `${vorm.description} — ${vorm.duration} min | ${easyHrLine()}`
+          + (vorm.doseAdjust ? ` · ${vorm.doseAdjust.lever}` : '');
+      }
+    } catch { /* lukt dit niet, dan blijft de regel hierboven staan */ }
+  }
+
   return {
     decision, trainingDesc, sessionLabel, why: whyFinal, ...c,
     score: Math.round(score * 10) / 10,
@@ -368,24 +404,25 @@ export function computeNextSession(log, logs, currentDate) {
   const strategiePlan = coachPlan({ log, logs, currentDate });
   const huidigNiveau = strategiePlan.strategy.level;
 
-  let niveau, note;
+  // Het niveau komt uit adaptiveLevel() — dezelfde afbeelding die de
+  // kopregel gebruikt. De notities hieronder zeggen waaróm.
+  let niveau = adaptiveLevel(state, {
+    current: huidigNiveau,
+    chosen: strategiePlan.choice.available ? strategiePlan.choice.level : huidigNiveau });
+  let note;
   switch (state) {
     case 'HOLD':
-      niveau = huidigNiveau;
       note = coach.pendingRecoveryCheck
         ? 'Vul eerst je herstelcheck in (hoe reageerde je lichaam op de vorige training?) — daarna geef ik de volgende sessie vrij.'
         : 'Zelfde niveau als je laatste sessie — bewust niet opbouwen vandaag.';
       break;
     case 'REPEAT':
-      niveau = huidigNiveau;
       note = 'Herhaal de vorm van de vorige keer — die was (net) te zwaar.';
       break;
     case 'DELOAD':
-      niveau = Math.max(1, huidigNiveau - 2);
       note = 'Twee niveaus lichter — bewust terugnemen, dit is goed herstelbeleid.';
       break;
     case 'TEST':
-      niveau = Math.max(1, huidigNiveau - 1);
       note = 'Testsessie na een pauze: één niveau onder je huidige. Stop direct bij signalen.';
       break;
     case 'SWAP':
@@ -397,16 +434,10 @@ export function computeNextSession(log, logs, currentDate) {
       };
     case 'BUILD':
     default:
-      niveau = strategiePlan.choice.available ? strategiePlan.choice.level : huidigNiveau;
       note = strategiePlan.choice.available ? strategiePlan.choice.why
         : 'Je bent klaar voor de volgende stap in de opbouw.';
   }
   niveau = Math.max(1, niveau);
-  // De vorm die bij dit niveau hoort, gekozen met dezelfde regels als altijd:
-  // niet wat aan de beurt is, maar wat past en niet recent stukliep.
-  const vorm = niveau === (strategiePlan.choice.level ?? -1) && strategiePlan.choice.available
-    ? strategiePlan.choice.session
-    : (sessionsAtLevel(niveau)[0] || strategiePlan.choice.session || null);
   const nr = niveau;
 
   // Staat lopen op slot, dan is er vandaag geen sessienummer. De sessie
@@ -415,13 +446,19 @@ export function computeNextSession(log, logs, currentDate) {
   if (gated) {
     const g = coach.gate;
     // De sessie die straks vrijkomt, ook al mag hij vandaag niet.
-    const preview = planNextSession({ log, logs, currentDate, gate: g, ignoreGate: true });
+    const preview = nextSession({ log, logs, currentDate, gate: g, ignoreGate: true,
+      level: niveau });
+    const vorm = preview.session;
     return {
       state, nr: null, run: null, adaptive: coach.adaptive,
       purpose: preview.purpose, purposeLabel: PURPOSE[preview.purpose]?.label || null,
       race: preview.race, targetPace: preview.targetPace, why: preview.why,
       timeline: preview.timeline, planInputs: preview.inputs,
       previewNr: nr, previewRun: preview.run || vorm,
+      // Het hele voorschrift mee naar buiten: tempo, wandeltempo, hartslag,
+      // hefbomen. Schermen die dat nodig hebben, rekenden het anders zelf
+      // opnieuw uit — en kwamen dan op een andere sessie uit.
+      prescription: preview,
       gate: g, action: g.action,
       note: g.blockers[0] || g.headline,
       releasedBy: g.released,
@@ -430,11 +467,16 @@ export function computeNextSession(log, logs, currentDate) {
     };
   }
 
-  // De sessie zelf komt uit de doelgestuurde planner: racedatum bepaalt het
-  // doel, belastbaarheid de zwaarte. Het schemanummer blijft alleen bestaan
-  // als koppeling naar je historie — het bepaalt niet meer wát je traint.
-  const plan = planNextSession({ log, logs, currentDate, gate: coach.gate });
-  const run = plan.run || vorm;
+  // Eén bron voor de sessie van vandaag: nextSession(). Daar kiest de
+  // bibliotheek de vorm en zet raceplan het doel, het tempo, het
+  // hartslagvoorschrift en de dosering eromheen.
+  //
+  // Hier stond `planNextSession(...)` en daarna `plan.run || vorm`. Dat
+  // gooide de zojuist gekozen vorm weg zodra de planner er zelf één had —
+  // en dat had hij altijd. Vandaar dat Vandaag een andere sessie noemde dan
+  // Progressie.
+  const plan = nextSession({ log, logs, currentDate, gate: coach.gate, level: niveau });
+  const run = plan.run;
 
   return {
     state, nr, run, adaptive: coach.adaptive,
@@ -444,6 +486,7 @@ export function computeNextSession(log, logs, currentDate) {
     mayBuild: plan.mayBuild, derivedFrom: plan.derivedFrom,
     timeline: plan.timeline, planInputs: plan.inputs, levers: plan.levers,
     previewNr: nr, previewRun: run,
+    prescription: plan,
     gate: coach.gate, action: 'RUN_TODAY',
     releasedBy: coach.gate?.released || [],
     earliestRunDate: currentDate,

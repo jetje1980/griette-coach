@@ -935,8 +935,10 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
   const nextSession = computeNextSession(log, logs, currentDate);
   const strategiePlan = coachPlan({ log, logs, currentDate });
   const nextRunNr = nextSession.nr ?? strategiePlan.strategy.level;
-  const nextRun = nextSession.run
-    || (strategiePlan.choice.available ? strategiePlan.choice.session : null);
+  // Staat lopen op slot, dan is `run` leeg en is `previewRun` de sessie die
+  // straks vrijkomt. Die komt uit dezelfde bron; de bibliotheekkeuze hier
+  // nog eens los aflezen gaf op een rustdag een andere tekst dan elders.
+  const nextRun = nextSession.run || nextSession.previewRun || null;
 
   const yestDate = (() => { const d = new Date(currentDate); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
   const yestTrained = logs?.[yestDate]?.run_done || logs?.[yestDate]?.core_done;
