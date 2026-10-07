@@ -455,6 +455,11 @@ export function computeNextSession(log, logs, currentDate) {
       race: preview.race, targetPace: preview.targetPace, why: preview.why,
       timeline: preview.timeline, planInputs: preview.inputs,
       previewNr: nr, previewRun: preview.run || vorm,
+      // De reden van de toestand apart van `note`. `note` wordt hieronder
+      // overschreven door de uitleg van de planner, en dan stond er
+      // "de coach neemt bewust terug" met een reden die daar niets mee te
+      // maken had.
+      stateNote: note,
       // Het hele voorschrift mee naar buiten: tempo, wandeltempo, hartslag,
       // hefbomen. Schermen die dat nodig hebben, rekenden het anders zelf
       // opnieuw uit — en kwamen dan op een andere sessie uit.
@@ -486,6 +491,7 @@ export function computeNextSession(log, logs, currentDate) {
     mayBuild: plan.mayBuild, derivedFrom: plan.derivedFrom,
     timeline: plan.timeline, planInputs: plan.inputs, levers: plan.levers,
     previewNr: nr, previewRun: run,
+    stateNote: note,
     prescription: plan,
     gate: coach.gate, action: 'RUN_TODAY',
     releasedBy: coach.gate?.released || [],

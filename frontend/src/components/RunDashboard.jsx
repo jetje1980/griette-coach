@@ -9,6 +9,11 @@ import { todayLocal } from '../datetime';
 import RaceGoalEditor from './RaceGoalEditor';
 import TrainingContext from './TrainingContext';
 import { economyAnalysis } from '../economyAnalysis';
+import { computeNextSession } from './CoachAdvice';
+import { runDistance } from '../data/runningSchema';
+import { measuredPaces } from '../easyPace';
+import { easyHrLine } from '../hrModel';
+import { PURPOSE } from '../raceplan';
 
 // Progressie → Run, radicaal simpel.
 //
@@ -100,6 +105,25 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
     .filter(n => !['economy_context', 'economy_tradeoff'].includes(n.id));
   const andereSignalen = (warnings?.signals || []).filter(s => s.id !== 'economy');
 
+  // ── De sessie van vandaag, bovenaan ──────────────────────────
+  //
+  // Dit stond onder het ingeklapte blok "Coachbesluit, schema en alle
+  // grafieken". Dus om te zien wát je moet doen, moest je eerst door een
+  // accordeon met onderbouwing — terwijl dat juist de enige vraag is
+  // waarmee je dit scherm opent. Zij vroeg het naar boven, en dat is waar
+  // het hoort.
+  //
+  // Eén bron: computeNextSession(), dezelfde beslissing als op Vandaag en
+  // op de startkaart, inclusief de poort en een bewuste terugname.
+  const beslissing = useMemo(() => {
+    try { return computeNextSession(logs[currentDate] || {}, logs, currentDate); }
+    catch { return null; }
+  }, [logs, currentDate]);
+  const volgende = beslissing?.run || beslissing?.previewRun || null;
+  const opSlot = !!beslissing && beslissing.action !== 'RUN_TODAY';
+  const paces = useMemo(() => { try { return measuredPaces({ logs, currentDate }); }
+    catch { return null; } }, [logs, currentDate]);
+
   // De volledige weging: meting, vorm van de sessies, omstandigheden en het
   // advies dat daaruit volgt. Dezelfde functie die de coachprompt vult, zodat
   // het scherm en de AI niet twee verhalen vertellen.
@@ -116,6 +140,66 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
 
   return (
     <div>
+      {/* ── DE VOLGENDE SESSIE ────────────────────────────────── */}
+      {volgende && (
+        <>
+          <Label right={
+            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 99, padding: '1px 7px',
+              border: `1px solid ${opSlot ? 'var(--gold)' : 'var(--sage)'}`,
+              color: opSlot ? 'var(--gold)' : 'var(--sage)', whiteSpace: 'nowrap' }}>
+              {opSlot ? 'nog op slot' : 'vrijgegeven'}
+            </span>
+          }>{opSlot ? 'De sessie die klaarstaat' : 'Je volgende looptraining'}</Label>
+          <div className="os-card" style={{ marginBottom: 12,
+            borderLeft: `3px solid ${opSlot ? 'var(--gold)' : 'var(--sage)'}` }}>
+            <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>
+              Niveau {volgende.level ?? beslissing.nr ?? beslissing.previewNr}
+              {beslissing.purposeLabel ? ` · ${beslissing.purposeLabel.toLowerCase()}` : ''}
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 800, fontFamily: 'var(--font-serif)',
+              lineHeight: 1.2, marginBottom: 4 }} data-volgende-loop>
+              {volgende.description}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ghost)', marginBottom: 5 }}>
+              {volgende.duration} min · {easyHrLine()}
+              {runDistance(volgende, paces) ? ` · ${runDistance(volgende, paces).label}` : ''}
+            </div>
+
+            {/* Waarom het vandaag anders kan zijn dan je op grond van je
+                niveau verwacht: de poort, of een bewuste terugname. */}
+            {opSlot && (
+              <div style={{ fontSize: 11.5, color: 'var(--gold)', lineHeight: 1.45,
+                marginBottom: 4 }} data-poortnoot>
+                Lopen staat vandaag op slot
+                {beslissing.earliestRunDate && beslissing.earliestRunDate !== currentDate
+                  ? ` — vrij vanaf ${beslissing.earliestRunDate}` : ''}
+                . {beslissing.note || ''}
+              </div>
+            )}
+            {!opSlot && beslissing.state && beslissing.state !== 'BUILD' && (
+              <div style={{ fontSize: 11.5, color: 'var(--gold)', lineHeight: 1.45,
+                marginBottom: 4 }} data-poortnoot>
+                De coach neemt vandaag bewust terug. {beslissing.stateNote || ''}
+              </div>
+            )}
+
+            {volgende.note && (
+              <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.45,
+                marginBottom: 4 }}>{volgende.note}</div>
+            )}
+            {/* Waarom juist deze vorm. Een advies zonder reden is niet te
+                weerleggen, en dat hoort zij wel te kunnen. */}
+            {beslissing.prescription?.choiceWhy && (
+              <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.5 }}
+                data-sessiereden>
+                {beslissing.prescription.choiceWhy}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ── NU ────────────────────────────────────────────────── */}
       <Label>Nu</Label>
       <div className="os-card" style={{ marginBottom: 12 }}>

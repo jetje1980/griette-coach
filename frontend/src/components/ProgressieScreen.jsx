@@ -8,7 +8,6 @@ import { USER, PERSONAL_EVENTS } from '../config';
 // meer te tonen.
 import { RUNS as LEGACY_RUNS, runDistance } from '../data/runningSchema';
 import { coachPlan } from '../coachPlan';
-import { computeNextSession } from './CoachAdvice';
 import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
 import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
 import { protectedHours } from './WeekScreen';
@@ -588,28 +587,13 @@ function TabHardlopen({ logs }) {
   const [showDetails, setShowDetails] = useState(false);
   const tod = todayStr();
   const completedRuns = Object.values(logs).filter(l => l.run_done).length;
-  // De sessie van vandaag komt uit dezelfde beslissing als op Vandaag.
-  //
-  // Dit scherm las eerder alleen de bibliotheekkeuze, en Vandaag las de
-  // beslissing inclusief de adaptieve toestand. Op een dag waarop de coach
-  // bewust een niveau lager test, stond hier dus een zwaardere sessie dan
-  // daar — en nergens stond waaróm. Eén beslissing, en de reden erbij.
-  const log = logs[tod] || {};
-  const beslissing = computeNextSession(log, logs, tod);
-  const plan = coachPlan({ log, logs, currentDate: tod });
-  const vorm = beslissing.run || beslissing.previewRun || null;
-  const nextRun = vorm
-    ? { ...vorm, label: vorm.description, description: vorm.note,
-        duration: vorm.duration, note: beslissing.note || null }
-    : null;
-  // Staat lopen op slot, of neemt de coach bewust terug, dan hoort dat hier
-  // te staan en niet alleen op Vandaag.
-  const poortNoot = (beslissing.action && beslissing.action !== 'RUN_TODAY')
-    ? `Lopen staat vandaag op slot${beslissing.earliestRunDate && beslissing.earliestRunDate !== tod
-        ? ` — vrij vanaf ${beslissing.earliestRunDate}` : ''}. Dit is de sessie die dan klaarstaat.`
-    : (beslissing.state && beslissing.state !== 'BUILD'
-        ? `De coach neemt vandaag bewust terug. ${beslissing.note || ''}`
-        : null);
+  // De sessie van vandaag staat bovenaan in RunDashboard, uit
+  // computeNextSession() — dezelfde beslissing als op Vandaag en op de
+  // startkaart. Hier werd hij een tweede keer uitgelezen en getoond; dat
+  // gaf twee kaarten die hetzelfde moesten zeggen en dat bij de volgende
+  // wijziging niet meer deden. Wat hier blijft is de onderbouwing: niveau,
+  // strategie en de afwijking tussen plan en werkelijkheid.
+  const plan = coachPlan({ log: logs[tod] || {}, logs, currentDate: tod });
 
   const recentRuns = Object.values(logs)
     .filter(l => l.run_done && l.run_session)
@@ -867,51 +851,12 @@ function TabHardlopen({ logs }) {
         )}
       </div>
 
-      {/* Next run */}
-      {nextRun && (
-        <>
-          <div className="os-section-label">Volgende sessie</div>
-          <div className="os-card" style={{ borderLeft: '3px solid var(--sage)' }}>
-            <div style={{ fontSize: 11, color: 'var(--ghost)', fontWeight: 700,
-              textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
-              Niveau {nextRun.level ?? plan.choice.level} · {plan.choice.purpose?.replace('_', ' ').toLowerCase()}
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, fontFamily: 'var(--font-serif)' }}
-              data-volgende-loop>
-              {nextRun.label}
-            </div>
-            {/* Waarom dit vandaag anders kan zijn dan je op grond van je
-                niveau zou verwachten: de poort of een bewuste terugname.
-                Zonder deze regel staan er twee getallen in de app zonder
-                dat er één uitlegt waarom ze verschillen. */}
-            {poortNoot && (
-              <div style={{ fontSize: 11.5, color: 'var(--gold)', lineHeight: 1.45,
-                marginBottom: 4 }} data-poortnoot>
-                {poortNoot}
-              </div>
-            )}
-            {nextRun.note && (
-              <div style={{ fontSize: 12.5, color: 'var(--sub)', lineHeight: 1.45, marginBottom: 4 }}>
-                {nextRun.note}
-              </div>
-            )}
-            {/* Waarom juist deze vorm. Een advies zonder reden is niet te
-                weerleggen, en dat hoort zij wel te kunnen. */}
-            <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.5, marginBottom: 4 }}
-              data-sessiereden>
-              {plan.choice.why}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.4, marginBottom: 4 }}>
-              {nextRun.description}
-            </div>
-            {nextRun.duration && (
-              <div style={{ fontSize: 12, color: 'var(--ghost)' }}>
-                {nextRun.duration} min · {easyHrLine()}{runDistance(nextRun, paces) ? ` · ${runDistance(nextRun, paces).label}` : ''}
-              </div>
-            )}
-          </div>
-        </>
-      )}
+      {/* De volgende sessie stond hier, onder het ingeklapte blok met de
+          onderbouwing. Daarmee moest je door een accordeon heen om te zien
+          wát je moet doen — de enige vraag waarmee je dit scherm opent. Hij
+          staat nu bovenaan in RunDashboard, uit dezelfde beslissing. Hier
+          een tweede kaart laten staan zou twee keer hetzelfde zeggen, en bij
+          een volgende wijziging weer twee keer iets anders. */}
 
       {/* Aftellen naar de eerste race. De naam en de afstand komen uit het
           racedoel, niet uit een label hier — die liepen uit elkaar. */}

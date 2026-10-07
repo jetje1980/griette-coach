@@ -58,7 +58,7 @@ export default function CockpitCard({
         // Neemt de coach vandaag bewust terug, dan hoort dat hier te staan.
         // Een lichtere sessie zonder uitleg leest als een fout.
         terugname: beslissing.state && beslissing.state !== 'BUILD'
-          ? beslissing.note : null,
+          ? beslissing.stateNote : null,
         vanaf: poort.earliestRunDate ? formatNLLong(poort.earliestRunDate) : 'zodra je herstel het toelaat',
         dagen: poort.daysUntilRun ?? 0,
       };
