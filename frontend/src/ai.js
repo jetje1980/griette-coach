@@ -879,17 +879,40 @@ ${JSON.stringify(schema, null, 2)}`;
         const b = computeNextSession(logs[vandaag] || {}, logs, vandaag);
         const run = b.run || b.previewRun;
         if (!run) return null;
+        const st = b.prescription?.strategy || null;
+        const rijp = b.prescription?.choice?.readiness || null;
         return {
           vorm: run.description,
           duur: run.duration,
           doel: run.goal || null,
           reden: b.note || b.prescription?.reason || null,
           opSlot: !b.run,
+          // De as die deze weken groeit, en of de stap omhoog verdiend is.
+          // Zonder deze twee kon het model zeggen dat ze te weinig schone
+          // sessies had terwijl ze alles goed verdroeg, en kon het een
+          // kortere wandelpauze adviseren terwijl de blokken moeten groeien.
+          as: st ? `${st.axisLabel} — ${st.axisAim}` : null,
+          asDekking: st?.blockCoverage != null && st?.goalMinutes != null
+            ? `je doel vraagt ~${st.goalMinutes} min doorlopend; je langste blok dekt daar ${st.blockCoverage}% van`
+            : null,
+          rijpheid: rijp?.note || null,
+          terugname: b.state && b.state !== 'BUILD' ? b.stateNote : null,
         };
       } catch { return null; }
     })();
     const loopRegel = volgende
-      ? `EERSTVOLGENDE LOOPTRAINING VOLGENS DE PLANNER: ${volgende.vorm} (${volgende.duur} min)${volgende.doel ? ` — doel: ${volgende.doel}` : ''}${volgende.opSlot ? '\nLET OP: lopen staat vandaag op slot; dit is de sessie die daarna klaarstaat.' : ''}${volgende.reden ? `\nWaarom die: ${volgende.reden}` : ''}\nDit is exact de sessie die zij in de app ziet staan. Noem geen andere vorm, geen ander aantal blokken en geen andere wandelpauze.`
+      ? `EERSTVOLGENDE LOOPTRAINING VOLGENS DE PLANNER: ${volgende.vorm} (${volgende.duur} min)${volgende.doel ? ` — doel: ${volgende.doel}` : ''}${volgende.opSlot ? '\nLET OP: lopen staat vandaag op slot; dit is de sessie die daarna klaarstaat.' : ''}${volgende.reden ? `\nWaarom die: ${volgende.reden}` : ''}${volgende.as ? `\nWAT ER DEZE WEKEN GROEIT: ${volgende.as}` : ''}${volgende.asDekking ? `\n  ${volgende.asDekking}` : ''}${volgende.rijpheid ? `\nOPBOUWSTATUS: ${volgende.rijpheid}` : ''}${volgende.terugname ? `\nWAAROM VANDAAG LICHTER: ${volgende.terugname}` : ''}
+Dit is exact de sessie die zij in de app ziet staan. Noem geen andere vorm, geen ander aantal blokken en geen andere wandelpauze.
+REGEL OVER DE OPBOUW: er gaat één as per keer omhoog. Staat de as op langere
+blokken, dan adviseer je géén kortere wandelpauze — dat is de tweede as, en
+twee prikkels tegelijk maken een slechte respons onverklaarbaar. Voor
+doorlopend kunnen lopen is de bloklengte de beperking; 3×8 minuten met ruime
+pauze brengt haar daar verder dan 5×5 met één minuut, ook al zijn dat meer
+loopminuten. Zeg dat met zoveel woorden als zij ernaar vraagt.
+REGEL OVER VERDRAGEN: zeg nooit dat zij haar trainingen niet goed verdraagt
+zonder naar OPBOUWSTATUS te kijken. Een sessie zonder ingevulde herstelcheck
+is geen bewijs van belastbaarheid, maar ook geen slechte respons — benoem dat
+verschil in plaats van het samen te vatten als "nog niet verdragen".`
       : 'EERSTVOLGENDE LOOPTRAINING: de planner geeft vandaag geen looptraining vrij.';
 
     const prompt = `${context}

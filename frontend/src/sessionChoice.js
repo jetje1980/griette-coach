@@ -30,7 +30,7 @@
 import { todayLocal, daysBetween } from './datetime';
 import { SESSIONS, sessionsAtLevel, sessionsUpTo, findSession, MAX_LEVEL }
   from './data/sessionLibrary';
-import { purposesFor } from './strategy';
+import { purposesFor, GENEROUS_PAUSE_MIN } from './strategy';
 
 // Hoeveel schone sessies op een niveau voordat een stap omhoog verdiend is.
 export const SESSIONS_BEFORE_STEP = 2;
@@ -65,26 +65,52 @@ export function learnFromHistory(history = [], { currentDate = todayLocal() } = 
   return perVorm;
 }
 
-// Verdien je een stap omhoog? Twee schone sessies op het huidige niveau,
-// en geen slechte respons in de laatste twee weken.
+// Verdien je een stap omhoog?
+//
+// ─────────────────────────────────────────────────────────────────
+// WAT ER MIS WAS
+//
+// Dit keek of de id van een gelopen sessie in de verzameling vormen op dit
+// niveau zat:
+//
+//     const opNiveau = new Set(sessionsUpTo(level).filter(s => s.level === level)...)
+//     const relevant = history.filter(h => opNiveau.has(h.sessionId));
+//
+// Twee problemen. De ids kwamen nooit aan (zie sessionHistory), en zelfs met
+// ids telde alleen een sessie mee die exact één van de vormen ván dit niveau
+// was. Liep ze een zwaardere sessie dan het niveau vroeg, dan telde die niet
+// — terwijl dat juist het bewijs is dat het niveau gehaald is.
+//
+// Nu telt wat ze aantóónbaar heeft gedaan: elke schone sessie waarvan de
+// gemeten bloklengte op of boven dit niveau lag.
+// ─────────────────────────────────────────────────────────────────
 export function readyToStep(history = [], level, { currentDate = todayLocal() } = {}) {
-  const opNiveau = new Set(sessionsUpTo(level).filter(s => s.level === level).map(s => s.id));
-  const relevant = history.filter(h => opNiveau.has(h.sessionId));
+  const relevant = history.filter(h => h.level != null && h.level >= level);
   const schoon = relevant.filter(h => h.response === 'good').length;
   const recentSlecht = history.some(h =>
     ['poor', 'red'].includes(h.response) &&
     daysBetween(h.date, currentDate) <= VARIETY_WINDOW_DAYS);
 
+  // Een sessie zonder antwoord in het 24-48u-venster is geen bewijs, maar
+  // ook geen tegenbewijs. Dat onderscheid hoort zichtbaar te zijn: anders
+  // lijkt "nog niet verdiend" op "het ging niet goed".
+  const onbeantwoord = relevant.filter(h =>
+    h.response === 'unanswered' || h.response === 'pending').length;
+
   return {
     ready: schoon >= SESSIONS_BEFORE_STEP && !recentSlecht,
     cleanAtLevel: schoon,
+    atLevel: relevant.length,
+    unanswered: onbeantwoord,
     needed: SESSIONS_BEFORE_STEP,
     blockedByResponse: recentSlecht,
     note: recentSlecht
       ? 'Er zit een slechte respons in de laatste twee weken; eerst weer schoon draaien.'
       : schoon >= SESSIONS_BEFORE_STEP
-        ? `${schoon} schone sessies op dit niveau — de volgende stap is verdiend.`
-        : `${schoon} van ${SESSIONS_BEFORE_STEP} schone sessies op dit niveau.`,
+        ? `${schoon} schone sessies op dit niveau of hoger — de volgende stap is verdiend.`
+        : onbeantwoord > 0
+          ? `${schoon} van ${SESSIONS_BEFORE_STEP} schone sessies op dit niveau. Van ${onbeantwoord} sessie(s) is de herstelcheck niet ingevuld; die kunnen niet meetellen als bewijs.`
+          : `${schoon} van ${SESSIONS_BEFORE_STEP} schone sessies op dit niveau.`,
   };
 }
 
@@ -129,9 +155,12 @@ export function chooseSession({
     let score = 100;
     const waarom = [];
 
-    // Het doel dat het best bij de fase past telt het zwaarst.
+    // Het doel dat bij de fase past is een voorkeur, geen stuurman. Staat er
+    // een beperkende as aan, dan weegt die zwaarder: anders won een vorm met
+    // kortere blokken omdat zijn doel toevallig vooraan stond in de fase, en
+    // dat was precies de keuze waar zij over viel.
     const doelRang = doelen.indexOf(purpose);
-    score -= doelRang * 12;
+    score -= doelRang * (strategy.axis ? 4 : 12);
     if (doelRang === 0) waarom.push(`past bij ${strategy.label.toLowerCase()}`);
 
     // Op niveau is beter dan eronder — maar eronder is geen diskwalificatie.
@@ -146,6 +175,31 @@ export function chooseSession({
       }
     } else {
       score += 5; waarom.push('nog niet eerder gedaan');
+    }
+
+    // ── De beperkende as weegt zwaarder dan de doelvoorkeur ────
+    //
+    // Hier zat het antwoord op haar vraag. Op niveau 5 staan twee vormen:
+    // zes minuten met 1,5 minuut pauze, en vijf minuten met 1 minuut. De
+    // tweede heet DURABILITY en DURABILITY stond vooraan in de fase, dus
+    // koos de app de kortere blokken met de kortere pauze — terwijl het
+    // doel langere blokken vraagt.
+    //
+    // Nu stuurt de as de keuze. Bij BLOCK winnen lange blokken, en een
+    // pauze die krapper is dan ruim kost punten: dat zou de tweede as
+    // tegelijk opvoeren, en dan weet je bij een slechte respons niet welke
+    // van de twee het was.
+    if (strategy.axis === 'BLOCK') {
+      score += Math.min(40, (s.blockMin || 0) * 4);
+      if (s.continuous) score += 10;
+      if (!s.continuous && (s.walkMin ?? 0) < GENEROUS_PAUSE_MIN) {
+        score -= 20;
+        waarom.push('pauze te krap voor deze fase');
+      } else if (!s.continuous) {
+        waarom.push(`blok van ${s.blockMin} min met ruime pauze`);
+      }
+    } else if (strategy.axis === 'DENSITY') {
+      score += Math.min(18, (6 - (s.walkMin ?? 6)) * 4);
     }
 
     if (avoidIds.includes(s.id)) score -= 200;
@@ -167,8 +221,10 @@ export function chooseSession({
       id: x.session.id, label: x.session.label, purpose: x.purpose, score: x.score })),
     // De uitleg. Dit is geen versiering: zonder reden is een advies niet te
     // weerleggen, en zij hoort een advies te kunnen weerleggen.
+    axis: strategy.axis,
     why: [
       `${strategy.label}: ${strategy.aim}`,
+      `Wat er deze weken groeit: ${strategy.axisLabel}. ${strategy.axisAim}`,
       consolideert
         ? `Niveau ${doelNiveau} vasthouden. ${stap.note}`
         : `Stap naar niveau ${doelNiveau}. ${stap.note}`,

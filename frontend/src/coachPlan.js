@@ -31,24 +31,82 @@ import { runningState } from './raceGoals';
 import { upcomingGoals } from './raceGoalModel';
 import { exertionalResponse } from './symptoms';
 import { loadWorkouts } from './workouts';
-import { MAX_LEVEL } from './data/sessionLibrary';
+import { MAX_LEVEL, SESSIONS, findSession, levelForBlock } from './data/sessionLibrary';
+import { densityByDate } from './sessionDensity';
 
 // ── De historie waar de keuze van leert ─────────────────────────
 //
-// Elke afgeronde run met de respons erop. `sessionId` verwijst naar een vorm
-// uit de bibliotheek; oude sessies die nog een plannedSessionId uit het
-// afgeschafte weekschema dragen, krijgen er geen — die tellen mee voor
-// vermogen, niet voor vormkeuze.
+// ─────────────────────────────────────────────────────────────────
+// WAT ER MIS WAS
+//
+// Dit las `w.libraryId` van elke training, en liet daarna alles vallen wat
+// er geen had:
+//
+//     .filter(h => h.sessionId)
+//
+// Maar `libraryId` wordt nergens op een training geschreven. Het veld
+// bestaat alleen op de voorgeschréven sessie, niet op de gelopen sessie.
+// Dus kwam hier altijd een lege lijst uit, hoe goed haar trainingen ook
+// vielen.
+//
+// Het gevolg was een slot op de hele opbouw. readyToStep() telt schone
+// sessies in deze lijst; nul sessies betekent nul schone sessies, dus de
+// stap omhoog werd nooit verdiend en de app consolideerde eeuwig. Zij zei
+// dat de app te conservatief rekende of dat er een fout zat. Het was het
+// tweede.
+//
+// ─────────────────────────────────────────────────────────────────
+// WAT HET NU DOET
+//
+// De vorm wordt uit de training zelf afgeleid, niet uit een label dat er
+// toevallig op staat. De ronden van het horloge zeggen hoe lang je blokken
+// waren en hoeveel pauze ertussen zat; daaruit volgt het niveau en de
+// dichtstbijzijnde vorm uit de bibliotheek.
+//
+// Dat werkt met terugwerkende kracht voor alles wat er al in staat. Dat is
+// het punt: haar trainingen stonden er, ze werden alleen niet gelezen.
 export function sessionHistory({ logs = {}, currentDate = todayLocal() } = {}) {
+  const dichtheid = (() => {
+    try { return densityByDate({ currentDate }); } catch { return {}; }
+  })();
+
   return loadWorkouts()
     .filter(w => (w.activityType === 'run' || w.activityType == null) && w.date <= currentDate)
-    .map(w => ({
-      sessionId: w.libraryId || null,
-      date: w.date,
-      response: exertionalResponse({ workoutDate: w.date, logs, currentDate }).status,
-    }))
-    .filter(h => h.sessionId)
+    .map(w => {
+      const d = dichtheid[w.date] || null;
+      const blok = d?.blockMin ?? null;
+      const vorm = w.libraryId ? findSession(w.libraryId) : (d ? dichtstbijVorm(d) : null);
+      return {
+        // De id blijft meedoen voor verzadiging ("dit deed je vorige week
+        // al"), maar is niet meer de voorwaarde om mee te tellen.
+        sessionId: vorm?.id || null,
+        // Het niveau is wat telt voor een stap omhoog, en dat komt uit de
+        // gemeten bloklengte — niet uit een nummer in een lijst.
+        level: blok != null ? levelForBlock(blok) : null,
+        blockMin: blok,
+        pausePerBlockMin: d?.pausePerBlockMin ?? null,
+        continuous: !!d?.continuous,
+        date: w.date,
+        response: exertionalResponse({ workoutDate: w.date, logs, currentDate }).status,
+      };
+    })
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// De vorm uit de bibliotheek die het dichtst bij de gelopen structuur ligt.
+// Bloklengte weegt het zwaarst: dat is de as waarop de bibliotheek is
+// gesorteerd en de maat die er voor haar doel toe doet.
+function dichtstbijVorm(d) {
+  if (!d?.blockMin) return null;
+  let beste = null, besteScore = Infinity;
+  for (const s of SESSIONS) {
+    if (!!s.continuous !== !!d.continuous) continue;
+    const score = Math.abs(s.blockMin - d.blockMin) * 3
+      + Math.abs((s.reps || 1) - (d.runBlocks || 1))
+      + (d.pausePerBlockMin != null ? Math.abs((s.walkMin || 0) - d.pausePerBlockMin) : 0);
+    if (score < besteScore) { besteScore = score; beste = s; }
+  }
+  return beste;
 }
 
 // ── Alles bij elkaar ────────────────────────────────────────────
@@ -67,6 +125,10 @@ export function coachPlan({ log = {}, logs = {}, currentDate = todayLocal() } = 
     provenBlockMin: proven?.provenBlockMin ?? 0,
     longestToleratedKm: st?.longestTolerated ?? 0,
     sessions: proven?.sessions ?? 0,
+    // Haar gemeten rustige looptempo. De strategie rekent de doelafstand
+    // hiermee om naar minuten, om te weten hoeveel van de duur ze al in
+    // één blok haalt. Met een aangenomen tempo klopt die som niet.
+    easyPaceMin: st?.runPace ?? null,
   };
 
   const goal = (() => {

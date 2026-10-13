@@ -166,6 +166,39 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
               {runDistance(volgende, paces) ? ` · ${runDistance(volgende, paces).label}` : ''}
             </div>
 
+            {/* Welke knop er deze weken aan staat, en waarom juist die.
+                Zij vroeg waarom 5×5 met één minuut pauze en niet 3×8 met
+                twee of drie — en dat was de juiste vraag: voor doorlopend
+                kunnen lopen is de bloklengte de beperking, niet de pauze.
+                Eén as per keer, en die as staat er nu bij. */}
+            {beslissing.prescription?.strategy?.axisLabel && (
+              <div style={{ fontSize: 11.5, lineHeight: 1.45, marginBottom: 5,
+                paddingLeft: 8, borderLeft: '2px solid var(--border)' }} data-as>
+                <strong>Wat er deze weken groeit: {beslissing.prescription.strategy.axisLabel}.</strong>{' '}
+                <span style={{ color: 'var(--sub)' }}>
+                  {beslissing.prescription.strategy.axisAim}
+                </span>
+                {beslissing.prescription.strategy.blockCoverage != null
+                  && beslissing.prescription.strategy.goalMinutes != null && (
+                  <span style={{ color: 'var(--ghost)' }}>
+                    {' '}Je doel vraagt ongeveer {beslissing.prescription.strategy.goalMinutes} minuten
+                    doorlopend; je langste blok dekt daar nu {beslissing.prescription.strategy.blockCoverage}% van.
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Wat je al hebt gedaan, en of de stap verdiend is. De app zei
+                "0 van 2 schone sessies" terwijl zij alles goed verdroeg —
+                omdat haar trainingen niet werden meegeteld. Dat hoort
+                controleerbaar op het scherm te staan. */}
+            {beslissing.prescription?.choice?.readiness && (
+              <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.45,
+                marginBottom: 5 }} data-rijpheid>
+                {beslissing.prescription.choice.readiness.note}
+              </div>
+            )}
+
             {/* Waarom het vandaag anders kan zijn dan je op grond van je
                 niveau verwacht: de poort, of een bewuste terugname. */}
             {opSlot && (

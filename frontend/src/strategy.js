@@ -70,6 +70,56 @@ export const PHASE = {
 export const TAPER_DAYS = 10;
 export const SPECIFIC_WEEKS = 6;
 
+// ── Welke as is nu de beperkende ────────────────────────────────
+//
+// WAAROM DIT ER IS
+//
+// Zij vroeg: waarom 5×5 met 1 minuut wandelen, en niet 3×8 met 2 of 3
+// minuten? Dat is de juiste vraag, en het antwoord van de app was fout.
+//
+// Een run/wandel-sessie kan op drie manieren zwaarder:
+//
+//   BLOK      langere stukken aan één stuk lopen
+//   DICHTHEID kortere wandelpauzes tussen dezelfde blokken
+//   TEMPO     sneller lopen bij dezelfde hartslag
+//
+// Voor "5 km achter elkaar kunnen lopen" is de bloklengte de beperkende as.
+// Vijf keer vijf minuten met één minuut pauze levert 25 loopminuten op,
+// maar je bent nooit langer dan vijf minuten doorlopend bezig. Drie keer
+// acht met ruime pauze levert minder loopminuten en toch meer van wat het
+// doel vraagt.
+//
+// De bibliotheek koppelde langere blokken aan EASY_ECONOMY en kortere
+// pauzes aan DURABILITY, en de fasevoorkeur zette DURABILITY vooraan. Dus
+// werd de dichtheid opgevoerd terwijl de blokken moesten groeien. Precies
+// wat zij zag.
+//
+// En één as per keer. Blokken langer máken terwijl de pauze korter wordt is
+// twee prikkels tegelijk; valt het dan slecht, dan weet je niet welke het
+// was — en bij haar is dat niet academisch, want een misrekening kost dagen.
+export const AXIS = {
+  BLOCK: {
+    id: 'BLOCK', label: 'langere blokken',
+    aim: 'Langer aan één stuk kunnen lopen. De wandelpauze blijft ruim: die is hier het hulpmiddel, niet het doel.',
+  },
+  DENSITY: {
+    id: 'DENSITY', label: 'kortere pauzes',
+    aim: 'Dezelfde blokken met minder herstel ertussen. Pas zinvol als de blokken lang genoeg zijn.',
+  },
+  PACE: {
+    id: 'PACE', label: 'tempo',
+    aim: 'Wennen aan het tempo dat je doel vraagt, nu de duur er al is.',
+  },
+};
+
+// Hoe ruim moet de pauze blijven zolang de blokken groeien? Korter dan dit
+// is de tweede as, en die komt later.
+export const GENEROUS_PAUSE_MIN = 1.5;
+
+// Met welk tempo rekenen we de doelafstand om naar minuten, als er nog geen
+// gemeten tempo is? Rustig, want daar bouwt ze op.
+export const ASSUMED_EASY_PACE_MIN = 8.0;
+
 // Hoeveel van de doelafstand moet je verdragen voordat racespecifiek werk
 // zinvol is? Onder deze dekking is tempo trainen bouwen op zand.
 export const SPECIFIC_MIN_COVERAGE = 0.7;
@@ -93,6 +143,14 @@ export function currentStrategy({
   const dagen = goal?.date ? daysBetween(currentDate, goal.date) : null;
   const weken = dagen != null ? dagen / 7 : null;
 
+  // Hoeveel minuten doorlopend vraagt het doel, en hoeveel daarvan haal je
+  // al in één blok? Zolang dat ver uit elkaar ligt is de bloklengte de as.
+  const tempo = capability?.easyPaceMin || ASSUMED_EASY_PACE_MIN;
+  const doelMinuten = goal?.distanceKm ? goal.distanceKm * tempo : null;
+  const blokDekking = doelMinuten ? Math.min(1, blockMin / doelMinuten) : null;
+  const as = (blokDekking == null || blokDekking < SPECIFIC_MIN_COVERAGE)
+    ? AXIS.BLOCK : AXIS.PACE;
+
   const redenen = [];
 
   // 1. Herstel gaat voor alles.
@@ -100,14 +158,14 @@ export function currentStrategy({
   if (!groen) {
     redenen.push('je herstelrespons is op dit moment niet schoon');
     return maak(PHASE.RECOVER, { level, blockMin, dekking, weken, goal, redenen, currentDate,
-      lever: 'geen', volgende: null });
+      as: AXIS.BLOCK, blokDekking, doelMinuten, lever: 'geen', volgende: null });
   }
 
   // 2. Taper: alleen als er werkelijk een race aankomt.
   if (dagen != null && dagen >= 0 && dagen <= TAPER_DAYS) {
     redenen.push(`${goal.name} is over ${dagen} ${dagen === 1 ? 'dag' : 'dagen'}`);
     return maak(PHASE.TAPER, { level, blockMin, dekking, weken, goal, redenen, currentDate,
-      lever: 'geen', volgende: null });
+      as: AXIS.PACE, blokDekking, doelMinuten, lever: 'geen', volgende: null });
   }
 
   // 3. Racespecifiek: dichtbij genoeg én je dekt de afstand al grotendeels.
@@ -118,11 +176,13 @@ export function currentStrategy({
       redenen.push(`nog ${Math.round(weken)} weken tot ${goal.name}`);
       redenen.push(`je verdraagt ${Math.round(dekking * 100)}% van de afstand`);
       return maak(PHASE.SPECIFIC, { level, blockMin, dekking, weken, goal, redenen, currentDate,
+        as, blokDekking, doelMinuten,
         lever: 'tempo', volgende: volgendeStap(level, PHASE.SPECIFIC) });
     }
     redenen.push(`${goal.name} is dichtbij, maar je verdraagt pas ${Math.round((dekking || 0) * 100)}% van de afstand`);
     redenen.push('afstand gaat vóór tempo — anders traint je snelle helft');
     return maak(PHASE.BASE, { level, blockMin, dekking, weken, goal, redenen, currentDate,
+      as, blokDekking, doelMinuten,
       lever: 'duur', volgende: volgendeStap(level, PHASE.BASE) });
   }
 
@@ -130,6 +190,7 @@ export function currentStrategy({
   if (goal) redenen.push(`nog ${Math.round(weken)} weken tot ${goal.name} — tijd genoeg voor breedte`);
   else redenen.push('geen race op de kalender, dus breedte bouwen');
   return maak(PHASE.BASE, { level, blockMin, dekking, weken, goal, redenen, currentDate,
+    as, blokDekking, doelMinuten,
     lever: 'duur', volgende: volgendeStap(level, PHASE.BASE) });
 }
 
@@ -162,6 +223,14 @@ function maak(phase, x) {
     weeksToGoal: x.weken != null ? +x.weken.toFixed(1) : null,
     goal: x.goal ? { name: x.goal.name, date: x.goal.date, distanceKm: x.goal.distanceKm } : null,
     lever: x.lever,
+    // De beperkende as, en waarom. Dit stuurt de vormkeuze in
+    // sessionChoice.js en staat op het scherm, zodat een advies niet alleen
+    // zegt wát je doet maar ook welke knop er deze weken aan staat.
+    axis: (x.as || AXIS.BLOCK).id,
+    axisLabel: (x.as || AXIS.BLOCK).label,
+    axisAim: (x.as || AXIS.BLOCK).aim,
+    goalMinutes: x.doelMinuten != null ? Math.round(x.doelMinuten) : null,
+    blockCoverage: x.blokDekking != null ? +(x.blokDekking * 100).toFixed(0) : null,
     reasons: x.redenen,
     // Het blokplan als intentie, nadrukkelijk niet als gezag.
     plannedBlock: blokIntentie ? { id: blokIntentie.id, name: blokIntentie.name } : null,

@@ -334,3 +334,54 @@ export function actualTotals(logs) {
     estKm: +estKm.toFixed(1), estCount: planOnly.length,
   };
 }
+
+
+// ── Je eigen trainingsritme ─────────────────────────────────────
+//
+// WAAROM DIT ER IS
+//
+// computeHeadCoach zette een "testsessie" in zodra er vijf dagen tussen
+// twee runs zaten: één niveau lichter, voor de zekerheid na een pauze.
+//
+// Maar vijf dagen is voor haar geen pauze, het is haar ritme. Wie twee keer
+// per week loopt — dinsdag en zondag — heeft per definitie gaten van vijf
+// dagen. De app zette dus bij elke normale week een stap terug, en dat
+// stapelde op de kapotte stap omhoog: permanent een niveau onder haar
+// kunnen, zonder dat er iets aan de hand was.
+//
+// Een pauze is een gat dat lang is vóór jou. Daarom wordt het hier
+// vergeleken met je eigen mediane gat, met een absolute bodem eronder: een
+// week en een half is voor iedereen een onderbreking.
+export const BREAK_FLOOR_DAYS = 10;
+export const BREAK_FACTOR = 2;
+
+export function runRhythm({ currentDate = todayLocal(), limit = 10 } = {}) {
+  const datums = loadWorkouts()
+    .filter(w => (w.activityType === 'run' || w.activityType == null) && w.date <= currentDate)
+    .map(w => w.date)
+    .sort()
+    .slice(-limit);
+
+  if (datums.length < 3) {
+    return { known: false, typicalGapDays: null, breakAfterDays: BREAK_FLOOR_DAYS,
+      note: 'Nog te weinig runs om je ritme te kennen; tot die tijd geldt tien dagen als onderbreking.' };
+  }
+
+  const gaten = [];
+  for (let i = 1; i < datums.length; i++) {
+    gaten.push(Math.round((new Date(datums[i]) - new Date(datums[i - 1])) / 86400000));
+  }
+  gaten.sort((a, b) => a - b);
+  const mediaan = gaten[Math.floor(gaten.length / 2)];
+
+  return {
+    known: true,
+    typicalGapDays: mediaan,
+    gaps: gaten,
+    runsLast28: loadWorkouts().filter(w => (w.activityType === 'run' || w.activityType == null)
+      && w.date <= currentDate && w.date >= addDays(currentDate, -27)).length,
+    // Pas hierboven is het een onderbreking in plaats van jouw ritme.
+    breakAfterDays: Math.max(BREAK_FLOOR_DAYS, mediaan * BREAK_FACTOR),
+    note: `Je loopt normaal met ongeveer ${mediaan} dagen ertussen. Een gat telt pas als onderbreking vanaf ${Math.max(BREAK_FLOOR_DAYS, mediaan * BREAK_FACTOR)} dagen.`,
+  };
+}

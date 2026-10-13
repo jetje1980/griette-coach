@@ -3,7 +3,7 @@ import { USER } from '../config';
 import { coachPlan, nextSession, adaptiveLevel } from '../coachPlan';
 import { sessionsAtLevel } from '../data/sessionLibrary';
 import { PURPOSE } from '../raceplan';
-import { lastRunWorkout, workoutWasHeavy, toleranceFor, workoutsForSession } from '../workouts';
+import { lastRunWorkout, workoutWasHeavy, toleranceFor, workoutsForSession, runRhythm } from '../workouts';
 import { restDayDecision } from '../restday';
 import { todayLocal, addDays } from '../datetime';
 
@@ -198,9 +198,27 @@ export function computeHeadCoach(log, logs, currentDate) {
   // DELOAD: reduce intensity · SWAP: change modality · TEST: re-entry check
   let adaptiveState = 'BUILD';
 
-  const lastRunDone = Object.values(logs || {})
-    .filter(l => l.run_done && l.run_session)
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  // De laatste run. Hier stond `l.run_done && l.run_session` — en
+  // `run_session` is het sessienummer uit het afgeschafte weekschema, dat
+  // alleen nog wordt geschreven door de knop "snel gemarkeerd als gedaan".
+  // Een run die via Strava binnenkomt heeft dat nummer niet, dus vond deze
+  // regel niets, werd het gat 999 dagen, en zette de app elke dag een
+  // "testsessie na een onderbreking" klaar — een niveau lager, voor niets.
+  //
+  // Nu telt elke geregistreerde run: uit de workouts, en anders uit het
+  // dagboek zonder dat er een nummer bij hoeft te staan.
+  const lastRunDone = (() => {
+    const uitWorkouts = (() => {
+      try { const w = lastRunWorkout(currentDate); return w ? { date: w.date } : null; }
+      catch { return null; }
+    })();
+    const uitLogs = Object.values(logs || {})
+      .filter(l => l.run_done && l.date)
+      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+    if (!uitWorkouts) return uitLogs;
+    if (!uitLogs) return uitWorkouts;
+    return uitLogs.date > uitWorkouts.date ? uitLogs : uitWorkouts;
+  })();
   const sessionsSinceRest = [yest, d2, d3].filter(l => l?.run_done || l?.core_done).length;
   const recentAvgEnergy   = avg([yest?.energy, d2?.energy].filter(x => x != null));
   const recentPem         = pemYest || (log?.symptom_pem && d2?.symptom_pem);
@@ -217,11 +235,25 @@ export function computeHeadCoach(log, logs, currentDate) {
     adaptiveState = sessionsSinceRest >= 3 ? 'DELOAD' : 'BUILD';
   }
 
-  // TEST state: long gap + green
+  // TEST state: een onderbreking, en groen.
+  //
+  // Hier stond `daysSinceLastRun >= 5`. Vijf dagen is voor haar geen pauze
+  // maar haar ritme: wie twee keer per week loopt, heeft gaten van vijf
+  // dagen. De app zette dus elke normale week een niveau terug. Nu wordt
+  // het gat vergeleken met haar eigen mediane gat, met tien dagen als
+  // bodem — zie runRhythm().
   const daysSinceLastRun = lastRunDone
     ? Math.floor((new Date(currentDate) - new Date(lastRunDone.date)) / 86400000)
     : 999;
-  if (decision === 'GREEN' && daysSinceLastRun >= 5 && !highLoad) {
+  const ritme = (() => {
+    try { return runRhythm({ currentDate }); } catch { return { breakAfterDays: 10 }; }
+  })();
+  // Nooit eerder gelopen is geen onderbreking maar een begin. Dat verdient
+  // ook voorzichtigheid, maar niet de uitleg "na een onderbreking van 999
+  // dagen" — en niet een niveau eraf van een niveau dat er nog niet is.
+  const nooitGelopen = !lastRunDone;
+  if (decision === 'GREEN' && !nooitGelopen
+      && daysSinceLastRun >= ritme.breakAfterDays && !highLoad) {
     adaptiveState = 'TEST';
   }
 
@@ -376,6 +408,12 @@ export function computeHeadCoach(log, logs, currentDate) {
   return {
     decision, trainingDesc, sessionLabel, why: whyFinal, ...c,
     score: Math.round(score * 10) / 10,
+    // Het gat en wat voor háár een onderbreking is. Zonder deze twee kan de
+    // uitleg bij een testsessie alleen een vaste drempel noemen, en die
+    // bestaat niet meer.
+    gapDays: daysSinceLastRun,
+    breakAfterDays: ritme.breakAfterDays,
+    rhythmGapDays: ritme.typicalGapDays ?? null,
     adaptiveState,
     adaptive: ADAPTIVE_META[adaptiveState],
     pendingRecoveryCheck,
@@ -423,7 +461,9 @@ export function computeNextSession(log, logs, currentDate) {
       note = 'Twee niveaus lichter — bewust terugnemen, dit is goed herstelbeleid.';
       break;
     case 'TEST':
-      note = 'Testsessie na een pauze: één niveau onder je huidige. Stop direct bij signalen.';
+      note = `Testsessie na een onderbreking van ${coach.gapDays} dagen`
+        + (coach.rhythmGapDays ? ` (jouw normale gat is ${coach.rhythmGapDays} dagen)` : '')
+        + ': één niveau onder je huidige. Stop direct bij signalen.';
       break;
     case 'SWAP':
       return {
@@ -446,20 +486,40 @@ export function computeNextSession(log, logs, currentDate) {
   if (gated) {
     const g = coach.gate;
     // De sessie die straks vrijkomt, ook al mag hij vandaag niet.
+    //
+    // HOLD betekent "vandaag niet opbouwen" en gaat over de belasting van
+    // vandáág — hoge frequentie, een amberdag, een openstaande
+    // herstelcheck. Staat lopen vandaag toch al op slot, dan is die reden
+    // bij de volgende sessie verlopen, en hoort de vooruitblik te laten
+    // zien wat ze werkelijk verdiend heeft. Anders stond er een niveau
+    // lager klaar dan haar opbouw aangeeft, en voelt de app conservatiever
+    // dan hij is.
+    //
+    // REPEAT, DELOAD en TEST blijven wél staan: die gaan over herstel en
+    // over hoe de vórige sessie viel, en dat verloopt niet met een rustdag.
+    const blijftGelden = ['REPEAT', 'DELOAD', 'TEST'].includes(state);
+    const previewNiveau = blijftGelden ? niveau : adaptiveLevel('BUILD', {
+      current: huidigNiveau,
+      chosen: strategiePlan.choice.available ? strategiePlan.choice.level : huidigNiveau });
     const preview = nextSession({ log, logs, currentDate, gate: g, ignoreGate: true,
-      level: niveau });
+      level: previewNiveau });
     const vorm = preview.session;
     return {
       state, nr: null, run: null, adaptive: coach.adaptive,
       purpose: preview.purpose, purposeLabel: PURPOSE[preview.purpose]?.label || null,
       race: preview.race, targetPace: preview.targetPace, why: preview.why,
       timeline: preview.timeline, planInputs: preview.inputs,
-      previewNr: nr, previewRun: preview.run || vorm,
+      previewNr: previewNiveau, previewRun: preview.run || vorm,
       // De reden van de toestand apart van `note`. `note` wordt hieronder
       // overschreven door de uitleg van de planner, en dan stond er
       // "de coach neemt bewust terug" met een reden die daar niets mee te
       // maken had.
-      stateNote: note,
+      //
+      // Geldt de toestand niet meer voor de vooruitblik (zie hierboven),
+      // dan hoort er ook geen terugname gemeld te worden — anders staat er
+      // "bewust niet opbouwen" naast een sessie die wél een stap omhoog is.
+      stateNote: blijftGelden ? note : null,
+      stateAppliedToPreview: blijftGelden,
       // Het hele voorschrift mee naar buiten: tempo, wandeltempo, hartslag,
       // hefbomen. Schermen die dat nodig hebben, rekenden het anders zelf
       // opnieuw uit — en kwamen dan op een andere sessie uit.
