@@ -64,15 +64,49 @@ export function daysBetween(fromStr, toStr) {
 }
 
 // Maandag van de week waarin `dateStr` valt.
-export function startOfWeek(dateStr) {
+// ── Waar begint een week? ───────────────────────────────────────
+//
+// WAAROM DIT INSTELBAAR IS
+//
+// Deze functie nam maandag aan. Zij begint haar week op zondag: dat is de
+// dag waarop ze haar nieuwe week plant en haar eerste run doet. Voor de app
+// was die zondag de laatste dag van de vorige week, dus stond de teller
+// "loopdagen deze week" op haar eerste trainingsdag al vol.
+//
+// Een week is geen natuurkundig gegeven maar een planningsafspraak, en die
+// afspraak maakt zij. Vandaar een instelling in plaats van een aanname.
+const WEEK_START_KEY = 'gc_week_start';
+export const DEFAULT_WEEK_START = 0;      // 0 = zondag, 1 = maandag
+
+export function loadWeekStart() {
+  try {
+    const v = localStorage.getItem(WEEK_START_KEY);
+    const n = v == null ? DEFAULT_WEEK_START : parseInt(v, 10);
+    return Number.isInteger(n) && n >= 0 && n <= 6 ? n : DEFAULT_WEEK_START;
+  } catch { return DEFAULT_WEEK_START; }
+}
+
+export function saveWeekStart(dow) {
+  const n = parseInt(dow, 10);
+  if (!Number.isInteger(n) || n < 0 || n > 6) return loadWeekStart();
+  try { localStorage.setItem(WEEK_START_KEY, String(n)); } catch { /* opslag vol */ }
+  return n;
+}
+
+export const WEEK_START_LABELS = ['zondag', 'maandag', 'dinsdag', 'woensdag',
+  'donderdag', 'vrijdag', 'zaterdag'];
+
+export function startOfWeek(dateStr, { weekStartsOn = null } = {}) {
+  const begin = weekStartsOn == null ? loadWeekStart() : weekStartsOn;
   const d = noon(dateStr);
   const dow = d.getDay();                 // 0 = zondag
-  d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+  const terug = (dow - begin + 7) % 7;
+  d.setDate(d.getDate() - terug);
   return toDayString(d);
 }
 
-export function endOfWeek(dateStr) {
-  return addDays(startOfWeek(dateStr), 6);
+export function endOfWeek(dateStr, opties) {
+  return addDays(startOfWeek(dateStr, opties), 6);
 }
 
 // Datumstrings zijn lexicografisch vergelijkbaar; deze helpers maken de

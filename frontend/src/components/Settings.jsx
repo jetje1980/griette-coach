@@ -4,6 +4,9 @@ import { getSession } from '../supabase';
 import { pendingCount, forceSyncNow } from '../sync';
 import { LogoutButton } from './AuthGate';
 import Integrations from './Integrations';
+import { loadWeekStart, saveWeekStart, WEEK_START_LABELS } from '../datetime';
+import { runDayCeiling } from '../restday';
+import { saveGoal } from '../goals';
 import { todayLocal } from '../datetime';
 
 const FOOD_PREF_KEY = 'gc_food_prefs';
@@ -356,6 +359,9 @@ export default function Settings({ onClose }) {
           </div>
         </div>
 
+        {/* Vrijgeven van looptrainingen */}
+        <RunReleaseSettings />
+
         {/* Integraties */}
         <Integrations />
 
@@ -395,6 +401,85 @@ export default function Settings({ onClose }) {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Wanneer geeft de coach een looptraining vrij? ───────────────
+//
+// Twee instellingen die samen bepalen wanneer er een run vrijkomt, en die
+// eerder niet te zien of te wijzigen waren:
+//
+//   weekstart     de dag waarop jouw week begint. De app nam maandag aan;
+//                 zij begint op zondag, en dus stond de teller "loopdagen
+//                 deze week" op haar eerste trainingsdag al vol.
+//   weekplafond   hoeveel loopdagen per week maximaal.
+//
+// Het plafond geldt per kalenderweek vanaf de weekstart. Het rollende
+// venster van zeven dagen blijft bestaan voor belasting — je lichaam weet
+// niet dat het zondag is — maar het bepaalt niet meer of je mag lopen.
+function RunReleaseSettings() {
+  const [weekStart, setWeekStart] = useState(() => loadWeekStart());
+  const [ceiling, setCeiling] = useState(() => String(runDayCeiling()));
+  const [melding, setMelding] = useState('');
+
+  function kiesDag(dow) {
+    saveWeekStart(dow);
+    setWeekStart(dow);
+    setMelding(`Je week begint nu op ${WEEK_START_LABELS[dow]}. De teller loopdagen start op die dag.`);
+  }
+
+  function bewaarPlafond(v) {
+    const n = parseInt(v, 10);
+    setCeiling(v);
+    if (!Number.isInteger(n) || n < 1 || n > 6) return;
+    saveGoal({ domain: 'RUN', metric: 'run_days_week', target_value: String(n),
+      direction: 'at_most' });
+    setMelding(`Weekplafond staat op ${n} loopdagen.`);
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 12 }} data-run-release>
+      <div className="card-header">
+        <div className="card-accent" style={{ background: 'var(--gold)' }} />
+        <div className="card-title">🏃 Vrijgeven van looptrainingen</div>
+      </div>
+      <div className="card-body">
+        <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>
+          Het weekplafond geldt per week vanaf de dag die je hier kiest. Daarnaast
+          blijft er altijd minstens één volle rustdag tussen twee runs, en blijft
+          een openstaande herstelcheck een run tegenhouden — dat zijn
+          herstelregels, geen weekregels.
+        </div>
+
+        <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 5 }}>
+          Mijn week begint op
+        </div>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
+          {WEEK_START_LABELS.map((label, dow) => (
+            <button key={dow} type="button" data-weekstart={dow}
+              onClick={() => kiesDag(dow)}
+              style={{ fontSize: 11, padding: '5px 10px', borderRadius: 99, cursor: 'pointer',
+                border: `1px solid ${weekStart === dow ? 'var(--sage)' : 'var(--border)'}`,
+                background: weekStart === dow ? 'var(--sage)' : 'transparent',
+                color: weekStart === dow ? '#fff' : 'var(--sub)',
+                fontWeight: weekStart === dow ? 700 : 500 }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 5 }}>
+          Maximaal aantal loopdagen per week
+        </div>
+        <input type="number" min="1" max="6" value={ceiling} data-weekplafond
+          onChange={e => bewaarPlafond(e.target.value)}
+          style={{ width: 70, fontSize: 13, padding: '5px 8px', borderRadius: 6,
+            border: '1px solid var(--border)', background: 'transparent',
+            color: 'var(--text)' }} />
+
+        {melding && <div className="saved-note" style={{ marginTop: 8 }}>{melding}</div>}
       </div>
     </div>
   );

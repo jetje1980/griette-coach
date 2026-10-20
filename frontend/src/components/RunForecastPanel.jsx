@@ -99,7 +99,13 @@ function GateCard({ log, logs, currentDate }) {
         gap: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
         {stat('Sinds laatste run', L.daysSinceLastRun == null ? '–' : `${L.daysSinceLastRun} d`,
           L.hoursAreEstimated && L.daysSinceLastRun != null ? 'geschat op de dag' : null)}
-        {stat('Loopdagen 7d', `${L.runDays7}/${gate.frequency.ceiling}`)}
+        {/* Twee tellingen, en ze meten niet hetzelfde. Het plafond geldt
+            per week zoals zij hem plant; het rollende venster is de maat
+            voor belasting. Eén getal tegen het plafond zetten dat uit het
+            andere venster komt, gaf "3/3" op haar eerste trainingsdag. */}
+        {stat('Loopdagen deze week', `${L.runDaysThisWeek ?? L.runDays7}/${gate.frequency.ceiling}`,
+          `vanaf ${L.weekStartLabel || 'maandag'}`)}
+        {stat('Loopdagen 7d', `${L.runDays7}`, 'rollend, voor belasting')}
         {stat('Volume 7d', `${L.runMin7} min`,
           L.baselineRunMinPerWeek ? `basis ${L.baselineRunMinPerWeek}` : 'geen basis')}
         {stat('Rustdagen 7d', `${L.restDays7}`)}

@@ -110,6 +110,19 @@ export const AXIS = {
     id: 'PACE', label: 'tempo',
     aim: 'Wennen aan het tempo dat je doel vraagt, nu de duur er al is.',
   },
+  // In een taper en tijdens herstel groeit er niets, en dan hoort er ook
+  // geen as te staan. Ik had hier eerst PACE neergezet voor de taper; dan
+  // stond er "wennen aan het tempo dat je doel vraagt, nu de duur er al is"
+  // terwijl haar langste blok 6% van die duur dekte. Een onjuiste uitleg is
+  // erger dan geen uitleg.
+  NONE: {
+    id: 'NONE', label: 'niets — vers worden',
+    aim: 'Er gaat deze dagen niets omhoog. Wat je nu nog wint is herstel, niet vorm.',
+  },
+  RECOVER: {
+    id: 'RECOVER', label: 'niets — eerst verwerken',
+    aim: 'De prikkel die er al was moet eerst landen. Opbouwen komt daarna.',
+  },
 };
 
 // Hoe ruim moet de pauze blijven zolang de blokken groeien? Korter dan dit
@@ -150,6 +163,10 @@ export function currentStrategy({
   const blokDekking = doelMinuten ? Math.min(1, blockMin / doelMinuten) : null;
   const as = (blokDekking == null || blokDekking < SPECIFIC_MIN_COVERAGE)
     ? AXIS.BLOCK : AXIS.PACE;
+  // De dekking gaat over doorlopend kunnen lopen. Loopt zij nog met
+  // wandelpauzes, dan is de bloklengte de as — ook als het totaal aantal
+  // loopminuten al in de buurt van de doelduur komt.
+
 
   const redenen = [];
 
@@ -158,14 +175,14 @@ export function currentStrategy({
   if (!groen) {
     redenen.push('je herstelrespons is op dit moment niet schoon');
     return maak(PHASE.RECOVER, { level, blockMin, dekking, weken, goal, redenen, currentDate,
-      as: AXIS.BLOCK, blokDekking, doelMinuten, lever: 'geen', volgende: null });
+      as: AXIS.RECOVER, blokDekking, doelMinuten, lever: 'geen', volgende: null });
   }
 
   // 2. Taper: alleen als er werkelijk een race aankomt.
   if (dagen != null && dagen >= 0 && dagen <= TAPER_DAYS) {
     redenen.push(`${goal.name} is over ${dagen} ${dagen === 1 ? 'dag' : 'dagen'}`);
     return maak(PHASE.TAPER, { level, blockMin, dekking, weken, goal, redenen, currentDate,
-      as: AXIS.PACE, blokDekking, doelMinuten, lever: 'geen', volgende: null });
+      as: AXIS.NONE, blokDekking, doelMinuten, lever: 'geen', volgende: null });
   }
 
   // 3. Racespecifiek: dichtbij genoeg én je dekt de afstand al grotendeels.

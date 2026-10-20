@@ -18,6 +18,10 @@ import { loadWorkouts, toleranceFor, workoutWasHeavy } from './workouts';
 import { exertionalResponse, readSymptoms, RED_FLAG_IDS } from './symptoms';
 import { loadStrengthSessions } from './data/strengthSchema';
 import { goalTarget } from './goals';
+// Alleen de weekgrens komt uit datetime; addDays en daysBetween staan
+// hieronder lokaal en blijven zoals ze zijn — ze worden elders uit dit
+// bestand geïmporteerd.
+import { startOfWeek, loadWeekStart, WEEK_START_LABELS } from './datetime';
 
 // ── Kaders ──────────────────────────────────────────────────────
 // Minimaal één volledige niet-loopdag tussen twee runs. Bij long COVID
@@ -108,6 +112,7 @@ export function trainingLoad(logs, currentDate) {
 
   // Loopdagen, niet loopsessies: twee runs op één dag is één belaste dag.
   const runDays = (arr) => new Set(arr.map(w => w.date)).size;
+  const weekBegin = startOfWeek(currentDate);
 
   const sum = (arr, f) => arr.reduce((s, w) => s + f(w), 0);
 
@@ -130,6 +135,26 @@ export function trainingLoad(logs, currentDate) {
 
     runDays7: runDays(runs7),
     runDays14: runDays(runs14),
+
+    // ── De kalenderweek, naast het rollende venster ────────────
+    //
+    // Twee tellingen die niet door elkaar mogen lopen:
+    //
+    //   runDays7          rollend venster van zeven dagen. Dit is de maat
+    //                     voor belasting: je lichaam weet niet dat het
+    //                     zondag is.
+    //   runDaysThisWeek   de loopdagen in de week zoals zij hem plant. Dit
+    //                     is de maat voor een weekplafond, want een plafond
+    //                     per week is een planningsafspraak.
+    //
+    // Het plafond gebruikte het rollende venster. Daardoor stond op haar
+    // eerste trainingsdag — zondag — de teller al op drie en gaf de poort
+    // "al 3 loopdagen in 7 dagen", terwijl haar nieuwe week net begon.
+    weekStart: weekBegin,
+    weekStartLabel: WEEK_START_LABELS[loadWeekStart()],
+    runDaysThisWeek: runDays(runs.filter(w => w.date >= weekBegin && w.date <= currentDate)),
+    runMinThisWeek: Math.round(sum(runs.filter(w => w.date >= weekBegin && w.date <= currentDate),
+      w => num(w.duration))),
     runSessions7: runs7.length,
     runKm7: +sum(runs7, w => num(w.distance)).toFixed(1),
     runMin7: Math.round(sum(runs7, w => num(w.duration))),
@@ -171,7 +196,9 @@ export function runDayCeiling() {
 // verdragen en er geen PEM-signaal was.
 export function frequencyVerdict(load, logs, currentDate) {
   const ceiling = runDayCeiling();
-  const current = load.runDays7;
+  // Het plafond geldt per week zoals zij hem plant, niet per rollend
+  // venster. Zie de toelichting bij runDaysThisWeek in trainingLoad().
+  const current = load.runDaysThisWeek ?? load.runDays7;
   const blockers = [];
 
   const poor14 = load.tolerance14.filter(t => t.verdict === 'poor').length;
@@ -182,7 +209,9 @@ export function frequencyVerdict(load, logs, currentDate) {
     l.date >= addDays(currentDate, -13) && l.date <= currentDate &&
     (l.symptom_pem || l.recovery_check === 'bad' || l.training_recovery === 2)).length;
 
-  if (current >= ceiling) blockers.push(`weekplafond bereikt (${current}/${ceiling} loopdagen)`);
+  if (current >= ceiling) {
+    blockers.push(`weekplafond bereikt (${current}/${ceiling} loopdagen deze week, geteld vanaf ${load.weekStartLabel || 'maandag'})`);
+  }
   if (poor14 > 0) blockers.push(`${poor14} sessie${poor14 > 1 ? 's' : ''} slecht verdragen in 14 dagen`);
   if (pem14 > 0) blockers.push(`${pem14} PEM-signaal${pem14 > 1 ? 'en' : ''} in 14 dagen`);
   if (good14 < 4) blockers.push(`nog te weinig goed verdragen sessies (${good14} in 14 dagen, 4 nodig)`);
@@ -243,6 +272,19 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
   const released = [];   // wat een run juist vrijgeeft
   let action = 'RUN_TODAY';
   let earliestRunDate = currentDate;
+  // ── Nooit eerder vrij dan de strengste blokkade ───────────────
+  //
+  // Elke tak hieronder zette deze datum met een gewone toewijzing, dus won
+  // de laatste tak die toevallig langsliep — niet de blokkade die het
+  // langst geldt. Golden er twee tegelijk (bijvoorbeeld "één volle rustdag"
+  // tot dinsdag en het weekplafond tot zondag), dan kon er "vrij vanaf
+  // dinsdag" staan terwijl lopen tot zondag op slot bleef.
+  //
+  // Een vooruitblik die te vroeg belooft, is erger dan geen vooruitblik:
+  // zij plant erop.
+  const pasVrij = (datum) => {
+    if (datum && datum > earliestRunDate) earliestRunDate = datum;
+  };
 
   const decision = coach.decision;
   const lastRun = load.lastRun;
@@ -278,21 +320,21 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
   if (alarmVandaag.length) {
     action = 'FULL_REST';
     blockers.push(`${alarmVandaag.map(s => s.label.toLowerCase()).join(', ')} vandaag — geen belasting tot dit weg is`);
-    earliestRunDate = addDays(currentDate, 2);
+    pasVrij(addDays(currentDate, 2));
   } else if (lastResponse?.status === 'red') {
     action = 'FULL_REST';
     blockers.push(`Abnormale respons na je sessie van ${lastRun.date.slice(5)}: ${lastResponse.reason.toLowerCase()}`);
-    earliestRunDate = addDays(currentDate, 3);
+    pasVrij(addDays(currentDate, 3));
   } else if (decision === 'RED' || log.symptom_pem || log.training_recovery === 2) {
     action = 'FULL_REST';
     blockers.push(log.symptom_pem || log.training_recovery === 2
       ? 'PEM-signaal vandaag — trainen verlengt de terugslag'
       : 'Coachbesluit staat op rood');
-    earliestRunDate = addDays(currentDate, 2);
+    pasVrij(addDays(currentDate, 2));
   } else if (symptomCount >= 3) {
     action = 'FULL_REST';
     blockers.push(`${symptomCount} actieve symptomen — eerst omlaag, dan pas belasting`);
-    earliestRunDate = addDays(currentDate, 2);
+    pasVrij(addDays(currentDate, 2));
   }
 
   // ── 2. Vertraagde respons nog onbekend ────────────────────────
@@ -311,42 +353,55 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
     if (load.daysSinceLastRun === 0) {
       action = 'FULL_REST';
       blockers.push('Vandaag al gelopen — twee loopsessies op één dag doen we niet');
-      earliestRunDate = addDays(currentDate, MIN_REST_DAYS_BETWEEN_RUNS + 1);
+      pasVrij(addDays(currentDate, MIN_REST_DAYS_BETWEEN_RUNS + 1));
     } else if (lastTol === 'poor') {
       action = 'ACTIVE_RECOVERY';
       blockers.push(lastResponse?.reason
         ? `De run van ${lastRun.date.slice(5)} werd slecht verdragen. ${lastResponse.reason}`
         : `De run van ${lastRun.date.slice(5)} werd slecht verdragen — die telt als te zwaar`);
-      earliestRunDate = addDays(currentDate, 2);
+      pasVrij(addDays(currentDate, 2));
     } else if (load.daysSinceLastRun < 2 && !answered) {
       action = 'WAIT_FOR_RESPONSE';
       blockers.push(`Nog geen herstelcheck na de run van ${lastRun.date.slice(5)} — het 24–48u-venster is de meetlat, niet je ochtendgevoel`);
-      earliestRunDate = addDays(lastRun.date, MIN_REST_DAYS_BETWEEN_RUNS + 1);
+      pasVrij(addDays(lastRun.date, MIN_REST_DAYS_BETWEEN_RUNS + 1));
     } else if (load.daysSinceLastRun <= MIN_REST_DAYS_BETWEEN_RUNS) {
       action = lastHeavy ? 'ACTIVE_RECOVERY' : 'STRENGTH_TODAY';
       blockers.push(`Gisteren gelopen — minstens één volle rustdag tussen twee runs`);
-      earliestRunDate = addDays(lastRun.date, MIN_REST_DAYS_BETWEEN_RUNS + 1);
+      pasVrij(addDays(lastRun.date, MIN_REST_DAYS_BETWEEN_RUNS + 1));
     } else if (lastHeavy && load.daysSinceLastRun < 3 && !answered) {
       action = 'WAIT_FOR_RESPONSE';
       blockers.push('Vorige sessie was zwaar en de respons is nog niet ingevuld');
-      earliestRunDate = addDays(lastRun.date, 3);
+      pasVrij(addDays(lastRun.date, 3));
     }
   }
 
   // ── 3. Weekplafond ────────────────────────────────────────────
-  if (action === 'RUN_TODAY' && load.runDays7 >= freq.ceiling) {
-    action = load.daysSinceStrength == null || load.daysSinceStrength >= 2
-      ? 'STRENGTH_TODAY' : 'ACTIVE_RECOVERY';
-    blockers.push(`Al ${load.runDays7} loopdagen in 7 dagen — dat is het plafond`);
-    // Vrij zodra de oudste loopdag uit het venster van 7 dagen valt
-    const oldest = load.tolerance14
-      .filter(t => t.date >= addDays(currentDate, -6))
-      .map(t => t.date).sort()[0];
-    earliestRunDate = oldest ? addDays(oldest, 7) : addDays(currentDate, 1);
+  //
+  // Per kalenderweek, geteld vanaf de dag waarop zij haar week begint.
+  // Hier stond het rollende venster van zeven dagen, en dat betekende dat
+  // de eerste run van haar nieuwe week geblokkeerd werd door de runs van
+  // de week ervoor. Zo is een weekplafond geen plafond maar een boete op
+  // regelmatig lopen.
+  // Let op de voorwaarde: deze toets liep alleen als er nog geen andere
+  // blokkade was. Dat is precies waarom de vooruitblik te vroeg kon
+  // beloven — hield een rustdag lopen vandaag al tegen, dan werd het
+  // weekplafond niet eens meer bekeken en stond er "vrij vanaf dinsdag"
+  // terwijl de week nog vol zat. Een blokkade die niet wordt geëvalueerd,
+  // verdwijnt niet; hij wordt alleen onzichtbaar.
+  const weekRunDays = load.runDaysThisWeek ?? load.runDays7;
+  if (weekRunDays >= freq.ceiling) {
+    if (action === 'RUN_TODAY') {
+      action = load.daysSinceStrength == null || load.daysSinceStrength >= 2
+        ? 'STRENGTH_TODAY' : 'ACTIVE_RECOVERY';
+    }
+    blockers.push(`Al ${weekRunDays} loopdagen deze week (vanaf ${load.weekStartLabel || 'maandag'}) — dat is het plafond van ${freq.ceiling}`);
+    // Vrij zodra de nieuwe week begint.
+    pasVrij(addDays(load.weekStart || currentDate, 7));
   }
 
   // ── 4. Weekvolume ─────────────────────────────────────────────
-  if (action === 'RUN_TODAY' && load.baselineRunMinPerWeek) {
+  // Ook deze toets loopt altijd, om dezelfde reden als hierboven.
+  if (load.baselineRunMinPerWeek) {
     const cap = load.baselineRunMinPerWeek * (1 + MAX_WEEKLY_VOLUME_GROWTH);
     // Een tiende van een klein getal is geen prikkel maar ruis. Bij 21
     // minuten basis is 10% nog geen twee en een halve minuut; daarop de
@@ -354,9 +409,13 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
     // belastbaarheid te zeggen. Boven de relatieve grens moet er dus ook
     // een absolute sprong zitten voordat dit een blokkade wordt.
     if (load.runMin7 >= cap && load.runMin7 - load.baselineRunMinPerWeek >= MIN_MEANINGFUL_GROWTH_MIN) {
-      action = 'ACTIVE_RECOVERY';
-      blockers.push(`${load.runMin7} min gelopen deze week tegen een basis van ${load.baselineRunMinPerWeek} min — meer dan 10% groei`);
-      earliestRunDate = addDays(currentDate, 2);
+      if (action === 'RUN_TODAY') action = 'ACTIVE_RECOVERY';
+      // "deze week" stond hier, maar dit is het rollende venster van zeven
+      // dagen — en dat is voor volume ook de juiste maat. Alleen de naam was
+      // fout, en juist die naam maakte het verwarrend op de eerste dag van
+      // haar nieuwe week.
+      blockers.push(`${load.runMin7} min gelopen in de laatste zeven dagen tegen een basis van ${load.baselineRunMinPerWeek} min per week — meer dan 10% groei`);
+      pasVrij(addDays(currentDate, 2));
     }
   }
 
@@ -364,19 +423,19 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
   if (action === 'RUN_TODAY' && load.restDays7 === 0) {
     action = 'FULL_REST';
     blockers.push('Zeven dagen achter elkaar belast — een echte rustdag is nu de training');
-    earliestRunDate = addDays(currentDate, 1);
+    pasVrij(addDays(currentDate, 1));
   }
 
   // ── 6. Coachkleur dempt af ────────────────────────────────────
   if (action === 'RUN_TODAY' && decision === 'BLUE') {
     action = 'ACTIVE_RECOVERY';
     blockers.push('Herstelkleur blauw — vandaag geen trainingsprikkel');
-    earliestRunDate = addDays(currentDate, 1);
+    pasVrij(addDays(currentDate, 1));
   }
   if (action === 'RUN_TODAY' && log.day_capacity === 'herstel') {
     action = 'ACTIVE_RECOVERY';
     blockers.push('Je hebt vandaag zelf als hersteldag gemarkeerd — dat weegt zwaarder dan het schema');
-    earliestRunDate = addDays(currentDate, 1);
+    pasVrij(addDays(currentDate, 1));
   }
 
   // Kracht alleen aanbieden als dat ook echt kan

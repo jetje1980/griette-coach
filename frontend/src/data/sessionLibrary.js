@@ -153,19 +153,48 @@ export const SESSIONS = [
     'Tijdtest op je doelafstand onder goede omstandigheden.',
     { test: true }),
 
-  // ── Taper en herstel · op elk niveau bruikbaar ────────────────
-  cont(0, 15, PURPOSE_ID.RECOVERY,
-    'Kort en doorlopend, puur om te bewegen. Geen prikkel.'),
-  cont(0, 20, PURPOSE_ID.RECOVERY,
-    'Twintig minuten waarin niets moet.'),
-  rw(0, 3, 3, 3, PURPOSE_ID.RECOVERY,
+  // ── Taper en herstel ──────────────────────────────────────────
+  //
+  // WAT ER MIS WAS
+  //
+  // Deze zes vormen stonden op niveau 0, met het commentaar "op elk niveau
+  // bruikbaar". De bedoeling was goed: een taper of een hersteldrafje hoort
+  // niet achter een niveau te zitten. Het gevolg was het niet.
+  //
+  // sessionsUpTo() filtert op `s.level <= level`, en nul is kleiner dan
+  // alles. Dus kwamen "20 min doorlopend" en "25 min doorlopend" voor
+  // iedereen in aanmerking — ook voor iemand van wie het langste verdragen
+  // blok vijf minuten is. In een taperweek, vlak voor een race, is dat een
+  // verviervoudiging van haar langste blok. levelForBlock() sloot niveau 0
+  // al expliciet uit; de keuzefuncties niet.
+  //
+  // Een taper is niet iets anders dan haar training, het is minder van wat
+  // ze al doet. Dus hebben deze vormen nu gewone niveaus die bij hun
+  // bloklengte horen, en staat de ladder ook onderaan vol — anders is er op
+  // een laag niveau geen taper en valt de keuze terug op iets zwaarder.
+  rw(1, 1, 3, 4, PURPOSE_ID.RECOVERY,
+    'Heel kort lopen met ruime wandelpauzes. Puur om te bewegen.'),
+  rw(3, 3, 3, 3, PURPOSE_ID.RECOVERY,
     'Losse benen: kort lopen, ruim wandelen.'),
-  cont(0, 20, PURPOSE_ID.TAPER,
+  rw(5, 5, 3, 2, PURPOSE_ID.RECOVERY,
+    'Twee rustige blokken met ruime pauze. Geen prikkel, alleen doorbloeding.'),
+  cont(9, 15, PURPOSE_ID.RECOVERY,
+    'Kort en doorlopend, puur om te bewegen. Geen prikkel.'),
+  cont(10, 20, PURPOSE_ID.RECOVERY,
+    'Twintig minuten waarin niets moet.'),
+
+  rw(2, 2, 2, 3, PURPOSE_ID.TAPER,
+    'Activering: drie korte blokken, ruim binnen je grens. Je wint hier niets meer, je houdt alleen je benen wakker.'),
+  rw(4, 4, 2, 3, PURPOSE_ID.TAPER,
+    'Kort en vlot aanvoelend. Stop met het gevoel dat je er nog twee bij kon doen.'),
+  rw(6, 8, 2, 2, PURPOSE_ID.TAPER,
+    'Twee blokken van acht, rustig. De laatste keer dat je de vorm voelt voor de race.'),
+  cont(9, 15, PURPOSE_ID.TAPER,
+    'Activering: kort, vlot aanvoelend, ruim binnen je grens.'),
+  cont(10, 20, PURPOSE_ID.TAPER,
     'Twintig minuten rustig met twee korte versnellingen om scherp te blijven.',
     { surges: 2, surgeMin: 1 }),
-  cont(0, 15, PURPOSE_ID.TAPER,
-    'Activering: kort, vlot aanvoelend, ruim binnen je grens.'),
-  cont(0, 25, PURPOSE_ID.TAPER,
+  cont(10, 25, PURPOSE_ID.TAPER,
     'Laatste rustige run met het racetempo heel even aangetikt.',
     { surges: 1, surgeMin: 2 }),
 ];
@@ -192,7 +221,11 @@ export const findSession = (id) => SESSIONS.find(s => s.id === id) || null;
 
 // Alles wat op of onder een niveau ligt — dat is wat je nu aankunt.
 export function sessionsUpTo(level, { purpose = null } = {}) {
-  return SESSIONS.filter(s => s.level <= level && (!purpose || s.purpose === purpose));
+  // `s.level >= 1`: een vorm zonder geldig niveau hoort nooit gekozen te
+  // worden. Nul is kleiner dan elk niveau, dus zo'n vorm paste eerder bij
+  // iedereen — zie de toelichting bij de taper- en herstelvormen.
+  return SESSIONS.filter(s => s.level >= 1 && s.level <= level
+    && (!purpose || s.purpose === purpose));
 }
 
 // De vormen op precies één niveau, eventueel voor één doel.

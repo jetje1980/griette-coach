@@ -14,6 +14,7 @@ import { runDistance } from '../data/runningSchema';
 import { measuredPaces } from '../easyPace';
 import { easyHrLine } from '../hrModel';
 import { PURPOSE } from '../raceplan';
+import { trainingLoad, runDayCeiling } from '../restday';
 
 // Progressie → Run, radicaal simpel.
 //
@@ -124,6 +125,16 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
   const paces = useMemo(() => { try { return measuredPaces({ logs, currentDate }); }
     catch { return null; } }, [logs, currentDate]);
 
+  // De weekteller zoals zij hem plant, plus het rollende venster ernaast.
+  const weekLoad = useMemo(() => {
+    try {
+      const L = trainingLoad(logs, currentDate);
+      return { runDaysThisWeek: L.runDaysThisWeek ?? L.runDays7,
+        runDays7: L.runDays7, weekStartLabel: L.weekStartLabel || 'maandag',
+        ceiling: runDayCeiling() };
+    } catch { return null; }
+  }, [logs, currentDate, ctxTick]);
+
   // De volledige weging: meting, vorm van de sessies, omstandigheden en het
   // advies dat daaruit volgt. Dezelfde functie die de coachprompt vult, zodat
   // het scherm en de AI niet twee verhalen vertellen.
@@ -184,6 +195,21 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
                     {' '}Je doel vraagt ongeveer {beslissing.prescription.strategy.goalMinutes} minuten
                     doorlopend; je langste blok dekt daar nu {beslissing.prescription.strategy.blockCoverage}% van.
                   </span>
+                )}
+              </div>
+            )}
+
+            {/* De weekteller, met de weekstart erbij. Zij begint haar week op
+                zondag; de app telde een rollend venster van zeven dagen en
+                zei daardoor op haar eerste trainingsdag al "3 loopdagen
+                deze week". Nu staat er wat er geteld wordt, en vanaf wanneer. */}
+            {weekLoad && (
+              <div style={{ fontSize: 11, color: 'var(--ghost)', lineHeight: 1.45,
+                marginBottom: 5 }} data-weekteller>
+                Loopdagen deze week: {weekLoad.runDaysThisWeek}/{weekLoad.ceiling}
+                {' '}(geteld vanaf {weekLoad.weekStartLabel}, in te stellen bij Instellingen)
+                {weekLoad.runDays7 !== weekLoad.runDaysThisWeek && (
+                  <span> · {weekLoad.runDays7} in de laatste zeven dagen, dat is de belastingmaat</span>
                 )}
               </div>
             )}

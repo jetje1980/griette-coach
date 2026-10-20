@@ -197,6 +197,10 @@ export function computeHeadCoach(log, logs, currentDate) {
   // BUILD: ready to progress · HOLD: repeat current · REPEAT: redo last
   // DELOAD: reduce intensity · SWAP: change modality · TEST: re-entry check
   let adaptiveState = 'BUILD';
+  // Waaróm de toestand is wat hij is. Zonder deze reden leest "twee niveaus
+  // lichter" als een oordeel over haar vorm, ook als het over frequentie
+  // ging — en dan klopt de uitleg niet bij de ingreep.
+  let adaptiveCause = null;
 
   // De laatste run. Hier stond `l.run_done && l.run_session` — en
   // `run_session` is het sessienummer uit het afgeschafte weekschema, dat
@@ -232,7 +236,18 @@ export function computeHeadCoach(log, logs, currentDate) {
     adaptiveState = (delayedBad || highLoad) ? (delayedBad ? 'REPEAT' : 'HOLD') : 'HOLD';
   } else {
     // GREEN
-    adaptiveState = sessionsSinceRest >= 3 ? 'DELOAD' : 'BUILD';
+    //
+    // Hier stond: drie belaste dagen op rij → DELOAD, en DELOAD betekent
+    // twee niveaus lichter. Dat was de "ineens weer terug bij af": van
+    // 8 minuten blokken naar 3 minuten, terwijl elke sessie goed was
+    // verdragen en de enige aanleiding frequentie was.
+    //
+    // Twee niveaus eraf is een uitspraak over haar belastbaarheid, en die
+    // hoort bij een slechte respons — niet bij "je hebt drie dagen op rij
+    // iets gedaan". Daarvoor is de rustdag het antwoord, en die legt de
+    // poort al op. Dus: niet opbouwen vandaag, en het niveau blijft staan.
+    adaptiveState = sessionsSinceRest >= 3 ? 'HOLD' : 'BUILD';
+    if (sessionsSinceRest >= 3) adaptiveCause = 'frequentie';
   }
 
   // TEST state: een onderbreking, en groen.
@@ -411,6 +426,7 @@ export function computeHeadCoach(log, logs, currentDate) {
     // Het gat en wat voor háár een onderbreking is. Zonder deze twee kan de
     // uitleg bij een testsessie alleen een vaste drempel noemen, en die
     // bestaat niet meer.
+    adaptiveCause,
     gapDays: daysSinceLastRun,
     breakAfterDays: ritme.breakAfterDays,
     rhythmGapDays: ritme.typicalGapDays ?? null,
@@ -450,7 +466,9 @@ export function computeNextSession(log, logs, currentDate) {
   let note;
   switch (state) {
     case 'HOLD':
-      note = coach.pendingRecoveryCheck
+      note = coach.adaptiveCause === 'frequentie'
+        ? 'Drie belaste dagen op rij — vandaag niet opbouwen. Je niveau blijft staan; wat je nodig hebt is een rustdag, niet een lichtere sessie.'
+        : coach.pendingRecoveryCheck
         ? 'Vul eerst je herstelcheck in (hoe reageerde je lichaam op de vorige training?) — daarna geef ik de volgende sessie vrij.'
         : 'Zelfde niveau als je laatste sessie — bewust niet opbouwen vandaag.';
       break;
