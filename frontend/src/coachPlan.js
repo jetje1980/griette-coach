@@ -24,7 +24,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 import { todayLocal } from './datetime';
-import { currentStrategy } from './strategy';
+import { currentStrategy, loadBuildThrough } from './strategy';
 import { chooseSession } from './sessionChoice';
 import { provenStructure, planNextSession } from './raceplan';
 import { runningState } from './raceGoals';
@@ -149,7 +149,11 @@ export function coachPlan({ log = {}, logs = {}, currentDate = todayLocal() } = 
     warnings: st?.warnings?.signals?.length ?? 0,
   };
 
-  const strategy = currentStrategy({ capability, goal, recovery, currentDate });
+  const strategy = currentStrategy({ capability, goal, recovery, currentDate,
+    // Haar eigen keuze om door te bouwen weegt mee in de fase. Zonder dit
+    // hing de taper alleen aan de kalender, en kon zij er niets tegen
+    // inbrengen behalve het racedoel weghalen.
+    buildThrough: loadBuildThrough() });
   const history = sessionHistory({ logs, currentDate });
   const choice = chooseSession({ strategy, history, currentDate });
 

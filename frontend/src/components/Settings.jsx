@@ -6,6 +6,7 @@ import { LogoutButton } from './AuthGate';
 import Integrations from './Integrations';
 import { loadWeekStart, saveWeekStart, WEEK_START_LABELS } from '../datetime';
 import { runDayCeiling } from '../restday';
+import { loadBuildThrough, saveBuildThrough } from '../strategy';
 import { saveGoal } from '../goals';
 import { todayLocal } from '../datetime';
 
@@ -422,7 +423,16 @@ export default function Settings({ onClose }) {
 function RunReleaseSettings() {
   const [weekStart, setWeekStart] = useState(() => loadWeekStart());
   const [ceiling, setCeiling] = useState(() => String(runDayCeiling()));
+  const [bouwTot, setBouwTot] = useState(() => loadBuildThrough());
   const [melding, setMelding] = useState('');
+
+  function zetBouwTot(datum) {
+    const opgeslagen = saveBuildThrough(datum);
+    setBouwTot(opgeslagen);
+    setMelding(opgeslagen
+      ? `De coach bouwt door tot en met ${opgeslagen} en begint daarna met taperen.`
+      : 'De coach bepaalt zelf wanneer de taper begint.');
+  }
 
   function kiesDag(dow) {
     saveWeekStart(dow);
@@ -479,8 +489,57 @@ function RunReleaseSettings() {
             border: '1px solid var(--border)', background: 'transparent',
             color: 'var(--text)' }} />
 
+        {/* ── Doorbouwen tot en met ──────────────────────────────
+            De taper hing alleen aan de kalender: stond er een race binnen
+            de taperperiode, dan bouwde de app niet meer op — ook als dat
+            een stretchdoel was dat per definitie mag schuiven. Hier kan zij
+            zeggen tot wanneer ze doorbouwt. De coach blijft wel melden wat
+            hij zou adviseren. */}
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 3 }}>
+            Doorbouwen tot en met
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.5,
+            marginBottom: 6 }}>
+            Tot en met deze dag blijft de coach afstand opbouwen en begint hij niet
+            met taperen, ook niet als er een race nadert. Laat het leeg om de coach
+            zelf te laten kiezen.
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input type="date" value={bouwTot || ''} data-bouwtot
+              onChange={e => zetBouwTot(e.target.value || null)}
+              style={{ fontSize: 12, padding: '5px 8px', borderRadius: 6,
+                border: '1px solid var(--border)', background: 'transparent',
+                color: 'var(--text)' }} />
+            <button type="button" data-bouwtot-zondag onClick={() => zetBouwTot(komendeZondag())}
+              style={{ fontSize: 11, padding: '5px 10px', borderRadius: 99,
+                border: '1px solid var(--border)', background: 'transparent',
+                color: 'var(--sub)', cursor: 'pointer' }}>
+              t/m komende zondag
+            </button>
+            {bouwTot && (
+              <button type="button" data-bouwtot-wis onClick={() => zetBouwTot(null)}
+                style={{ fontSize: 11, padding: '5px 10px', borderRadius: 99,
+                  border: 'none', background: 'none', color: 'var(--ghost)',
+                  cursor: 'pointer' }}>
+                wissen
+              </button>
+            )}
+          </div>
+        </div>
+
         {melding && <div className="saved-note" style={{ marginTop: 8 }}>{melding}</div>}
       </div>
     </div>
   );
+}
+
+// De eerstvolgende zondag, of vandaag als het al zondag is. Haar week begint
+// op zondag, dus "tot en met komende zondag" is de natuurlijke eenheid.
+function komendeZondag() {
+  const vandaag = todayLocal();
+  const d = new Date(`${vandaag}T12:00:00`);
+  const naar = (7 - d.getDay()) % 7;
+  d.setDate(d.getDate() + naar);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }

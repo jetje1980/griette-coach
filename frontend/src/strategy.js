@@ -67,7 +67,61 @@ export const PHASE = {
   },
 };
 
-export const TAPER_DAYS = 10;
+// ── Hoe lang taperen, en waarvoor eigenlijk? ────────────────────
+//
+// WAT ER MIS WAS
+//
+// Tien dagen taper voor élk doel dat als eerste op de kalender stond. Op
+// 21 oktober betekende dat: niet meer opbouwen, want op 31 oktober staat de
+// Bereloop. Maar die Bereloop is een STRETCH-doel, en de app zegt daar zelf
+// over: "Alleen bij een gunstig verloop. Als het niet lukt, schuift het
+// doel — niet de opbouw."
+//
+// Tien dagen opbouw opgeven voor een doel dat per definitie mag schuiven is
+// het omgekeerde van wat dat doel betekent. Zij wilde doorbouwen en had
+// gelijk; de app sprak zichzelf tegen.
+//
+// Daarom hangt de taperlengte nu aan het soort doel. Een checkpoint is een
+// peiling waarvoor je niks inlevert, een stretchdoel kost een paar frisse
+// dagen, en alleen een echt doel verdient een volle taperweek.
+export const TAPER_DAYS_BY_TYPE = {
+  TARGET: 7,
+  STRETCH: 3,
+  CHECKPOINT: 2,
+  LONG_TERM: 0,
+};
+
+// De terugval als het soort doel onbekend is: behandel het als een doel.
+export const TAPER_DAYS = 7;
+
+// ── Haar eigen keuze: doorbouwen tot en met ─────────────────────
+//
+// Zij kent haar lichaam en haar kalender. Zegt zij "ik wil tot en met
+// zondag afstand opbouwen", dan is dat geen voorkeur die de app mag
+// wegrekenen. De app blijft wel zeggen wat hij zou adviseren — overrulen is
+// iets anders dan verzwijgen.
+const BUILD_THROUGH_KEY = 'gc_build_through';
+
+export function loadBuildThrough() {
+  try {
+    const v = localStorage.getItem(BUILD_THROUGH_KEY);
+    return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  } catch { return null; }
+}
+
+export function saveBuildThrough(date) {
+  try {
+    if (!date) localStorage.removeItem(BUILD_THROUGH_KEY);
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(date)) localStorage.setItem(BUILD_THROUGH_KEY, date);
+  } catch { /* opslag vol of geblokkeerd */ }
+  return loadBuildThrough();
+}
+
+export function taperDaysFor(goal) {
+  const t = goal?.type ? TAPER_DAYS_BY_TYPE[goal.type] : null;
+  return t == null ? TAPER_DAYS : t;
+}
+
 export const SPECIFIC_WEEKS = 6;
 
 // ── Welke as is nu de beperkende ────────────────────────────────
@@ -147,6 +201,9 @@ export function currentStrategy({
   capability = null,      // { provenBlockMin, longestToleratedKm, sessions }
   goal = null,            // { name, date, distanceKm, targetTimeSec }
   recovery = null,        // { green, pemFreeWeeks, warnings }
+  // Tot en met deze datum wil zij blijven opbouwen, wat de kalender ook
+  // zegt. Leeg of in het verleden betekent: geen override.
+  buildThrough = null,
   currentDate = todayLocal(),
 } = {}) {
   const blockMin = capability?.provenBlockMin ?? 0;
@@ -175,14 +232,24 @@ export function currentStrategy({
   if (!groen) {
     redenen.push('je herstelrespons is op dit moment niet schoon');
     return maak(PHASE.RECOVER, { level, blockMin, dekking, weken, goal, redenen, currentDate,
-      as: AXIS.RECOVER, blokDekking, doelMinuten, lever: 'geen', volgende: null });
+      as: AXIS.RECOVER, blokDekking, doelMinuten, buildThrough, lever: 'geen', volgende: null });
   }
 
-  // 2. Taper: alleen als er werkelijk een race aankomt.
-  if (dagen != null && dagen >= 0 && dagen <= TAPER_DAYS) {
+  // 2. Taper: alleen als er werkelijk een race aankomt waarvoor je iets
+  //    inlevert, en alleen zolang zij niet zelf zegt dat ze doorbouwt.
+  const taperDagen = taperDaysFor(goal);
+  const bouwtDoor = buildThrough && buildThrough >= currentDate;
+  if (dagen != null && dagen >= 0 && taperDagen > 0 && dagen <= taperDagen && !bouwtDoor) {
     redenen.push(`${goal.name} is over ${dagen} ${dagen === 1 ? 'dag' : 'dagen'}`);
+    redenen.push(`dat is een ${(goal.type || 'doel').toLowerCase()}-doel, dus ${taperDagen} dagen taper`);
     return maak(PHASE.TAPER, { level, blockMin, dekking, weken, goal, redenen, currentDate,
-      as: AXIS.NONE, blokDekking, doelMinuten, lever: 'geen', volgende: null });
+      as: AXIS.NONE, blokDekking, doelMinuten, buildThrough, taperDagen, lever: 'geen', volgende: null });
+  }
+  // Zij overrulet de taper. Dat is haar keuze en die wordt genoemd, niet
+  // stilzwijgend ingewilligd — een coach die zwijgt over een afwijking van
+  // zijn eigen advies is geen coach.
+  if (bouwtDoor && dagen != null && dagen >= 0 && dagen <= taperDagen) {
+    redenen.push(`je wilt doorbouwen tot en met ${buildThrough}, dus nog geen taper voor ${goal.name}`);
   }
 
   // 3. Racespecifiek: dichtbij genoeg én je dekt de afstand al grotendeels.
@@ -193,13 +260,13 @@ export function currentStrategy({
       redenen.push(`nog ${Math.round(weken)} weken tot ${goal.name}`);
       redenen.push(`je verdraagt ${Math.round(dekking * 100)}% van de afstand`);
       return maak(PHASE.SPECIFIC, { level, blockMin, dekking, weken, goal, redenen, currentDate,
-        as, blokDekking, doelMinuten,
+        as, blokDekking, doelMinuten, buildThrough, taperDagen,
         lever: 'tempo', volgende: volgendeStap(level, PHASE.SPECIFIC) });
     }
     redenen.push(`${goal.name} is dichtbij, maar je verdraagt pas ${Math.round((dekking || 0) * 100)}% van de afstand`);
     redenen.push('afstand gaat vóór tempo — anders traint je snelle helft');
     return maak(PHASE.BASE, { level, blockMin, dekking, weken, goal, redenen, currentDate,
-      as, blokDekking, doelMinuten,
+      as, blokDekking, doelMinuten, buildThrough, taperDagen,
       lever: 'duur', volgende: volgendeStap(level, PHASE.BASE) });
   }
 
@@ -207,7 +274,7 @@ export function currentStrategy({
   if (goal) redenen.push(`nog ${Math.round(weken)} weken tot ${goal.name} — tijd genoeg voor breedte`);
   else redenen.push('geen race op de kalender, dus breedte bouwen');
   return maak(PHASE.BASE, { level, blockMin, dekking, weken, goal, redenen, currentDate,
-    as, blokDekking, doelMinuten,
+    as, blokDekking, doelMinuten, buildThrough, taperDagen,
     lever: 'duur', volgende: volgendeStap(level, PHASE.BASE) });
 }
 
@@ -247,6 +314,8 @@ function maak(phase, x) {
     axisLabel: (x.as || AXIS.BLOCK).label,
     axisAim: (x.as || AXIS.BLOCK).aim,
     goalMinutes: x.doelMinuten != null ? Math.round(x.doelMinuten) : null,
+    buildThrough: x.buildThrough || null,
+    taperDays: x.taperDagen ?? null,
     blockCoverage: x.blokDekking != null ? +(x.blokDekking * 100).toFixed(0) : null,
     reasons: x.redenen,
     // Het blokplan als intentie, nadrukkelijk niet als gezag.

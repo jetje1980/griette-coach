@@ -199,6 +199,20 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
               </div>
             )}
 
+            {/* Haar eigen keuze, als die aanstaat. Een override die nergens
+                staat, is geen keuze maar een verrassing — en zij moet kunnen
+                zien dat de coach weet dat hij overruled is. */}
+            {beslissing.prescription?.strategy?.buildThrough && (
+              <div style={{ fontSize: 11.5, color: 'var(--sage)', lineHeight: 1.45,
+                marginBottom: 5 }} data-bouwtot-actief>
+                Jij hebt gekozen om door te bouwen tot en met{' '}
+                {beslissing.prescription.strategy.buildThrough}
+                {beslissing.prescription.strategy.goal?.name
+                  ? `, dus nog geen taper voor ${beslissing.prescription.strategy.goal.name}.`
+                  : '.'}
+              </div>
+            )}
+
             {/* De weekteller, met de weekstart erbij. Zij begint haar week op
                 zondag; de app telde een rollend venster van zeven dagen en
                 zei daardoor op haar eerste trainingsdag al "3 loopdagen
