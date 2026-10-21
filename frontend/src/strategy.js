@@ -227,12 +227,26 @@ export function currentStrategy({
 
   const redenen = [];
 
-  // 1. Herstel gaat voor alles.
+  // 1. Herstel gaat voor alles — maar onbekend is geen slechte respons.
+  //
+  // Is de herstelcheck niet ingevuld, dan weet de app niet hoe het viel.
+  // Dan is "herstellen" een verkeerde uitspraak: er is niets om van te
+  // herstellen, er is alleen niets ingevuld. Het niveau dat zij aantoonbaar
+  // liep blijft staan, er wordt niet opgebouwd, en de uitleg zegt waarom.
+  const onbekend = !!(recovery?.unknown || capability?.tolerated === false);
   const groen = recovery ? recovery.green !== false : true;
-  if (!groen) {
+  if (!groen && !onbekend) {
     redenen.push('je herstelrespons is op dit moment niet schoon');
     return maak(PHASE.RECOVER, { level, blockMin, dekking, weken, goal, redenen, currentDate,
       as: AXIS.RECOVER, blokDekking, doelMinuten, buildThrough, lever: 'geen', volgende: null });
+  }
+  if (onbekend) {
+    const n = capability?.unverifiedSessions || 0;
+    redenen.push(`je structuur staat vast uit je sessies (langste blok ${blockMin} min), maar de herstelcheck is ${n ? `bij ${n} sessie(s) ` : ''}niet ingevuld`);
+    redenen.push('dus vasthouden op dit niveau, niet opbouwen — onbekend is geen bewijs, maar ook geen slechte respons');
+    return maak(PHASE.BASE, { level, blockMin, dekking, weken, goal, redenen, currentDate,
+      as, blokDekking, doelMinuten, buildThrough, taperDagen: 0,
+      lever: 'duur', volgende: null, bouwtNiet: true });
   }
 
   // 2. Taper: alleen als er werkelijk een race aankomt waarvoor je iets
@@ -299,7 +313,11 @@ function maak(phase, x) {
     phase: phase.id,
     label: phase.label,
     aim: phase.aim,
-    builds: phase.builds,
+    // `bouwtNiet` zet opbouwen uit zonder de fase te veranderen: zij is wel
+    // basis aan het bouwen, er mag alleen geen stap bij zolang onbekend is
+    // hoe het viel.
+    builds: phase.builds && !x.bouwtNiet,
+    buildsBlocked: !!x.bouwtNiet,
     level: x.level,
     nextLevel: x.volgende,
     provenBlockMin: x.blockMin,

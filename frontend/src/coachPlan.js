@@ -129,6 +129,11 @@ export function coachPlan({ log = {}, logs = {}, currentDate = todayLocal() } = 
     // hiermee om naar minuten, om te weten hoeveel van de duur ze al in
     // één blok haalt. Met een aangenomen tempo klopt die som niet.
     easyPaceMin: st?.runPace ?? null,
+    // Staat de structuur vast uit haar sessies, of is hij ook verdragen?
+    // Zonder herstelcheck blijft het niveau staan maar wordt er niet
+    // opgebouwd — zie provenStructure().
+    tolerated: proven ? proven.tolerated !== false : true,
+    unverifiedSessions: proven?.unverifiedSessions ?? 0,
   };
 
   const goal = (() => {
@@ -145,6 +150,10 @@ export function coachPlan({ log = {}, logs = {}, currentDate = todayLocal() } = 
   // gedefinieerd maar afgelezen.
   const recovery = {
     green: (st?.warnings?.signals?.length ?? 0) < 2 && (st?.pemFreeWeeks ?? 0) >= 1,
+    // Onbekend is geen slechte respons. Dit veld zegt dát het onbekend is,
+    // zodat de strategie "vasthouden" kan kiezen in plaats van
+    // "herstellen" — die twee voelen heel anders als je net 3×8 liep.
+    unknown: proven ? proven.tolerated === false : false,
     pemFreeWeeks: st?.pemFreeWeeks ?? 0,
     warnings: st?.warnings?.signals?.length ?? 0,
   };

@@ -202,11 +202,35 @@ export function raceTimeline({ currentDate = todayLocal(), races = null } = {}) 
 // Niet het schemanummer, en niet de zwaarste sessie die je ooit hebt
 // afgemaakt — alleen wat erna schoon werd verdragen.
 export function provenStructure({ logs = {}, currentDate = todayLocal() } = {}) {
-  const rows = allBreakdowns({ limit: 40, currentDate })
+  const metLoopblokken = allBreakdowns({ limit: 40, currentDate })
     .filter(b => (b.segments || []).some(s => s.kind === 'run'))
-    .filter(b => exertionalResponse({ workoutDate: b.workout.date, logs, currentDate })
-      .countsAsVolume)
     .sort((a, b) => b.workout.date.localeCompare(a.workout.date));
+
+  const verdragen = metLoopblokken.filter(b =>
+    exertionalResponse({ workoutDate: b.workout.date, logs, currentDate }).countsAsVolume);
+
+  // ── Voltooid en verdragen zijn twee dingen ────────────────────
+  //
+  // WAT ER MIS WAS
+  //
+  // Dit las alleen sessies die als verdragen golden — dus met een
+  // ingevulde herstelcheck. Ontbrak die, dan kwam hier `null` uit en viel
+  // de hele app terug op niveau 1: een sessie van 1 minuut lopen × 4,
+  // dertien minuten in totaal, voor iemand die drie dagen eerder 3 × 8
+  // minuten liep. Dat staat in Strava, met rondes en hartslag. Het is geen
+  // aanname en geen schatting.
+  //
+  // Dat zijn twee verschillende feiten:
+  //
+  //   voltooid    wat zij werkelijk heeft gedaan. Zeker.
+  //   verdragen   of haar lichaam dat goed verwerkte. Onbekend zonder
+  //               herstelcheck — en onbekend is niet hetzelfde als slecht.
+  //
+  // De structuur die zij voltooide bepaalt wat realistisch is; de
+  // verdraagzaamheid bepaalt of er opgebouwd mag worden. Die tweede hoort
+  // de eerste niet te wissen.
+  const rows = verdragen.length ? verdragen : metLoopblokken;
+  const basis = verdragen.length ? 'verdragen' : 'voltooid';
 
   if (!rows.length) return null;
 
@@ -231,6 +255,12 @@ export function provenStructure({ logs = {}, currentDate = todayLocal() } = {}) 
     duration: Math.round(Number(last.workout.duration) || 0),
     provenBlockMin: +bestBlock.toFixed(1),
     sessions: rows.length,
+    // 'verdragen' als de herstelcheck is ingevuld, 'voltooid' als alleen
+    // vaststaat dát ze het deed. Op dat verschil hangt of er opgebouwd mag
+    // worden — en het hoort in de uitleg te staan, niet in stilte.
+    basis,
+    tolerated: basis === 'verdragen',
+    unverifiedSessions: basis === 'voltooid' ? rows.length : 0,
   };
 }
 

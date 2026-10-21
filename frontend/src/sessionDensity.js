@@ -69,11 +69,23 @@ export function densityOf(workout, { hrSettings = null } = {}) {
   const loopMin = b.runMinutes || 0;
   const wandelMin = b.walkMinutes || 0;
 
-  // Pauzes tússen de blokken. Bij vier loopblokken liggen er drie pauzes
-  // tussen; een wandelstuk vooraf of achteraf is geen pauze maar warming-up
-  // of uitlopen, en dat moet de noemer niet verwateren.
-  const pauzes = Math.max(0, Math.min(wandelBlokken.length, loopBlokken.length - 1));
-  const pauzePerBlok = pauzes > 0 ? wandelMin / wandelBlokken.length : null;
+  // Pauzes tússen de blokken, en alleen die.
+  //
+  // Hier werd het totaal aan wandelminuten gedeeld door álle wandelblokken,
+  // inclusief de warming-up en het uitlopen. Bij haar sessie van 18 oktober
+  // (5 min inwandelen · 8 · 2 · 8 · 2 · 8 · 4,3 min uitwandelen) kwam daar
+  // 3,3 minuten pauze uit, terwijl de werkelijke pauze tussen de blokken
+  // twee minuten was. Dat verschil bepaalt of de app denkt dat haar sessie
+  // dichter of ruimer werd — precies de as waar het hier om gaat.
+  const segmenten = b.segments;
+  const eersteLoop = segmenten.findIndex(x => x.kind === SEGMENT.RUN);
+  const laatsteLoop = segmenten.map(x => x.kind).lastIndexOf(SEGMENT.RUN);
+  const tussenPauzes = segmenten
+    .slice(eersteLoop + 1, laatsteLoop)
+    .filter(x => x.kind === SEGMENT.WALK);
+  const pauzes = tussenPauzes.length;
+  const pauzeMin = tussenPauzes.reduce((sum, x) => sum + (x.minutes || 0), 0);
+  const pauzePerBlok = pauzes > 0 ? pauzeMin / pauzes : null;
 
   return {
     available: true,
@@ -81,13 +93,16 @@ export function densityOf(workout, { hrSettings = null } = {}) {
     runBlocks: loopBlokken.length,
     walkBlocks: wandelBlokken.length,
     pausesBetween: pauzes,
+    pauseTotalMin: rond1(pauzeMin),
     blockMin: rond1(gem(loopBlokken.map(s => s.minutes))),
     pausePerBlockMin: rond1(pauzePerBlok),
     runMinutes: rond1(loopMin),
     walkMinutes: rond1(wandelMin),
     // Oneindig als er niet gewandeld is: dat is doorlopend, de dichtste vorm
     // die er is. Dat wordt verderop expliciet apart behandeld.
-    workRestRatio: wandelMin > 0 ? rond1(loopMin / wandelMin) : null,
+    // Op de pauzes tussen de blokken: inwandelen en uitlopen zijn geen rust
+    // binnen de sessie en horen deze verhouding niet te vertekenen.
+    workRestRatio: pauzeMin > 0 ? rond1(loopMin / pauzeMin) : null,
     continuous: wandelMin === 0 || loopBlokken.length === 1,
     runShare: loopMin + wandelMin > 0 ? rond1(loopMin / (loopMin + wandelMin)) : null,
     runPace: b.runPace, runHr: b.runHr,

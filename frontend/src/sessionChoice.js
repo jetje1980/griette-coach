@@ -163,12 +163,29 @@ export function chooseSession({
     score -= doelRang * (strategy.axis ? 4 : 12);
     if (doelRang === 0) waarom.push(`past bij ${strategy.label.toLowerCase()}`);
 
-    // Op niveau is beter dan eronder — maar eronder is geen diskwalificatie.
-    score -= (doelNiveau - s.level) * 6;
+    // ── Nooit een niveau omlaag door afwisseling ───────────────
+    //
+    // WAT ER MIS WAS
+    //
+    // Hieronder kostte een lager niveau zes punten en kostte "recent nog
+    // gedaan" vijfentwintig. Dus: zij liep zondag 3 × 8 minuten, dat was
+    // haar hoogste niveau, en omdat ze die vorm net had gedaan koos de app
+    // drie dagen later 6 minuten — een niveau lager. Terwijl ze juist een
+    // tweede schone sessie op dat niveau nodig heeft om een stap te
+    // verdienen. Afwisseling werkte zo tegen de opbouw in.
+    //
+    // Afwisseling hoort te kiezen tússen vormen van hetzelfde niveau, niet
+    // tussen niveaus. Onder het doelniveau zakken mag alleen als er op dat
+    // niveau niets passends staat, en dat kost nu meer dan afwisseling kan
+    // opbrengen.
+    const nivoGat = doelNiveau - s.level;
+    score -= nivoGat * (nivoGat > 0 ? 30 : 6);
 
     if (g) {
       if (g.suspect) { score -= 60; waarom.push(`viel ${g.bad}× slecht`); }
-      if (g.recent) { score -= 25; waarom.push(`${g.daysAgo} dagen geleden nog gedaan`); }
+      // Kleiner dan de niveaustraf hierboven: afwisseling is een voorkeur,
+      // geen reden om lichter te gaan trainen.
+      if (g.recent) { score -= 12; waarom.push(`${g.daysAgo} dagen geleden nog gedaan`); }
       if (g.good > 0 && !g.suspect) { score += Math.min(10, g.good * 3); }
       if (g.lastResponse === 'good' && g.daysAgo > VARIETY_WINDOW_DAYS) {
         score += 8; waarom.push('viel de vorige keer goed');
@@ -193,7 +210,11 @@ export function chooseSession({
       score += Math.min(40, (s.blockMin || 0) * 4);
       if (s.continuous) score += 10;
       if (!s.continuous && (s.walkMin ?? 0) < GENEROUS_PAUSE_MIN) {
-        score -= 20;
+        // Ruim boven de bonus voor een nieuwe vorm plus de doelvoorkeur
+        // samen. Anders won een krappe pauze op nieuwigheid, met één punt
+        // verschil — en dan staat er 8 × 1 min pauze terwijl de blokken de
+        // as zijn.
+        score -= 30;
         waarom.push('pauze te krap voor deze fase');
       } else if (!s.continuous) {
         waarom.push(`blok van ${s.blockMin} min met ruime pauze`);
