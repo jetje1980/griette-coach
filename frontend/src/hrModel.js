@@ -32,6 +32,9 @@ import { loadHrSettings, saveHrSettings } from './goals';
 import { allBreakdowns } from './pace';
 import { exertionalResponse, pemFreeWeeks } from './symptoms';
 import { CPET } from './runningHistory';
+// Let op de richting: intensityDistribution importeert loadHrModel uit dit
+// bestand, niet intensityRelease. Geen kringloop.
+import { intensityDistribution } from './intensityDistribution';
 
 // ── Laag 1: de fysiologie ───────────────────────────────────────
 export const ZONE = {
@@ -222,11 +225,47 @@ export function intensityRelease({ logs = {}, currentDate = todayLocal(), model 
     };
   }
 
+  // ── Verdragen is niet hetzelfde als verstandig ────────────────
+  //
+  // Hier stond alleen: vier PEM-vrije weken plus drie goed verdragen
+  // sessies boven VT1 en het plafond gaat naar VT2. Dat belonen van
+  // tolerantie had een bijwerking die niemand had bedacht: wie álles boven
+  // VT1 loopt, verdraagt dat vanzelf drie keer, en krijgt dan méér
+  // intensiteit vrijgegeven. Bij haar was het resultaat nul procent van de
+  // loopminuten onder VT1, met een vrijgave tot 156.
+  //
+  // Zo liepen twee modellen tegen elkaar in: de strategie zei "bouw
+  // blokken op, rustig", en deze poort zei "je mag harder". Een
+  // intensiteitsvrijgave hoort pas open te gaan als er een rustige basis
+  // ónder ligt — anders geeft hij vrij wat de basis juist in de weg staat.
+  const verdeling = (() => {
+    try { return intensityDistribution({ currentDate, model: m }); }
+    catch { return { available: false }; }
+  })();
+  const basisOmgekeerd = verdeling.available
+    && ['omgekeerd', 'te_hard'].includes(verdeling.verdict);
+
+  if (pem.weeks >= 4 && toleratedAbove.length >= 3 && basisOmgekeerd) {
+    return {
+      level: RELEASE.PARTIAL.id, label: 'Eerst de verdeling, dan meer intensiteit',
+      ceiling: m.vt1Hr,
+      observations: above.length, tolerated: toleratedAbove.length, poor: poorAbove.length,
+      pemFreeWeeks: pem.weeks,
+      distribution: verdeling,
+      why: `Je verdraagt werk boven VT1 (${toleratedAbove.length} sessies, ${pem.weeks} PEM-vrije weken), `
+        + `maar ${verdeling.easyShare}% van je loopminuten lag onder VT1 — de richtlijn is ${verdeling.target}%. `
+        + `Meer intensiteit vrijgeven terwijl de rustige basis ontbreekt, bouwt op zand. `
+        + `Eerst twee weken met het grootste deel onder ${m.vt1Hr} bpm; daarna gaat dit plafond open.`,
+      evidence: toleratedAbove.slice(-4).map(r => ({ date: r.date, hr: r.hr, status: r.status })),
+    };
+  }
+
   if (pem.weeks >= 4 && toleratedAbove.length >= 3) {
     const maxOk = Math.max(...toleratedAbove.map(r => r.hr));
     return {
       level: RELEASE.OPEN.id, label: RELEASE.OPEN.label,
       ceiling: Math.min(m.vt2Hr, maxOk + 6),
+      distribution: verdeling,
       observations: above.length, tolerated: toleratedAbove.length, poor: poorAbove.length,
       pemFreeWeeks: pem.weeks,
       why: `${toleratedAbove.length} sessies boven VT1 goed verdragen, ${pem.weeks} PEM-vrije weken. ` +

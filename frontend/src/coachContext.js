@@ -45,6 +45,8 @@ import { trainingBalance, progressionProposal, compositionGuard, RISK } from './
 import { coachDecision, decisionAsText } from './decision';
 import { economyReading } from './economyReading';
 import { economyAnalysis, analysisAsText } from './economyAnalysis';
+import { intensityDistribution, distributionReading, distributionAsText }
+  from './intensityDistribution';
 import { sessionContextFor, contextLines } from './sessionContext';
 import { earlyWarnings, continuityTrend } from './runningHistory';
 
@@ -278,6 +280,14 @@ function trainingContext(asOf) {
     economyAnalysis: (() => {
       try { return economyAnalysis({ logs, currentDate: asOf }); } catch { return null; }
     })(),
+    // De intensiteitsverdeling: welk deel van de loopminuten onder VT1 lag.
+    // Voor duuropbouw de eerste maat, en hij ontbrak volledig.
+    distribution: (() => {
+      try { return intensityDistribution({ currentDate: asOf }); } catch { return null; }
+    })(),
+    get distributionReading() {
+      try { return distributionReading(this.distribution); } catch { return null; }
+    },
     runDays28: dagen,
     // Zwemmen en fietsen zijn ook belasting, ook al zijn ze geen looptraining.
     swimMin28: series('swim_duration', { asOf, since: addDays(asOf, -27) })
@@ -637,6 +647,14 @@ export function contextAsText(ctx) {
     zeg('    ANALYSE hieronder; gebruik die en niet dit ene woord.');
   } else zeg(`  ${ctx.training.note}`);
   zeg('');
+
+  // ── Hoe hard ze werkelijk loopt ───────────────────────────────
+  // Vóór de economieanalyse, want als de verdeling omgekeerd is, is elke
+  // uitspraak over economie een uitspraak over drempeltraining.
+  if (ctx.training.distribution) {
+    zeg(distributionAsText(ctx.training.distribution, ctx.training.distributionReading));
+    zeg('');
+  }
 
   // ── De diepe analyse van de loopeconomie ──────────────────────
   // Direct onder HARDLOPEN, want de uitspraak hangt aan die sessies. Dit is

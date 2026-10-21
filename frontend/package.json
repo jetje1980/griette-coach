@@ -4,7 +4,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node tests/run.mjs",
+    "test:node": "node tests/run.mjs --node",
+    "test:browser": "node tests/run.mjs --browser",
+    "serve:dist": "npx http-server dist --port 4173 -s"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -13,6 +17,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
+    "playwright": "^1.64.1",
     "vite": "^5.1.4"
   }
 }

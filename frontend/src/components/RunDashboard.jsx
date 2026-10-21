@@ -15,6 +15,7 @@ import { measuredPaces } from '../easyPace';
 import { easyHrLine } from '../hrModel';
 import { PURPOSE } from '../raceplan';
 import { trainingLoad, runDayCeiling } from '../restday';
+import { intensityDistribution, distributionReading } from '../intensityDistribution';
 
 // Progressie → Run, radicaal simpel.
 //
@@ -124,6 +125,16 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
   const opSlot = !!beslissing && beslissing.action !== 'RUN_TODAY';
   const paces = useMemo(() => { try { return measuredPaces({ logs, currentDate }); }
     catch { return null; } }, [logs, currentDate]);
+
+  // De intensiteitsverdeling. Dit is voor duuropbouw de eerste maat, en hij
+  // stond nergens: de app kon niet zien wat elke hardloopcoach als eerste
+  // opmerkt — dat álle loopblokken boven de eerste drempel lagen.
+  const verdeling = useMemo(() => {
+    try {
+      const d = intensityDistribution({ currentDate });
+      return { d, r: distributionReading(d) };
+    } catch { return null; }
+  }, [currentDate, ctxTick]);
 
   // De weekteller zoals zij hem plant, plus het rollende venster ernaast.
   const weekLoad = useMemo(() => {
@@ -269,6 +280,49 @@ export default function RunDashboard({ logs = {}, currentDate = todayLocal() }) 
                 {beslissing.prescription.choiceWhy}
               </div>
             )}
+          </div>
+        </>
+      )}
+
+      {/* ── INTENSITEITSVERDELING ─────────────────────────────── */}
+      {/* Vóór "Nu", want als deze verdeling omgekeerd is, is dit de knop
+          die eerst om moet — vóór langere blokken en meer kilometers. */}
+      {verdeling?.r?.available && verdeling.r.level !== 'goed' && (
+        <>
+          <Label right={
+            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 99, padding: '1px 7px',
+              border: '1px solid var(--rust)', color: 'var(--rust)', whiteSpace: 'nowrap' }}>
+              {verdeling.d.easyShare}% rustig · richtlijn {verdeling.d.target}%
+            </span>
+          }>Hoe hard je loopt</Label>
+          <div className="os-card" style={{ marginBottom: 12,
+            borderLeft: '3px solid var(--rust)' }} data-verdeling={verdeling.r.level}>
+            <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--font-serif)',
+              marginBottom: 4 }}>{verdeling.r.label}</div>
+            <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5, marginBottom: 8 }}>
+              {verdeling.r.detail}
+            </div>
+            {/* De verdeling als balk: vier zones, op minuten gewogen. */}
+            <div style={{ display: 'flex', height: 10, borderRadius: 99, overflow: 'hidden',
+              marginBottom: 4 }} data-verdeelbalk>
+              {[['rustig', (verdeling.d.shares.herstel || 0) + (verdeling.d.shares.rustig || 0), 'var(--sage)'],
+                ['tussen', verdeling.d.shares.tussen, 'var(--gold)'],
+                ['drempel', verdeling.d.shares.drempel, 'var(--rust)'],
+                ['boven', verdeling.d.shares.boven, 'var(--alert)']]
+                .filter(([, pct]) => pct > 0).map(([naam, pct, kleur]) => (
+                  <div key={naam} title={`${naam}: ${pct}%`}
+                    style={{ width: `${pct}%`, background: kleur }} />
+                ))}
+            </div>
+            <div style={{ fontSize: 9.5, color: 'var(--ghost)', marginBottom: 8 }}>
+              rustig (&lt;{verdeling.d.vt1}) · tussen · rond VT2 ({verdeling.d.vt2}) · erboven
+            </div>
+            {verdeling.r.advice.map((a, i) => (
+              <div key={i} style={{ fontSize: 11.5, lineHeight: 1.5, marginBottom: 3,
+                display: 'flex', gap: 6 }}>
+                <span style={{ color: 'var(--rust)' }}>·</span><span>{a}</span>
+              </div>
+            ))}
           </div>
         </>
       )}
