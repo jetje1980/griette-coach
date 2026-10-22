@@ -10,6 +10,7 @@ import { saveSession, loadSessions, sessionScore, deleteSession } from '../stren
 import { ClassPlayer, StrengthFeedback } from './StrengthToday';
 import { todayLocal } from '../datetime';
 import ExerciseTechnique from './ExerciseTechnique';
+import CoreVideos from './CoreVideos';
 
 // Drie trainingsvormen naast elkaar, geen van drieën de mindere:
 //   Gewichten     — het bestaande A/B-programma met kg × sets × reps × RIR
@@ -359,6 +360,10 @@ function CoachClasses({ currentDate, onSaved }) {
           </div>
         )}
       </div>
+
+      {/* Videolinks bij het core-werk. Direct onder "Core voorop", want daar
+          hoort het: een aanvulling op het core-blok, niet een vervanging. */}
+      <CoreVideos />
 
       <Label>Standaardlessen</Label>
       <div className="os-card">
