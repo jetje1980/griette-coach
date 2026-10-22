@@ -10,7 +10,11 @@ const BODY_DEFAULTS = {
   minWeight: 45,       // ondergrens — nooit onder, ongeacht tempo
   startDate: '2026-08-17',
   durationDays: 119,
-  hrZone: { low: 106, high: 132 },
+  // Het werkplafond is een afspraak, geen meting. 145 is wat er met haar
+  // begeleiding is afgesproken; de gemeten VT1 van 132 komt uit de CPET van
+  // februari 2025 en staat als tweede getal in het model. De app rekent met
+  // de afspraak en noemt het verschil — zie hrModel.easyCeilingLine().
+  hrZone: { low: 106, high: 145 },
   context: ['long-covid', 'ADHD', 'perimenopauze'],
   currentRun: 10,
 };

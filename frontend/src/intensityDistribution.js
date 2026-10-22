@@ -80,10 +80,18 @@ export function intensityDistribution({ currentDate = todayLocal(),
     };
   }
 
-  // Vier emmers, met VT1 als de grens die telt.
+  // ── Welke grens telt: het werkplafond, niet de meting ─────────
+  //
+  // Eerst stond hier VT1 uit de CPET als enige grens. Maar zij en haar
+  // begeleiding hebben een werkplafond afgesproken (145), en dat besluit is
+  // de grens waaraan haar training getoetst hoort te worden. De gemeten VT1
+  // blijft ernaast staan als tweede getal, zodat het verschil zichtbaar is
+  // in plaats van weggerekend — met een CPET van februari 2025 kan die
+  // meting verouderd zijn, en dan is de afspraak het betere anker.
+  const plafond = m.easyTargetHigh || m.vt1Hr;
   const emmer = (hr) => {
-    if (hr < m.vt1Hr - 26) return 'herstel';
-    if (hr < m.vt1Hr) return 'rustig';
+    if (hr < plafond - 26) return 'herstel';
+    if (hr <= plafond) return 'rustig';
     if (hr < m.vt2Hr - 4) return 'tussen';
     if (hr <= m.vt2Hr + 4) return 'drempel';
     return 'boven';
@@ -108,6 +116,14 @@ export function intensityDistribution({ currentDate = todayLocal(),
     hardMinutes: rond(hard),
     vt1: m.vt1Hr,
     vt2: m.vt2Hr,
+    // De grens waaraan getoetst is, en waar die vandaan komt.
+    ceiling: plafond,
+    ceilingSource: m.easyCeilingSource || 'cpet',
+    ceilingVsVt1: plafond - m.vt1Hr,
+    // Ook het aandeel onder de gemeten VT1, voor wie dat wil weten. Twee
+    // getallen naast elkaar is eerlijker dan één getal met een voetnoot.
+    underVt1Share: rond(blokken.filter(b => b.hr < m.vt1Hr)
+      .reduce((s2, b) => s2 + b.minutes, 0) / totaal * 100),
     // De uitspraak. Drie niveaus, want "te hard" en "ernstig omgekeerd"
     // vragen niet om hetzelfde gesprek.
     verdict: easyDeel >= EASY_SHARE_TARGET ? 'goed'
@@ -122,7 +138,13 @@ export function distributionReading(d) {
   if (!d?.available) {
     return { available: false, label: 'Intensiteitsverdeling onbekend', detail: d?.note || null };
   }
-  const basis = `${d.easyShare}% van je ${d.runMinutes} loopminuten lag onder VT1 (${d.vt1} bpm), over ${d.sessions} sessies in vier weken. Voor duuropbouw is ${d.target}% de richtlijn.`;
+  const grens = d.ceilingSource === 'afspraak'
+    ? `je afgesproken werkplafond van ${d.ceiling} bpm`
+    : `VT1 (${d.vt1} bpm)`;
+  const naast = d.ceilingSource === 'afspraak' && d.ceilingVsVt1 !== 0
+    ? ` Gemeten aan je VT1 van ${d.vt1} uit de CPET van februari 2025 zou dat ${d.underVt1Share}% zijn; die meting is inmiddels ruim anderhalf jaar oud, dus de afspraak is hier het betere anker.`
+    : '';
+  const basis = `${d.easyShare}% van je ${d.runMinutes} loopminuten lag binnen ${grens}, over ${d.sessions} sessies in vier weken. Voor duuropbouw is ${d.target}% de richtlijn.${naast}`;
 
   if (d.verdict === 'goed') {
     return { available: true, level: 'goed', label: 'Je verdeling is in orde',
@@ -141,17 +163,17 @@ export function distributionReading(d) {
       detail: `${basis} Je loopblokken lagen allemaal boven VT1: ${d.shares.tussen}% tussen VT1 en VT2, ${d.shares.drempel}% rond VT2, ${d.shares.boven}% erboven. Dat is geen rustige duurtraining met wandelpauzes, dat is intervaltraining op drempeltempo met herstelpauzes — een andere training, met een andere rekening.`,
       advice: [
         'Dit is de eerste knop om aan te draaien, vóór langere blokken. Langer worden op drempeltempo is precies het patroon dat in 2024–2025 tot terugval leidde.',
-        `Loop je volgende sessie met het hartslagalarm op ${d.vt1} bpm. Zakt je tempo daardoor naar 9:30 of 10:00 per kilometer: dat is de bedoeling, niet een probleem.`,
-        'Lukt het niet om onder VT1 te blijven terwijl je loopt, dan is de eerlijke conclusie dat doorlopend lopen nu nog te zwaar is voor rustig — wandel dan langer en loop korter, met hetzelfde hartslagplafond.',
+        `Loop je volgende sessie met het hartslagalarm op ${d.ceiling} bpm. Zakt je tempo daardoor: dat is de bedoeling, niet een probleem.`,
+        `Lukt het niet om onder ${d.ceiling} te blijven terwijl je loopt, dan is de eerlijke conclusie dat doorlopend lopen nu nog te zwaar is voor rustig — wandel dan langer en loop korter, met hetzelfde hartslagplafond.`,
       ],
     };
   }
   return {
     available: true, level: 'te_hard',
     label: 'Te veel van je lopen is te hard',
-    detail: `${basis} ${d.shares.tussen}% lag tussen VT1 en VT2 en ${d.shares.drempel + d.shares.boven}% op of boven VT2.`,
+    detail: `${basis} ${d.shares.tussen}% lag boven de band maar onder VT2, en ${d.shares.drempel + d.shares.boven}% op of boven VT2 (${d.vt2}).`,
     advice: [
-      `Breng het grootste deel terug onder ${d.vt1} bpm. Tempo is hier de uitkomst, niet het doel.`,
+      `Breng het grootste deel terug onder ${d.ceiling} bpm. Tempo is hier de uitkomst, niet het doel.`,
       'Wil je harder werken, doe dat dan in één aparte sessie per week, bewust en kort — niet verspreid over alles.',
     ],
   };
@@ -162,7 +184,10 @@ export function distributionAsText(d, r) {
   if (!d?.available) return `INTENSITEITSVERDELING: onbekend — ${d?.note || 'geen data'}`;
   const L = [];
   L.push('INTENSITEITSVERDELING (vier weken, per loopblok gewogen op minuten):');
-  L.push(`  rustig onder VT1 (${d.vt1}): ${d.shares.herstel + d.shares.rustig}% · tussen VT1 en VT2: ${d.shares.tussen}% · rond VT2: ${d.shares.drempel}% · boven VT2: ${d.shares.boven}%`);
+  L.push(`  grens waaraan getoetst: ${d.ceiling} bpm (${d.ceilingSource === 'afspraak' ? 'afgesproken werkplafond' : 'gemeten VT1'})` +
+    (d.ceilingVsVt1 ? ` · gemeten VT1 ligt op ${d.vt1}, verschil ${d.ceilingVsVt1 > 0 ? '+' : ''}${d.ceilingVsVt1}` : ''));
+  L.push(`  binnen de band: ${d.shares.herstel + d.shares.rustig}% · erboven onder VT2: ${d.shares.tussen}% · rond VT2: ${d.shares.drempel}% · boven VT2: ${d.shares.boven}%`);
+  L.push(`  (onder de gemeten VT1 van ${d.vt1}: ${d.underVt1Share}%)`);
   L.push(`  ${d.easyMinutes} van ${d.runMinutes} loopminuten rustig · richtlijn ${d.target}% · uitspraak: ${d.verdict}`);
   L.push(`  ${r.detail}`);
   for (const a of (r.advice || [])) L.push(`  advies: ${a}`);

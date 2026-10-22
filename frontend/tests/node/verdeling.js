@@ -154,5 +154,77 @@ ok('en legt uit dat de rustige basis eerst moet komen',
   ok('en het zegt wat er nodig is', /rondeknop|loopminuten/.test(d3.note || ''), d3.note);
 }
 
+
+// ── Het werkplafond is een afspraak, geen meting ────────────────
+//
+// Zij en haar begeleiding spraken 145 af. hrModel klemde elke waarde terug
+// naar VT1 uit de CPET van februari 2025 (132) en schreef die ook nog terug
+// naar de opslag — de afspraak kon niet bestaan. Deze sectie houdt dat dicht.
+{
+  console.log('\n═══ WERKPLAFOND ═══\n');
+  const { loadHrModel, saveHrModel, easyCeilingLine } = await import('../../src/hrModel.js');
+
+  // Haar echte sessies terugzetten.
+  mem.gc_workouts = JSON.stringify(workouts.sort((a, b) => b.date.localeCompare(a.date)));
+  delete mem.gc_hr_model;
+  mem.gc_hr_settings = JSON.stringify({ easyLow: 106, easyHigh: 145, released: 154,
+    vt1: 132, vt2: 156 });
+
+  const m = loadHrModel();
+  ok('een afgesproken plafond van 145 blijft 145', m.easyTargetHigh === 145,
+    String(m.easyTargetHigh));
+  ok('en wordt niet naar VT1 teruggeklemd', m.easyTargetHigh !== m.vt1Hr,
+    `${m.easyTargetHigh} tegenover VT1 ${m.vt1Hr}`);
+  ok('de herkomst is "afspraak"', m.easyCeilingSource === 'afspraak', m.easyCeilingSource);
+  ok('het verschil met de meting is benoemd', m.easyCeilingVsVt1 === 13,
+    String(m.easyCeilingVsVt1));
+  ok('en de regel zegt dat het afgesproken is, niet gemeten',
+    /afgesproken, niet gemeten/.test(easyCeilingLine(m)), easyCeilingLine(m));
+  ok('met de CPET-datum erbij', /2025/.test(easyCeilingLine(m)), easyCeilingLine(m));
+
+  // Handmatig zetten legt het vast als afspraak, niet als meting.
+  const na = saveHrModel({ easyTargetHigh: 140 });
+  ok('handmatig zetten blijft staan', na.easyTargetHigh === 140, String(na.easyTargetHigh));
+  ok('en wordt als afspraak vastgelegd', na.easyCeilingSource === 'afspraak',
+    na.easyCeilingSource);
+  // Buiten bereik wordt niet opgeslagen — en wordt dus ook geen afspraak.
+  const tehoog = saveHrModel({ easyTargetHigh: 200 });
+  ok('boven VT2 wordt geweigerd', !!tehoog.rejected, JSON.stringify(tehoog.rejected));
+  ok('en de oude waarde blijft staan', tehoog.easyTargetHigh === 140,
+    String(tehoog.easyTargetHigh));
+  ok('met een reden die de grens noemt', /VT2/.test(tehoog.rejected?.reason || ''),
+    tehoog.rejected?.reason);
+  ok('de opslag is niet stil opgeschoven',
+    loadHrModel().easyTargetHigh === 140, String(loadHrModel().easyTargetHigh));
+
+  // De verdeling toetst aan het plafond, met VT1 ernaast. Beide stores
+  // terugzetten: saveHrModel schrijft ook naar de oude instellingen.
+  delete mem.gc_hr_model;
+  mem.gc_hr_settings = JSON.stringify({ easyLow: 106, easyHigh: 145, released: 154,
+    vt1: 132, vt2: 156 });
+  const d4 = intensityDistribution({ currentDate: TODAY });
+  const r4 = distributionReading(d4);
+  console.log(`\n  bij plafond ${d4.ceiling}: ${d4.easyShare}% binnen de band (onder VT1: ${d4.underVt1Share}%)`);
+  ok('de verdeling toetst aan 145', d4.ceiling === 145, String(d4.ceiling));
+  // Geen exact getal: de segmentclassificatie van paceBreakdown kan per
+  // sessie iets anders uitpakken dan een handmatige telling op cadans, en
+  // dan hoort de test niet te breken op een procent. Wat telt is dat een
+  // deel binnen de band valt en dat het ruim onder de richtlijn blijft.
+  ok('een flink deel valt nu binnen de band, maar niet genoeg',
+    d4.easyShare > 20 && d4.easyShare < 80, `${d4.easyShare}%`);
+  ok('en dat is meer dan onder de oude grens van 132',
+    d4.easyShare > d4.underVt1Share, `${d4.easyShare}% tegenover ${d4.underVt1Share}%`);
+  ok('de uitspraak is "te hard", niet "omgekeerd"', d4.verdict === 'te_hard', d4.verdict);
+  ok('het aandeel onder de gemeten VT1 staat er ook', d4.underVt1Share === 0,
+    String(d4.underVt1Share));
+  ok('de lezing noemt de afspraak als grens',
+    /afgesproken werkplafond van 145/.test(r4.detail), r4.detail.slice(0, 160));
+  ok('en zet de meting er eerlijk naast',
+    /VT1 van 132/.test(r4.detail), r4.detail.slice(0, 260));
+  ok('het advies verwijst naar 145, niet naar 132',
+    r4.advice.some(a => /145/.test(a)) && !r4.advice.some(a => /onder 132/.test(a)),
+    r4.advice.join(' | ').slice(0, 200));
+}
+
 console.log(`\n${'█'.repeat(56)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(56)}`);
 process.exit(fail ? 1 : 0);

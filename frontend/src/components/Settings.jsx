@@ -6,6 +6,7 @@ import { LogoutButton } from './AuthGate';
 import Integrations from './Integrations';
 import { loadWeekStart, saveWeekStart, WEEK_START_LABELS } from '../datetime';
 import { runDayCeiling } from '../restday';
+import { loadHrModel, saveHrModel, easyCeilingLine } from '../hrModel';
 import { loadBuildThrough, saveBuildThrough } from '../strategy';
 import { saveGoal } from '../goals';
 import { todayLocal } from '../datetime';
@@ -360,6 +361,9 @@ export default function Settings({ onClose }) {
           </div>
         </div>
 
+        {/* Hartslagband */}
+        <HeartRateSettings />
+
         {/* Vrijgeven van looptrainingen */}
         <RunReleaseSettings />
 
@@ -542,4 +546,80 @@ function komendeZondag() {
   const naar = (7 - d.getDay()) % 7;
   d.setDate(d.getDate() + naar);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+
+// ── Het werkplafond: een afspraak, geen meting ──────────────────
+//
+// Dit ontbrak, en dat had gevolgen. Zij en haar begeleiding spraken een
+// werkplafond van 145 af, maar hrModel klemde elke waarde terug naar VT1
+// uit de CPET van februari 2025 — en schreef die 132 ook nog terug naar de
+// opslag. De afspraak kon in de app niet bestaan en werd elke week opnieuw
+// onderwerp van discussie, omdat hij nergens stond.
+//
+// Een gemeten drempel en een afgesproken plafond zijn twee dingen. Beide
+// staan hier, met het verschil ertussen.
+function HeartRateSettings() {
+  const [model, setModel] = useState(() => loadHrModel());
+  const [plafond, setPlafond] = useState(() => String(loadHrModel().easyTargetHigh));
+  const [melding, setMelding] = useState('');
+
+  function bewaar(v) {
+    setPlafond(v);
+    const n = parseInt(v, 10);
+    if (!Number.isInteger(n) || n < 100 || n > 200) return;
+    const next = saveHrModel({ easyTargetHigh: n, easyCeilingSource: 'afspraak' });
+    setModel(next);
+    setMelding(`Werkplafond staat op ${next.easyTargetHigh} bpm, vastgelegd als afspraak.`);
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 12 }} data-hr-settings>
+      <div className="card-header">
+        <div className="card-accent" style={{ background: 'var(--rust)' }} />
+        <div className="card-title">❤️ Hartslagband</div>
+      </div>
+      <div className="card-body">
+        <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>
+          Het werkplafond is de bovengrens van je rustige sessies. Dat is een
+          afspraak tussen jou en je begeleiding, geen testuitslag — de app rekent
+          ermee en zet de gemeten drempel ernaast.
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 10.5, color: 'var(--ghost)', fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.4px' }}>Werkplafond</div>
+            <input type="number" min="100" max="200" value={plafond} data-werkplafond
+              onChange={e => bewaar(e.target.value)}
+              style={{ width: 80, fontSize: 15, fontWeight: 700, padding: '5px 8px',
+                borderRadius: 6, border: '1px solid var(--border)', background: 'transparent',
+                color: 'var(--text)' }} />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5, flex: 1,
+            minWidth: 180 }}>
+            <div>Easy-band: {model.easyTargetLow}–{model.easyTargetHigh} bpm</div>
+            <div style={{ color: 'var(--ghost)' }}>
+              Gemeten VT1: {model.vt1Hr} · VT2: {model.vt2Hr} (CPET 4 feb 2025)
+            </div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 11, color: model.easyCeilingVsVt1 ? 'var(--gold)' : 'var(--sub)',
+          lineHeight: 1.5, marginTop: 8 }} data-plafond-herkomst>
+          {easyCeilingLine(model)}
+        </div>
+
+        {model.easyCeilingVsVt1 > 0 && (
+          <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 6 }}>
+            Zolang het plafond boven de gemeten drempel ligt, blijft een verse
+            meting het nuttigste wat je kunt doen: dertig minuten op vlak terrein
+            waarbij je net kunt praten geeft een bruikbare schatting van je VT1 nu.
+          </div>
+        )}
+
+        {melding && <div className="saved-note" style={{ marginTop: 8 }}>{melding}</div>}
+      </div>
+    </div>
+  );
 }

@@ -93,7 +93,31 @@ function defaults() {
     // rustige sessie en bij dit herstelprofiel. Het is een keuze, en die
     // wordt ook zo benoemd.
     easyTargetLow: legacy.easyLow ?? 106,
-    easyTargetHigh: Math.min(legacy.easyHigh ?? CPET.vt1Hr, CPET.vt1Hr),
+    // ── Het werkplafond mag boven VT1 liggen ───────────────────
+    //
+    // WAT ER MIS WAS
+    //
+    // Hier stond `Math.min(legacy.easyHigh ?? CPET.vt1Hr, CPET.vt1Hr)`: het
+    // werkplafond werd hard teruggeklemd naar VT1 uit de CPET van februari
+    // 2025. Zij en haar begeleiding spraken 145 af; die afspraak kon in
+    // deze app dus niet eens bestaan — hij werd stil naar 132 gebracht, en
+    // saveHrModel() schreef die 132 ook nog terug naar de oude
+    // instellingen. Een afspraak die het systeem ongedaan maakt, is geen
+    // afspraak.
+    //
+    // Een gemeten drempel en een afgesproken werkplafond zijn twee
+    // verschillende dingen. VT1 is een meting van een dag in februari 2025.
+    // Het werkplafond is een besluit over hoe er nu getraind wordt, en dat
+    // besluit is aan haar en haar begeleiding. De app rekent met het
+    // besluit, laat de meting ernaast staan, en noemt het verschil.
+    easyTargetHigh: legacy.easyHigh ?? CPET.vt1Hr,
+    // Waar het plafond vandaan komt, en sinds wanneer. Zonder herkomst leest
+    // een band van 145 naast een VT1 van 132 als een fout in plaats van als
+    // een keuze.
+    easyCeilingSource: (legacy.easyHigh && legacy.easyHigh !== CPET.vt1Hr)
+      ? 'afspraak' : 'cpet',
+    easyCeilingSetAt: null,
+    easyCeilingNote: null,
     // Bij aanvang is er geen bewijs voor werk boven VT1; dat betekent niet
     // dat het gevaarlijk is, alleen dat het nog niet is vrijgegeven.
     currentIntensityCeiling: CPET.vt1Hr,
@@ -121,8 +145,52 @@ export function easyHrLine(model = null) {
   return `Easy HR: ${m.easyTargetLow}\u2013${m.easyTargetHigh} bpm`;
 }
 
+// Dezelfde band, met de herkomst erbij. Voor plekken waar een uitspraak
+// over intensiteit wordt gedaan: dan hoort erbij waar die grens vandaan
+// komt, en hoe hij zich verhoudt tot de gemeten drempel.
+export function easyCeilingLine(model = null) {
+  const m = model || loadHrModel();
+  if (m.easyCeilingSource !== 'afspraak') {
+    return `Werkplafond ${m.easyTargetHigh} bpm — gelijk aan je gemeten VT1 (CPET ${CPET.date}).`;
+  }
+  const verschil = m.easyCeilingVsVt1;
+  return `Werkplafond ${m.easyTargetHigh} bpm — afgesproken, niet gemeten. `
+    + (verschil > 0
+      ? `Dat ligt ${verschil} slagen bóven je gemeten VT1 van ${m.vt1Hr} (CPET ${CPET.date}); die meting is ${CPET.date.slice(0, 4) === '2025' ? 'inmiddels ruim anderhalf jaar oud' : 'ouder'}, dus dat hoeft niet tegenstrijdig te zijn.`
+      : verschil < 0
+        ? `Dat ligt ${Math.abs(verschil)} slagen ónder je gemeten VT1 van ${m.vt1Hr}.`
+        : `Dat valt samen met je gemeten VT1.`);
+}
+
 export function saveHrModel(patch) {
-  const next = normalize({ ...loadHrModel(), ...patch });
+  // Zet iemand het werkplafond handmatig, dan is dat per definitie een
+  // afspraak en niet een meting. Dat wordt hier vastgelegd, zodat de app
+  // het later niet als CPET-waarde presenteert.
+  const p = { ...patch };
+  const huidig = loadHrModel();
+
+  // Een geweigerde waarde wordt geen afspraak.
+  //
+  // normalize() klemt een plafond boven VT2 terug naar VT2, en saveHrModel
+  // schreef die geklemde waarde daarna wél weg — ook naar de oude
+  // instellingen. Wie 200 intypte, kreeg er stil 156 als "afgesproken
+  // werkplafond" voor terug. Een grens die niemand heeft gekozen hoort niet
+  // als keuze opgeslagen te worden; buiten bereik betekent: niet opgeslagen,
+  // en zeggen waarom.
+  if (p.easyTargetHigh != null) {
+    const n = Number(p.easyTargetHigh);
+    if (!Number.isFinite(n) || n <= huidig.easyTargetLow || n > huidig.vt2Hr) {
+      return { ...huidig, rejected: {
+        field: 'easyTargetHigh', value: p.easyTargetHigh,
+        reason: `Een werkplafond moet tussen ${huidig.easyTargetLow + 1} en ${huidig.vt2Hr} liggen (VT2). ${p.easyTargetHigh} is niet opgeslagen.`,
+      } };
+    }
+    if (p.easyCeilingSource == null) {
+      p.easyCeilingSource = 'afspraak';
+      p.easyCeilingSetAt = p.easyCeilingSetAt || todayLocal();
+    }
+  }
+  const next = normalize({ ...huidig, ...p });
   localStorage.setItem(MODEL_KEY, JSON.stringify(next));
   // De oude instellingen blijven meelopen zolang andere schermen ze lezen,
   // maar walkTrigger krijgt daar nooit meer stilzwijgend VT1 in.
@@ -167,6 +235,14 @@ function normalize(m) {
   out.easyTargetLow = Number(out.easyTargetLow) || 106;
   out.easyTargetHigh = Number(out.easyTargetHigh) || out.vt1Hr;
   if (out.easyTargetHigh <= out.easyTargetLow) out.easyTargetHigh = out.easyTargetLow + 10;
+  // Niet terugklemmen naar VT1 — zie defaults(). Wel een bovengrens die
+  // nergens verdedigbaar is: boven VT2 is het geen easy-band meer.
+  out.easyTargetHigh = Math.min(out.easyTargetHigh, out.vt2Hr);
+  out.easyCeilingSource = out.easyCeilingSource === 'afspraak' ? 'afspraak'
+    : (out.easyTargetHigh !== out.vt1Hr ? 'afspraak' : 'cpet');
+  // Hoeveel ligt het werkplafond boven of onder de gemeten drempel? Dat
+  // getal hoort zichtbaar te zijn, niet weggerekend.
+  out.easyCeilingVsVt1 = out.easyTargetHigh - out.vt1Hr;
 
   out.currentIntensityCeiling = Math.min(out.vt2Hr,
     Math.max(Number(out.currentIntensityCeiling) || out.vt1Hr, out.easyTargetHigh));
@@ -246,16 +322,23 @@ export function intensityRelease({ logs = {}, currentDate = todayLocal(), model 
     && ['omgekeerd', 'te_hard'].includes(verdeling.verdict);
 
   if (pem.weeks >= 4 && toleratedAbove.length >= 3 && basisOmgekeerd) {
+    // Het plafond blijft op haar afgesproken werkplafond staan, niet op VT1.
+    // Dat onderscheid is precies wat hier eerder door elkaar liep: de grens
+    // waaraan getoetst wordt is de afspraak, en de melding hoort dezelfde
+    // grens te noemen als het percentage waarop hij rust.
+    const grens = m.easyTargetHigh || m.vt1Hr;
+    const afgesproken = m.easyCeilingSource === 'afspraak';
     return {
       level: RELEASE.PARTIAL.id, label: 'Eerst de verdeling, dan meer intensiteit',
-      ceiling: m.vt1Hr,
+      ceiling: grens,
       observations: above.length, tolerated: toleratedAbove.length, poor: poorAbove.length,
       pemFreeWeeks: pem.weeks,
       distribution: verdeling,
-      why: `Je verdraagt werk boven VT1 (${toleratedAbove.length} sessies, ${pem.weeks} PEM-vrije weken), `
-        + `maar ${verdeling.easyShare}% van je loopminuten lag onder VT1 — de richtlijn is ${verdeling.target}%. `
+      why: `Je verdraagt werk boven je band (${toleratedAbove.length} sessies, ${pem.weeks} PEM-vrije weken), `
+        + `maar ${verdeling.easyShare}% van je loopminuten bleef binnen ${afgesproken
+            ? `je afgesproken werkplafond van ${grens}` : `VT1 (${grens})`} — de richtlijn is ${verdeling.target}%. `
         + `Meer intensiteit vrijgeven terwijl de rustige basis ontbreekt, bouwt op zand. `
-        + `Eerst twee weken met het grootste deel onder ${m.vt1Hr} bpm; daarna gaat dit plafond open.`,
+        + `Eerst twee weken met het grootste deel onder ${grens} bpm; daarna gaat dit plafond open.`,
       evidence: toleratedAbove.slice(-4).map(r => ({ date: r.date, hr: r.hr, status: r.status })),
     };
   }
