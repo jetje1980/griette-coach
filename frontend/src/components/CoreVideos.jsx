@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { loadCoreVideos, addCoreVideo, removeCoreVideo, restoreCoreVideos,
   removedCount } from '../coreVideoStore';
-import { VIDEO_SOURCE_NOTE } from '../data/coreVideos';
+import { VIDEO_SOURCE_NOTE, videosByFocus } from '../data/coreVideos';
 
 // Videolinks bij kracht — met de waarschuwing erbij, en zelf te beheren.
 //
@@ -38,17 +38,22 @@ export default function CoreVideos() {
     <div className="os-card" style={{ marginBottom: 12 }} data-corevideos={videos.length}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)',
         textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
-        Video's bij je core-werk
+        Video's bij je krachtwerk
       </div>
 
       {/* De coachregel. Eén keer, bovenaan, en dan niet meer. */}
       <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.55, marginBottom: 8 }}>
-        Deze belasten je buikspieren en dat is nuttig. Wat ze niet doen is vet
-        weghalen op de plek waar je de oefening voelt — dat werkt bij niemand zo.
-        Hoe vlak je buik oogt, gaat over wat eroverheen zit en over hoe je ribben
-        en bekken staan; dat laatste is precies waar de hollow hold, de Pallof
-        press en de dead bug in jouw programma op mikken. Dus: leuk als
-        aanvulling, niet in plaats van je eigen core-blok.
+        Van deze twee groepen is <strong>billen en benen</strong> voor je hardlopen
+        het nuttigst: bilspieren en hamstrings dragen je loopblokken, en zwakke
+        billen laten je bekken wegzakken bij het landen — dat voel je later in je
+        knie of onderrug, niet in je bil. Zware beenbelasting concurreert wel met
+        een looptraining, dus doe die op een krachtdag en niet de dag vóór een
+        sessie met lange blokken.
+        {' '}Het buikwerk is nuttig voor een sterkere romp, maar haalt geen vet weg
+        op de plek waar je de oefening voelt — dat werkt bij niemand zo. Hoe vlak
+        je buik oogt gaat over wat eroverheen zit en over hoe je ribben en bekken
+        staan, en dat laatste is precies waar de hollow hold, de Pallof press en de
+        dead bug op mikken.
       </div>
 
       {videos.length === 0 && (
@@ -57,31 +62,13 @@ export default function CoreVideos() {
         </div>
       )}
 
-      {videos.map(v => (
-        <div key={v.id} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}
-          data-video={v.id}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <a href={v.url} target="_blank" rel="noopener noreferrer"
-              style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)',
-                textDecoration: 'none', flex: 1, lineHeight: 1.4 }}>
-              ▶ {v.title}
-            </a>
-            <button type="button" onClick={() => setVideos(removeCoreVideo(v.id))}
-              title="verwijderen"
-              style={{ fontSize: 10.5, padding: '2px 7px', borderRadius: 99,
-                border: 'none', background: 'none', color: 'var(--ghost)',
-                cursor: 'pointer' }}>✕</button>
+      {videosByFocus(videos).map(groep => (
+        <div key={groep.id} data-videogroep={groep.id}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--sage)',
+            marginTop: 8, marginBottom: 2 }}>
+            {groep.label}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 2 }}>
-            {v.minutes ? `${v.minutes} min · ` : ''}
-            {(v.tags || []).join(' · ')}
-            {v.source === 'eigen' ? (v.tags?.length ? ' · ' : '') + 'zelf toegevoegd' : ''}
-          </div>
-          {v.note && (
-            <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.45, marginTop: 3 }}>
-              {v.note}
-            </div>
-          )}
+          {groep.videos.map(v => videoRij(v, () => setVideos(removeCoreVideo(v.id))))}
         </div>
       ))}
 
@@ -152,6 +139,37 @@ export default function CoreVideos() {
               </div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Eén videorij. Stond eerst inline in de lijst; nu er twee groepen zijn,
+// zou dat twee kopieën van dezelfde opmaak worden.
+function videoRij(v, verwijder) {
+  return (
+    <div key={v.id} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}
+      data-video={v.id}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <a href={v.url} target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)',
+            textDecoration: 'none', flex: 1, lineHeight: 1.4 }}>
+          ▶ {v.title}
+        </a>
+        <button type="button" onClick={verwijder} title="verwijderen"
+          style={{ fontSize: 10.5, padding: '2px 7px', borderRadius: 99,
+            border: 'none', background: 'none', color: 'var(--ghost)',
+            cursor: 'pointer' }}>✕</button>
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 2 }}>
+        {v.minutes ? `${v.minutes} min · ` : ''}
+        {(v.tags || []).join(' · ')}
+        {v.source === 'eigen' ? ((v.tags || []).length ? ' · ' : '') + 'zelf toegevoegd' : ''}
+      </div>
+      {v.note && (
+        <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.45, marginTop: 3 }}>
+          {v.note}
         </div>
       )}
     </div>

@@ -1,7 +1,8 @@
 // De videolijst bij kracht: beheerbaar, en geen willekeurige links.
 import { loadCoreVideos, addCoreVideo, removeCoreVideo, restoreCoreVideos,
   videoUrlIsOk, removedCount } from '../../src/coreVideoStore.js';
-import { CORE_VIDEOS, videosForMinutes, VIDEO_SOURCE_NOTE } from '../../src/data/coreVideos.js';
+import { CORE_VIDEOS, videosForMinutes, videosByFocus, VIDEO_FOCUS,
+  VIDEO_SOURCE_NOTE } from '../../src/data/coreVideos.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -106,6 +107,43 @@ S('6 · Kapotte opslag levert gewoon de startlijst');
   store({ gc_core_videos: 'dit is geen json' });
   ok('geen crash, wel de lijst', loadCoreVideos().length === CORE_VIDEOS.length,
     String(loadCoreVideos().length));
+}
+
+S('7 · Twee groepen: billen en benen, en core');
+{
+  store();
+  const groepen = videosByFocus(loadCoreVideos());
+  ok('er zijn twee groepen', groepen.length === 2, groepen.map(g => g.id).join(','));
+  ok('billen en benen staat vooraan — dat is voor hardlopen het nuttigst',
+    groepen[0].id === 'onderlichaam', groepen[0].id);
+  ok('er zitten echte onderlichaamsvideo\'s in', groepen[0].videos.length >= 5,
+    String(groepen[0].videos.length));
+  ok('en core-video\'s in de tweede groep', groepen[1].videos.length >= 4,
+    String(groepen[1].videos.length));
+  ok('een gecombineerde sessie staat in beide groepen',
+    groepen[0].videos.some(v => v.focus === 'beide')
+    && groepen[1].videos.some(v => v.focus === 'beide'),
+    'beide-video ontbreekt in een van de groepen');
+  ok('elke video heeft een focus', loadCoreVideos().every(v => !!(v.focus || 'core')),
+    loadCoreVideos().filter(v => !v.focus).map(v => v.id).join(','));
+  ok('de groepsnamen zijn in gewone taal',
+    VIDEO_FOCUS.onderlichaam.label === 'Billen en benen', VIDEO_FOCUS.onderlichaam.label);
+
+  // De waarschuwing over zware beenbelasting hoort bij de zwaarste video.
+  const zwaar = loadCoreVideos().find(v => v.id === 'vs_lower_body_20');
+  ok('de zwaarste beensessie waarschuwt dat hij als krachtsessie telt',
+    /krachtsessie/.test(zwaar?.note || ''), zwaar?.note);
+}
+
+S('8 · Een eigen video zonder focus belandt bij core');
+{
+  store();
+  addCoreVideo({ title: 'Eigen', url: 'https://youtu.be/eigen1' });
+  const groepen = videosByFocus(loadCoreVideos());
+  const core = groepen.find(g => g.id === 'core');
+  ok('zonder opgegeven focus komt hij bij core', core.videos.some(v => v.title === 'Eigen'),
+    core.videos.map(v => v.title).join(','));
+  ok('en raakt hij niet kwijt', loadCoreVideos().some(v => v.title === 'Eigen'));
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
