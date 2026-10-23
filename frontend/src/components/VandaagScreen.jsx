@@ -4,6 +4,7 @@ import { nextSessionForecast } from '../forecast';
 import StrengthToday from './StrengthToday';
 import LeverageCard from './LeverageCard';
 import CockpitCard from './CockpitCard';
+import Challenge75 from './Challenge75';
 import WhyPanel from './WhyPanel';
 import AlivenessCard from './AlivenessCard';
 import { strengthDecision } from '../strengthGate';
@@ -888,6 +889,11 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
       <CockpitCard log={log} logs={logs} currentDate={currentDate}
         hasData={hasData} isFuture={isFuture}
         saveFields={saveFields} onCta={handleCta} />
+
+      {/* De 75-dagenuitdaging, direct onder het besluit van vandaag. Hier
+          hoort hij: het is een dagelijkse gewoonte, dus hij moet op het
+          scherm staan waar zij elke dag begint — niet twee tabs verderop. */}
+      {!isFuture && <Challenge75 currentDate={currentDate} />}
 
       {/* Direct onder het besluit, ingeklapt: waar het op gebaseerd is en —
           net zo belangrijk — wat er níet in zat. Alleen voor dagen die al

@@ -47,6 +47,7 @@ import { economyReading } from './economyReading';
 import { economyAnalysis, analysisAsText } from './economyAnalysis';
 import { intensityDistribution, distributionReading, distributionAsText }
   from './intensityDistribution';
+import { challengeAsText } from './challenge75';
 import { sessionContextFor, contextLines } from './sessionContext';
 import { earlyWarnings, continuityTrend } from './runningHistory';
 
@@ -84,6 +85,11 @@ export function buildCoachContext({ asOf = todayLocal(), horizon = 120, logs = n
 
   return {
     asOf,
+    // De 75-dagenuitdaging als tekstblok. Null zolang zij niet gestart is;
+    // dan staat er niets over in de prompt in plaats van een leeg kopje.
+    challenge: (() => {
+      try { return challengeAsText({ currentDate: asOf }); } catch { return null; }
+    })(),
     body: bodyContext(asOf),
     training: trainingContext(asOf),
     strength: strengthContext(asOf),
@@ -663,6 +669,15 @@ export function contextAsText(ctx) {
   // stil wordt overgeslagen lijkt achteraf meegewogen.
   if (ctx.training.economyAnalysis) {
     zeg(analysisAsText(ctx.training.economyAnalysis));
+    zeg('');
+  }
+
+  // ── De dagelijkse uitdaging ───────────────────────────────────
+  // Vóór kracht, want dit is wat zij elke dag doet. En met de regels erbij,
+  // zodat het model haar niet naar het circuit praat op een dag waarop haar
+  // herstelrespons dat niet toelaat.
+  if (ctx.challenge) {
+    zeg(ctx.challenge);
     zeg('');
   }
 

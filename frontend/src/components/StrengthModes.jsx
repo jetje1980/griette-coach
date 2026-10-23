@@ -11,6 +11,7 @@ import { ClassPlayer, StrengthFeedback } from './StrengthToday';
 import { todayLocal } from '../datetime';
 import ExerciseTechnique from './ExerciseTechnique';
 import CoreVideos from './CoreVideos';
+import Challenge75 from './Challenge75';
 
 // Drie trainingsvormen naast elkaar, geen van drieën de mindere:
 //   Gewichten     — het bestaande A/B-programma met kg × sets × reps × RIR
@@ -360,6 +361,11 @@ function CoachClasses({ currentDate, onSaved }) {
           </div>
         )}
       </div>
+
+      {/* De 75-dagenuitdaging staat op Vandaag — hier alleen de verwijzing,
+          want twee plekken die hetzelfde kunnen afvinken is twee plekken
+          waar de stand uit elkaar kan lopen. */}
+      <Challenge75 currentDate={currentDate} />
 
       {/* Videolinks bij het core-werk. Direct onder "Core voorop", want daar
           hoort het: een aanvulling op het core-blok, niet een vervanging. */}
