@@ -872,6 +872,17 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
         </button>
       )}
 
+      {/* ── De 75-dagenuitdaging, als eerste kaart ────────────────
+          Hij stond onder het dagadvies: pas zichtbaar na een half scherm
+          scrollen, en daaronder nog vijftien kaarten. Zij heeft drie keer
+          gevraagd waar ze haar acht minuten kan afvinken, en dat is het
+          antwoord op die vraag — niet dat de kaart "er staat", maar dat hij
+          niet stond waar je kijkt.
+
+          Dit duwt de ochtendmeting één kaart naar beneden en niet verder:
+          de volgorde die ertoe doet is meting vóór advies, en die blijft. */}
+      {!isFuture && <Challenge75 currentDate={currentDate} />}
+
       {/* De ochtendmeting staat vóór het advies, want het advies rekent
           ermee. En buiten elke uitklapper, want die klapt dicht. */}
       {!isFuture && (
@@ -889,11 +900,6 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
       <CockpitCard log={log} logs={logs} currentDate={currentDate}
         hasData={hasData} isFuture={isFuture}
         saveFields={saveFields} onCta={handleCta} />
-
-      {/* De 75-dagenuitdaging, direct onder het besluit van vandaag. Hier
-          hoort hij: het is een dagelijkse gewoonte, dus hij moet op het
-          scherm staan waar zij elke dag begint — niet twee tabs verderop. */}
-      {!isFuture && <Challenge75 currentDate={currentDate} />}
 
       {/* Direct onder het besluit, ingeklapt: waar het op gebaseerd is en —
           net zo belangrijk — wat er níet in zat. Alleen voor dagen die al
