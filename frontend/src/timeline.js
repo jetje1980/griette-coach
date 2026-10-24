@@ -240,8 +240,45 @@ function uitKracht() {
     // observatie is.
     uit.push(obs({ observedAt: s.date, domain: DOMAIN.TRAINING, metric: 'strength_done',
       value: true, source: 'strength', certainty: CERTAINTY.REPORTED,
-      meta: { program: s.program || null,
+      meta: { program: s.program || null, classId: s.classId || null,
+        type: s.type || null, completed: s.completed || null,
         exercises: (s.exercises || []).length } }));
+
+    // ── De lessen: duur, RPE en weerstand ─────────────────────
+    //
+    // WAT ER MIS WAS
+    //
+    // Er staan twee soorten sessies in deze opslag. De ene heeft een
+    // programma met oefeningen en gewichten; de andere is een les
+    // (classId strong15, strong30) met duur, RPE, bandweerstand en of ze
+    // meer had gekund — maar zónder oefeningenlijst.
+    //
+    // Deze projectie keek uitsluitend naar oefeningen en gewicht. Van haar
+    // elf krachtsessies hebben negen die velden niet, dus leverden ze
+    // precies één ding op: een volume van nul. Een sessie van dertig
+    // minuten op RPE 3 met medium banden was voor de coach niet te
+    // onderscheiden van niets.
+    //
+    // Nu komen die velden er wel in. Een les is geen halve sessie omdat
+    // hij anders is opgeschreven.
+    if (num(s.duration) != null) {
+      uit.push(obs({ observedAt: s.date, domain: DOMAIN.TRAINING,
+        metric: 'strength_duration', value: num(s.duration), unit: 'min',
+        source: 'strength', certainty: CERTAINTY.REPORTED,
+        meta: { classId: s.classId || null, program: s.program || null } }));
+    }
+    if (num(s.rpe) != null) {
+      uit.push(obs({ observedAt: s.date, domain: DOMAIN.TRAINING,
+        metric: 'strength_rpe', value: num(s.rpe), source: 'strength',
+        certainty: CERTAINTY.REPORTED,
+        meta: { classId: s.classId || null, couldDoMore: s.couldDoMore ?? null } }));
+    }
+    if (s.bandResistance) {
+      uit.push(obs({ observedAt: s.date, domain: DOMAIN.TRAINING,
+        metric: 'strength_band', value: s.bandResistance, source: 'strength',
+        certainty: CERTAINTY.REPORTED,
+        meta: { classId: s.classId || null } }));
+    }
   }
   return uit;
 }
@@ -486,7 +523,8 @@ export function completeness({ asOf = todayLocal(), days = 14 } = {}) {
     training: ['distance', 'duration'],
     // strength_done erbij: een sessie met alleen lichaamsgewicht levert
     // volume 0 op, en was daarmee niet te onderscheiden van niets gedaan.
-    strength: ['strength_volume', 'strength_done'],
+    // Duur en RPE erbij: bij een les is dát de belasting, niet het volume.
+    strength: ['strength_volume', 'strength_done', 'strength_duration', 'strength_rpe'],
     measurements: ['waist', 'navel', 'hip'],
     photos: ['photo_observation', 'photo_comparison'],
     // Cyclus is meer dan een menstruatiestart: de klachten die ermee

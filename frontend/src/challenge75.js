@@ -113,7 +113,12 @@ export function unmarkDay(datum) {
 // fotosysteem al, en een tweede fotosysteem erbij bouwen zou betekenen dat
 // er twee plekken zijn waar haar beeld kan zoekraken. Hier wordt alleen
 // vastgelegd dát er een foto is, zodat de reeks het kan tonen.
-export function markPhoto(datum, { type = 'front', photoId = null } = {}) {
+// De standaard is 'dag' — photoStore.DAILY_TYPE. Hier stond 'front', het
+// aanzicht van de wekelijkse progressiefoto's, en dat is precies de
+// verwisseling waardoor de foto van dag 1 in de verkeerde reeks belandde.
+// De waarde staat hier als tekst en niet als import, zodat deze module los
+// van het fotosysteem te gebruiken en te testen blijft.
+export function markPhoto(datum, { type = 'dag', photoId = null } = {}) {
   const s = lees();
   if (!s?.startDate) return null;
   const n = dayNumber(datum, s);

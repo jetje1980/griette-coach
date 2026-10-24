@@ -82,6 +82,30 @@ const klik = async t => page.evaluate(x => {
 // De feed-tab
 await klik('Progressie'); await page.waitForTimeout(800);
 ok('er is een tab "75 dagen"', await klik('75 dagen'), 'tab niet gevonden');
+await page.waitForTimeout(700);
+
+// ── Afvinken op het tabblad dat "75 dagen" heet ──────────────
+//
+// Zij vroeg twee keer waar ze haar acht minuten kon afvinken. De kaart
+// stond op Vandaag (onder het dagadvies) en in Kracht (onder de lessen),
+// maar niet op het tabblad met zijn eigen naam — de eerste plek waar je
+// kijkt. Nu wel, en het is dezelfde kaart op dezelfde opslag.
+await page.waitForSelector('[data-challenge]', { timeout: 6000 }).catch(() => {});
+ok('de afvinkkaart staat op het tabblad 75 dagen',
+  await page.locator('[data-challenge]').count() >= 1);
+ok('en wijst de juiste dag aan',
+  await page.locator('[data-challenge-dag="4"]').count() === 1,
+  await page.evaluate(() => document.querySelector('[data-challenge]')
+    ?.getAttribute('data-challenge-dag')));
+ok('met een knop om de acht minuten af te vinken',
+  await page.locator('[data-challenge-circuit]').count() >= 1);
+await page.locator('[data-challenge-circuit]').first().click();
+await page.waitForTimeout(500);
+ok('afvinken hier werkt', await page.locator('[data-challenge="gedaan"]').count() >= 1);
+const opslag = await page.evaluate(() =>
+  JSON.parse(localStorage.getItem('gc_challenge75') || '{}'));
+ok('en komt in dezelfde opslag als de kaart op Vandaag',
+  opslag.days?.[TODAY]?.kind === 'circuit', JSON.stringify(opslag.days));
 // Wachten op het element in plaats van op de klok: de feed leest IndexedDB
 // en decodeert de beelden, en hoe lang dat duurt hangt van de machine af.
 await page.waitForSelector('[data-feed-foto]', { timeout: 8000 }).catch(() => {});

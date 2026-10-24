@@ -362,9 +362,11 @@ function CoachClasses({ currentDate, onSaved }) {
         )}
       </div>
 
-      {/* De 75-dagenuitdaging staat op Vandaag — hier alleen de verwijzing,
-          want twee plekken die hetzelfde kunnen afvinken is twee plekken
-          waar de stand uit elkaar kan lopen. */}
+      {/* De 75-dagenuitdaging. Dezelfde kaart staat op Vandaag en op
+          Progressie → 75 dagen; alle drie lezen en schrijven gc_challenge75,
+          dus de stand kan niet uit elkaar lopen. Drie plekken omdat zij de
+          kaart op één plek niet vond: dit is een dagelijkse gewoonte, en die
+          hoort te staan waar je die dag toch al bent. */}
       <Challenge75 currentDate={currentDate} />
 
       {/* Videolinks bij het core-werk. Direct onder "Core voorop", want daar

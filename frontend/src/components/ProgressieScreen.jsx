@@ -18,6 +18,7 @@ import RunForecastPanel from './RunForecastPanel';
 import RunDashboard from './RunDashboard';
 import StrengthPanel from './StrengthPanel';
 import DailyFeed from './DailyFeed';
+import Challenge75 from './Challenge75';
 import MyChangePanel from './MyChangePanel';
 import BodyCheckIn from './BodyCheckIn';
 import WhyPanel from './WhyPanel';
@@ -1534,7 +1535,18 @@ export default function ProgressieScreen({ logs, streak }) {
           </ExpandSection>
         </>
       )}
-      {activeTab === 4 && <DailyFeed currentDate={todayStr()} />}
+      {/* Het tabblad heet "75 dagen", dus hoort hier te staan waar je de dag
+          afvinkt — niet alleen de foto's die eruit volgen. Zij kon de kaart
+          niet vinden omdat hij op Vandaag onder het dagadvies staat en in
+          Kracht onder de lessen; op het tabblad met zijn naam stond hij niet.
+          Alle drie de plekken lezen en schrijven dezelfde opslag, dus de
+          stand kan niet uit elkaar lopen. */}
+      {activeTab === 4 && (
+        <>
+          <Challenge75 currentDate={todayStr()} />
+          <DailyFeed currentDate={todayStr()} />
+        </>
+      )}
       {activeTab === 5 && <TabEnergie logs={logs} />}
       {activeTab === 6 && <TabMoney />}
       {activeTab === 7 && <TabFreedom />}

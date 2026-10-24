@@ -329,13 +329,31 @@ function strengthContext(asOf) {
     }
   }
 
+  // De lessen: duur, RPE en weerstand. Negen van haar elf sessies zijn
+  // lessen zonder oefeningenlijst; die leverden hiervoor alleen een volume
+  // van nul op en waren dus niet te onderscheiden van niets gedaan.
+  const lessen = series('strength_duration', { asOf })
+    .filter(o => o.observedAt >= addDays(asOf, -27));
+  const rpes = series('strength_rpe', { asOf })
+    .filter(o => o.observedAt >= addDays(asOf, -27));
+  const gedaan = series('strength_done', { asOf })
+    .filter(o => o.observedAt >= addDays(asOf, -27));
+
   return {
     known: true,
     sessions: volume.length,
-    sessions28: laatste28.length,
-    perWeek28: rond(laatste28.length / 4, 1),
+    // Op strength_done en niet op het volume: een les met alleen
+    // lichaamsgewicht heeft volume nul en bestond zo niet.
+    sessions28: Math.max(laatste28.length, gedaan.length),
+    perWeek28: rond(Math.max(laatste28.length, gedaan.length) / 4, 1),
     volumeTrend28: trend('strength_volume', 28, { asOf }),
-    lastSession: volume.length ? volume[volume.length - 1].observedAt : null,
+    classMinutes28: lessen.reduce((a, o) => a + (o.value || 0), 0),
+    classSessions28: lessen.length,
+    avgClassRpe28: rpes.length
+      ? rond(rpes.reduce((a, o) => a + o.value, 0) / rpes.length, 1) : null,
+    lastClass: lessen.length ? lessen[lessen.length - 1] : null,
+    lastSession: gedaan.length ? gedaan[gedaan.length - 1].observedAt
+      : (volume.length ? volume[volume.length - 1].observedAt : null),
     topLifts: [...perOefening.entries()].slice(0, 8)
       .map(([naam, v]) => ({ exercise: naam, weight: v.weight, sets: v.sets, reps: v.reps, date: v.date })),
     note: laatste28.length >= 8
@@ -684,6 +702,13 @@ export function contextAsText(ctx) {
   zeg('KRACHT:');
   if (ctx.strength.known) {
     zeg(`  ${ctx.strength.sessions28} sessies in 4 weken (${ctx.strength.perWeek28}/week) · laatste ${ctx.strength.lastSession}`);
+    // De lessen apart benoemen: bij een les is de duur de belasting en niet
+    // het volume, en zonder deze regel leek zo'n sessie leeg.
+    if (ctx.strength.classSessions28) {
+      zeg(`  waarvan ${ctx.strength.classSessions28} lessen, samen ${ctx.strength.classMinutes28} min`
+        + (ctx.strength.avgClassRpe28 != null ? ` · gemiddelde RPE ${ctx.strength.avgClassRpe28}` : '')
+        + '. Bij een les is de duur de belasting, niet het getilde gewicht.');
+    }
     if (ctx.strength.volumeTrend28?.available) {
       zeg(`  volumetrend 4 weken: ${ctx.strength.volumeTrend28.delta > 0 ? '+' : ''}${ctx.strength.volumeTrend28.delta} kg`);
     }
