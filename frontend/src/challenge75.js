@@ -24,7 +24,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 import { todayLocal, daysBetween, addDays } from './datetime';
-import { CHALLENGE, phaseForDay, MILESTONES } from './data/challenge75';
+import { CHALLENGE, phaseForDay, MILESTONES, PHASES } from './data/challenge75';
 
 const KEY = 'gc_challenge75';
 
@@ -144,9 +144,22 @@ export function challengeStatus({ currentDate = todayLocal() } = {}) {
     else if (i > 0) break;        // vandaag nog niet gedaan telt niet als breuk
   }
 
+  // ── Een datum vóór de start is geen crash ─────────────────────
+  //
+  // dayNumber() geeft null voor elke dag vóór de startdatum, en dailyMessage
+  // greep daarna naar fase.focus. Elke keer dat zij terugbladerde naar een
+  // dag van vóór 24 oktober, sprong het hele scherm op wit — want een
+  // TypeError in de render neemt de boom mee. Dat was mijn fout, en het is
+  // het soort fout dat niet "een foutmelding" oplevert maar "de app is weg".
+  //
+  // Een dag buiten het venster is een normale toestand: terugbladeren hoort
+  // te kunnen, en dan hoort er te staan dat de uitdaging toen nog niet liep.
   const klaar = vandaagNr != null && vandaagNr > CHALLENGE.days;
+  const voorStart = vandaagNr == null;
   const dagNr = klaar ? CHALLENGE.days : vandaagNr;
-  const fase = dagNr ? phaseForDay(dagNr) : null;
+  // Altijd een fase, ook buiten het venster: de eerste fase vóór de start,
+  // de laatste erna. Zo hoeft geen enkele lezer op null te controleren.
+  const fase = dagNr ? phaseForDay(dagNr) : PHASES[0];
 
   return {
     active: true,
@@ -155,6 +168,8 @@ export function challengeStatus({ currentDate = todayLocal() } = {}) {
     day: dagNr,
     totalDays: CHALLENGE.days,
     finished: klaar,
+    // Ligt deze datum vóór dag 1? Dan is er niets te doen en niets gemist.
+    beforeStart: voorStart,
     doneToday: !!dagen[currentDate]?.kind,
     kindToday: dagen[currentDate]?.kind || null,
     photoToday: !!dagen[currentDate]?.photo,
@@ -179,6 +194,18 @@ export function challengeStatus({ currentDate = todayLocal() } = {}) {
 export function dailyMessage({ currentDate = todayLocal() } = {}) {
   const st = challengeStatus({ currentDate });
   if (!st.active) return null;
+
+  // Vóór de startdatum valt er niets te melden en niets te missen. Hier
+  // stond geen controle, en dan greep de regel hieronder naar fase.focus
+  // van een fase die null was — witte pagina.
+  if (st.beforeStart) {
+    return {
+      day: null, done: false, beforeStart: true,
+      phaseLabel: null,
+      lines: [`De uitdaging begon op ${st.startDate}; deze dag valt ervoor.`],
+      photoAsked: false,
+    };
+  }
 
   const fase = st.phase;
   const regels = [];

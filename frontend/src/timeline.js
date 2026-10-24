@@ -31,6 +31,10 @@
 // ─────────────────────────────────────────────────────────────────
 
 import { todayLocal, addDays } from './datetime';
+// Alleen voor het omzetten van een oefening-id naar een leesbare naam.
+// uitKracht() leest de sessies zelf uit localStorage, maar een id als
+// 'a_squat' is geen naam die in een coachprompt thuishoort.
+import { exerciseName } from './data/strengthSchema';
 
 // De domeinen waarin de coach denkt. Elke observatie hoort bij precies één.
 export const DOMAIN = {
@@ -204,12 +208,40 @@ function uitKracht() {
     uit.push(obs({ observedAt: s.date, domain: DOMAIN.TRAINING, metric: 'strength_volume',
       value: Math.round(volume), unit: 'kg', source: 'strength',
       certainty: CERTAINTY.DERIVED, meta: { program: s.program || null } }));
+    // ── Hier verdween haar krachtwerk ─────────────────────────
+    //
+    // `if (!e?.name) continue;` stond hier, en een opgeslagen oefening heeft
+    // alleen een `id`. Dus werd élke oefening weggegooid voordat de coach
+    // hem zag: de prompt had altijd een lege lijst, en in het coachtabblad
+    // stond niets over kracht — ook als zij drie keer per week tilde.
+    //
+    // De naam komt nu uit exerciseName(), die de id opzoekt in alle
+    // programma's en lessen en bij een onbekende id de id zelf leesbaar
+    // maakt. Een oefening hoort nooit stil te verdwijnen omdat een veld
+    // anders heet dan verwacht.
     for (const e of (s.exercises || [])) {
-      if (!e?.name) continue;
+      const naam = exerciseName(e?.name || e?.id);
+      if (!naam) continue;
+      // Ook zonder gewicht meetellen: lichaamsgewichtwerk is training. De
+      // waarde blijft null in plaats van 0, want "geen gewicht gebruikt" is
+      // iets anders dan "nul kilo getild".
+      const gewicht = num(e.weight);
       uit.push(obs({ observedAt: s.date, domain: DOMAIN.TRAINING, metric: 'strength_lift',
-        value: num(e.weight), unit: 'kg', source: 'strength', certainty: CERTAINTY.MEASURED,
-        meta: { exercise: e.name, sets: e.sets ?? null, reps: e.reps ?? null } }));
+        value: gewicht, unit: gewicht == null ? null : 'kg', source: 'strength',
+        certainty: CERTAINTY.MEASURED,
+        meta: { exercise: naam, exerciseId: e?.id || null, sets: e.sets ?? null,
+          reps: e.reps ?? null, bodyweight: gewicht == null,
+          done: e.done !== false } }));
     }
+
+    // En een markering dat er die dag kracht is gedaan, los van het volume.
+    // Een sessie met alleen lichaamsgewicht levert volume 0 op, en dat is
+    // niet te onderscheiden van "niets gedaan" zolang er geen eigen
+    // observatie is.
+    uit.push(obs({ observedAt: s.date, domain: DOMAIN.TRAINING, metric: 'strength_done',
+      value: true, source: 'strength', certainty: CERTAINTY.REPORTED,
+      meta: { program: s.program || null,
+        exercises: (s.exercises || []).length } }));
   }
   return uit;
 }
@@ -452,7 +484,9 @@ export function completeness({ asOf = todayLocal(), days = 14 } = {}) {
     hr_rest: ['hr_rest'],
     recovery: ['training_recovery', 'recovery_check', 'headache_severity'],
     training: ['distance', 'duration'],
-    strength: ['strength_volume'],
+    // strength_done erbij: een sessie met alleen lichaamsgewicht levert
+    // volume 0 op, en was daarmee niet te onderscheiden van niets gedaan.
+    strength: ['strength_volume', 'strength_done'],
     measurements: ['waist', 'navel', 'hip'],
     photos: ['photo_observation', 'photo_comparison'],
     // Cyclus is meer dan een menstruatiestart: de klachten die ermee

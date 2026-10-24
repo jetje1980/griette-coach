@@ -32,6 +32,11 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
 
   const st = useMemo(() => challengeStatus({ currentDate }), [currentDate, tick, state]);
   const bericht = useMemo(() => dailyMessage({ currentDate }), [currentDate, tick, state]);
+  // Kijkt zij naar een eerdere dag? Dan hoort alles te werken wat op
+  // vandaag werkt — afvinken en een foto toevoegen — maar met de datum
+  // erbij in plaats van "vandaag". Achteraf invullen is geen uitzondering;
+  // het is hoe een dagboek werkt.
+  const isVandaag = currentDate === todayLocal();
 
   function ververs() { setState(loadChallenge()); setTick(t => t + 1); onChanged?.(); }
 
@@ -50,6 +55,17 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
           style={knopPrimair}>
           Start vandaag — dag 1 van 75
         </button>
+      </div>
+    );
+  }
+
+  if (st.beforeStart) {
+    return (
+      <div className="os-card" style={{ marginBottom: 12 }} data-challenge="voor-start">
+        <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5 }}>
+          De 75-dagenuitdaging begon op {st.startDate}. Deze dag valt ervoor, dus
+          er is hier niets te doen en niets gemist.
+        </div>
       </div>
     );
   }
@@ -101,6 +117,11 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
         </div>
         <div style={{ fontSize: 12, color: 'var(--sub)', flex: 1 }}>
           van {st.totalDays} · {st.doneCount} afgerond · {st.photoCount} foto's
+          {!isVandaag && (
+            <div style={{ fontSize: 10.5, color: 'var(--gold)' }}>
+              je kijkt naar {currentDate} — achteraf invullen kan hier
+            </div>
+          )}
         </div>
         {st.streak >= 2 && (
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--sage)',
@@ -131,7 +152,9 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
       {!st.doneToday ? (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
           <button type="button" data-challenge-circuit onClick={() => afvinken(DONE_KIND.CIRCUIT)}
-            style={knopPrimair}>De 8 minuten gedaan</button>
+            style={knopPrimair}>
+            {isVandaag ? 'De 8 minuten gedaan' : `8 minuten op ${currentDate.slice(8)}-${currentDate.slice(5, 7)} gedaan`}
+          </button>
           <button type="button" data-challenge-extra onClick={() => afvinken(DONE_KIND.EXTRA)}
             style={knopSecundair}>+ tweede workout</button>
           <button type="button" data-challenge-herstel onClick={() => afvinken(DONE_KIND.RECOVERY)}
@@ -159,7 +182,7 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
             fontSize: 11.5, color: 'var(--gold)', cursor: 'pointer', fontWeight: 600 }}
             data-challenge-foto="nee">
-            📷 {bezig ? 'bezig…' : `Foto van dag ${st.day} toevoegen`}
+            📷 {bezig ? 'bezig…' : `Foto van dag ${st.day} toevoegen`}{!isVandaag ? ' (achteraf)' : ''}
             <input type="file" accept="image/*" onChange={fotoVanDaag} disabled={bezig}
               style={{ display: 'none' }} />
           </label>

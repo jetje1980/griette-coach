@@ -475,3 +475,52 @@ export function adjustedPhase(phase, { recovered = true } = {}) {
     reason: `Je herstelrespons was deze week niet schoon, dus de ${phase?.label?.toLowerCase() || 'geplande'}week wordt een terugneemweek. De golf schuift op; hij vervalt niet.`,
   };
 }
+
+// ── Van oefening-id naar leesbare naam ──────────────────────────
+//
+// WAAROM DIT ER MOET ZIJN
+//
+// Een opgeslagen krachtsessie bewaart per oefening een `id` (a_squat,
+// c_plank, bm_hinge), geen naam. De tijdlijnprojectie deed:
+//
+//     if (!e?.name) continue;
+//
+// en gooide daarmee élke oefening weg voordat de coach hem zag. De
+// coachprompt had dus altijd een lege lijst topLifts, en in het coachtabblad
+// stond niets over kracht — ook als zij drie keer per week tilde. Zij merkte
+// dat haar krachttrainingen "niet worden meegenomen", en dat was letterlijk
+// waar.
+//
+// Deze tabel wordt één keer opgebouwd uit alle programma's en lessen, zodat
+// een id altijd een naam heeft.
+import { CLASS_EXERCISES } from './strengthClasses';
+
+const NAAM_PER_ID = (() => {
+  const uit = {};
+  for (const prog of Object.values(PROGRAMS || {})) {
+    for (const ex of (prog?.exercises || [])) {
+      if (ex?.id && ex?.name) uit[ex.id] = ex.name;
+    }
+  }
+  for (const blok of Object.values(CLASS_EXERCISES || {})) {
+    for (const ex of (Array.isArray(blok) ? blok : [])) {
+      if (ex?.id && ex?.name) uit[ex.id] = ex.name;
+    }
+  }
+  return uit;
+})();
+
+// Onbekende id? Dan de id zelf, leesbaar gemaakt. Beter een ruwe naam dan
+// een oefening die stil verdwijnt — dat was precies de fout.
+export function exerciseName(idOfNaam) {
+  if (!idOfNaam) return null;
+  if (NAAM_PER_ID[idOfNaam]) return NAAM_PER_ID[idOfNaam];
+  // Elk kort voorvoegsel eraf, niet een vaste lijst: de ids zijn
+  // {programma}_{oefening} en er komt vroeg of laat een letter bij die niet
+  // in zo'n lijst staat. Dan hoort de naam niet half te blijven staan.
+  return String(idOfNaam).replace(/^[a-z]{1,3}_/, '').replace(/_/g, ' ');
+}
+
+export function knownExerciseNames() {
+  return { ...NAAM_PER_ID };
+}
