@@ -99,5 +99,31 @@ S('4 · Verhuizing: wat moet er mee en wat niet');
     nieuweId === '2026-10-24_dag' && nieuweId !== '2026-10-24_voor', nieuweId);
 }
 
+S('5 · Oude mapnamen uit de cloud worden herkend');
+{
+  // Dit was het échte gat: restoreFromCloud loopt de mappen af en sloeg
+  // elke naam over die hij niet kende. Haar foto van dag 1 staat in de
+  // cloud onder .../2026-10-24/front/ en kon daardoor op géén enkel
+  // toestel terugkomen — ook niet op het toestel waar hij vandaan kwam,
+  // zodra de lokale opslag een keer is geschoond.
+  const LEGACY = { front: DAILY_TYPE, side: 'zij', back: 'achter', face: 'gezicht' };
+  const soortVan = n => LEGACY[n] || n;
+  const herkend = n => [...AANZICHTEN, DAILY_TYPE].includes(n) || !!LEGACY[n];
+
+  ok('een map "front" wordt herkend', herkend('front'));
+  ok('en komt binnen als dagfoto', soortVan('front') === DAILY_TYPE, soortVan('front'));
+  ok('de vier aanzichten blijven zichzelf',
+    AANZICHTEN.every(a => soortVan(a) === a), AANZICHTEN.map(soortVan).join(','));
+  ok('een dagfoto-map blijft zichzelf', soortVan(DAILY_TYPE) === DAILY_TYPE);
+  ok('de Engelse namen uit VIEWS worden ook afgevangen',
+    soortVan('side') === 'zij' && soortVan('back') === 'achter'
+      && soortVan('face') === 'gezicht');
+  ok('een onbekende map wordt nog steeds overgeslagen', !herkend('rommel'));
+  // De lokale sleutel die eruit volgt, mag niet botsen met een aanzicht.
+  ok('de sleutel wordt de dagfoto en niet het aanzicht',
+    `2026-10-24_${soortVan('front')}` === '2026-10-24_dag',
+    `2026-10-24_${soortVan('front')}`);
+}
+
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
 process.exit(fail ? 1 : 0);

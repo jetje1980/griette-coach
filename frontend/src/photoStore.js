@@ -105,6 +105,40 @@ export const DAILY_TYPE = 'dag';
 // dagelijkse: zonder deze lijst blijft een hele reeks op één toestel staan.
 const ALL_TYPES = [...PHOTO_TYPES, DAILY_TYPE];
 
+// ── Namen uit een eerdere versie ────────────────────────────────
+//
+// De eerste versie van de 75-dagenkaart schreef type 'front'. Dat was mijn
+// fout, en hij heeft gevolgen die verder reiken dan één verkeerd label:
+// restoreFromCloud loopt de mappen af en slaat elke naam over die hij niet
+// kent. Een foto die als 'front' in de cloud staat kan daardoor op géén
+// enkel toestel meer terugkomen — ook niet op het toestel waar hij vandaan
+// kwam, zodra de lokale opslag een keer is geschoond.
+//
+// In haar opslag staat precies één zo'n bestand (24 oktober, haar dag 1).
+// Deze afbeelding haalt hem binnen onder de juiste soort, zodat de reeks
+// zichzelf herstelt in plaats van dat er een handmatige actie nodig is.
+//
+// Andere Engelse namen uit VIEWS ('side', 'back', 'face') blijken niet in
+// haar opslag voor te komen; ze staan er toch bij, want als ze ooit zijn
+// weggeschreven hoort dezelfde reparatie te gelden.
+const LEGACY_TYPES = {
+  front: DAILY_TYPE,     // de challengefoto van de eerste versie
+  side: 'zij',
+  back: 'achter',
+  face: 'gezicht',
+};
+
+// De soort zoals hij lokaal hoort te heten.
+function soortVan(naam) {
+  return LEGACY_TYPES[naam] || naam;
+}
+
+// Herkent de restore deze mapnaam? Oude namen horen erbij, anders blijven
+// ze onzichtbaar.
+function herkend(naam) {
+  return ALL_TYPES.includes(naam) || !!LEGACY_TYPES[naam];
+}
+
 function newPhotoId() {
   return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -446,11 +480,11 @@ export const photoStore = {
           if (entry.id) {
             // Bestand direct in de datummap: {type}.{ext}
             targets.push({
-              type: entry.name.replace(/\.[^.]+$/, ''),
+              type: soortVan(entry.name.replace(/\.[^.]+$/, '')),
               path: `${folderPath}/${entry.name}`,
               photoId: null,
             });
-          } else if (ALL_TYPES.includes(entry.name)) {
+          } else if (herkend(entry.name)) {
             // Map per aanzicht: {type}/{id}.{ext}. Bij meerdere bestanden
             // wint de nieuwste — het scherm toont er één per aanzicht.
             const { data: files } = await supabase.storage.from(BUCKET)
@@ -459,7 +493,9 @@ export const photoStore = {
             const newest = (files || []).find(f => f.id);
             if (!newest) continue;
             targets.push({
-              type: entry.name,
+              // soortVan(): een map die 'front' heet, komt lokaal als
+              // dagfoto binnen. Zie LEGACY_TYPES.
+              type: soortVan(entry.name),
               path: `${folderPath}/${entry.name}/${newest.name}`,
               photoId: newest.name.replace(/\.[^.]+$/, ''),
             });
