@@ -137,6 +137,31 @@ const kinds = await page.evaluate(() => Object.values(
 ok('een hersteldag wordt als hersteldag bewaard', kinds.includes('herstel'),
   JSON.stringify(kinds));
 
+// ── De startdatum goedzetten op het scherm ───────────────────
+//
+// De uitdaging werd aangezet om twee uur 's nachts — technisch zaterdag,
+// voor haar nog vrijdag — en daarmee liep de teller vanaf dag één een dag
+// achter op wat zij meemaakte.
+await page.click('[data-challenge-startdatum-knop]'); await page.waitForTimeout(400);
+ok('de startdatum is aan te passen',
+  await page.locator('[data-challenge-startdatum]').count() === 1);
+await page.fill('[data-challenge-startdatum-invoer]', addDays(TODAY, -7));
+await page.waitForTimeout(300);
+ok('het scherm zegt vooraf welke dag het dan wordt',
+  /dag 8/.test(await page.textContent('[data-challenge-startdatum-voorbeeld]')),
+  await page.textContent('[data-challenge-startdatum-voorbeeld]'));
+await page.click('[data-challenge-startdatum-opslaan]'); await page.waitForTimeout(600);
+ok('na opslaan staat de kaart op dag 8',
+  await page.getAttribute('[data-challenge]', 'data-challenge-dag') === '8',
+  String(await page.getAttribute('[data-challenge]', 'data-challenge-dag')));
+const verschoven = await page.evaluate(() =>
+  JSON.parse(localStorage.getItem('gc_challenge75') || '{}'));
+ok('de startdatum staat in de opslag', verschoven.startDate === addDays(TODAY, -7),
+  String(verschoven.startDate));
+ok('en het eerder afgevinkte werk staat er nog, met een nieuw dagnummer',
+  Object.values(verschoven.days || {}).some(d => d.kind === 'herstel'),
+  JSON.stringify(verschoven.days));
+
 ok('geen JS-fout', errors.length===0, errors.join(' | '));
 await b.close();
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

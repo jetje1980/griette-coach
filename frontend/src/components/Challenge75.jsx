@@ -2,10 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { CHALLENGE, CIRCUIT, CIRCUIT_TOTAL_SECONDS, RECOVERY_VERSION }
   from '../data/challenge75';
 import { loadChallenge, startChallenge, challengeStatus, dailyMessage,
-  markDay, unmarkDay, markPhoto, DONE_KIND } from '../challenge75';
+  markDay, unmarkDay, markPhoto, setStartDate, DONE_KIND } from '../challenge75';
 import { photoStore, DAILY_TYPE } from '../photoStore';
 import { downscaleForStorage } from '../imageDownscale';
-import { todayLocal } from '../datetime';
+import { todayLocal, formatNLLong, daysBetween } from '../datetime';
 import Challenge75Grid from './Challenge75Grid';
 
 // De 75-dagenkaart: wat je vandaag doet, afvinken, de foto, en wat er
@@ -30,6 +30,8 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
   const [bezig, setBezig] = useState(false);
   const [melding, setMelding] = useState('');
   const [tweede, setTweede] = useState('');
+  const [datumOpen, setDatumOpen] = useState(false);
+  const [nieuweStart, setNieuweStart] = useState('');
 
   const st = useMemo(() => challengeStatus({ currentDate }), [currentDate, tick, state]);
   const bericht = useMemo(() => dailyMessage({ currentDate }), [currentDate, tick, state]);
@@ -137,6 +139,50 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
         overflow: 'hidden', marginBottom: 8 }}>
         <div style={{ width: `${pct}%`, height: '100%', background: 'var(--sage)' }} />
       </div>
+
+      {/* ── De startdatum, en hem kunnen goedzetten ──────────────
+          De uitdaging werd gestart om twee uur 's nachts: technisch
+          zaterdag, voor haar nog vrijdag. Daardoor liep de teller vanaf dag
+          één een dag achter op wat zij meemaakte. Wie dat niet kan
+          corrigeren, kijkt 75 dagen lang naar een getal dat niet klopt. */}
+      {!datumOpen ? (
+        <button type="button" data-challenge-startdatum-knop
+          onClick={() => { setNieuweStart(st.startDate); setDatumOpen(true); }}
+          style={{ ...knopTekst, padding: 0, marginBottom: 6, display: 'block' }}>
+          begonnen op {formatNLLong(st.startDate)} · klopt dat niet?
+        </button>
+      ) : (
+        <div style={{ marginBottom: 8, padding: '7px 9px', borderRadius: 8,
+          border: '1px solid var(--border)' }} data-challenge-startdatum>
+          <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5,
+            marginBottom: 6 }}>
+            Op welke dag deed je je eerste acht minuten? Alles wat je al hebt
+            afgevinkt blijft op zijn eigen datum staan; alleen de nummering
+            schuift mee.
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input type="date" className="os-input" value={nieuweStart}
+              max={todayLocal()} data-challenge-startdatum-invoer
+              onChange={e => setNieuweStart(e.target.value)}
+              style={{ width: 'auto', fontSize: 12 }} />
+            <button type="button" data-challenge-startdatum-opslaan
+              onClick={() => {
+                if (!nieuweStart) return;
+                setStartDate(nieuweStart);
+                setDatumOpen(false); ververs();
+                setMelding(`Dag 1 staat nu op ${formatNLLong(nieuweStart)}.`);
+              }} style={knopPrimair}>Opslaan</button>
+            <button type="button" onClick={() => setDatumOpen(false)}
+              style={knopTekst}>annuleren</button>
+          </div>
+          {nieuweStart && (
+            <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginTop: 6 }}
+              data-challenge-startdatum-voorbeeld>
+              Vandaag wordt dan dag {Math.max(1, daysBetween(nieuweStart, todayLocal()) + 1)}.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Wat je vandaag hoort te weten ────────────────────── */}
       {bericht && (

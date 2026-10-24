@@ -49,6 +49,35 @@ export function startChallenge({ startDate = todayLocal() } = {}) {
 
 export function loadChallenge() { return lees(); }
 
+// ── De startdatum alsnog goedzetten ─────────────────────────────
+//
+// WAAROM DIT MOET KUNNEN
+//
+// De uitdaging werd gestart op het moment dat de app het hoorde, en dat
+// was om twee uur 's nachts — technisch zaterdag, voor haar nog vrijdag.
+// Zo werd haar dag 1 een dag opgeschoven en klopte de teller vanaf dag
+// één niet meer. Dat is geen randgeval: een reeks die begint rond een
+// avond, een reis of een tijdzone zet zichzelf scheef, en dan is "dag 40"
+// een getal waar de eigenaar niet meer in gelooft.
+//
+// Dagnummers worden hier niet apart bewaard maar uit de datum gerekend,
+// dus verschuiven is goedkoop: alleen de opgeslagen `day` per dag moet mee.
+// Dagen die door de verschuiving buiten het venster van 75 vallen, blijven
+// staan maar worden gemeld — stilletjes iemands werk weggooien is erger dan
+// een datum die niet klopt.
+export function setStartDate(nieuweStart) {
+  const s = lees();
+  if (!s?.startDate || !nieuweStart) return s;
+  const dagen = {};
+  let buitenVenster = 0;
+  for (const [datum, rec] of Object.entries(s.days || {})) {
+    const n = daysBetween(nieuweStart, datum) + 1;
+    if (n < 1 || n > CHALLENGE.days) buitenVenster++;
+    dagen[datum] = { ...rec, day: n };
+  }
+  return { ...schrijf({ ...s, startDate: nieuweStart, days: dagen }), buitenVenster };
+}
+
 export function resetChallenge() {
   try { localStorage.removeItem(KEY); } catch { /* opslag */ }
   return null;

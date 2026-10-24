@@ -7,7 +7,8 @@
 //     mensen op dag 35 stoppen;
 //   · de foto hoort bij de dag en verdwijnt niet als zij het vinkje weghaalt.
 import { startChallenge, loadChallenge, resetChallenge, dayNumber, dateOfDay,
-  markDay, unmarkDay, markPhoto, challengeStatus, dailyMessage, challengeAsText,
+  markDay, unmarkDay, markPhoto, setStartDate, challengeStatus, dailyMessage,
+  challengeAsText,
   DONE_KIND } from '../../src/challenge75.js';
 import { CHALLENGE, CIRCUIT, CIRCUIT_TOTAL_SECONDS, RECOVERY_VERSION,
   PHASES, phaseForDay, MILESTONES } from '../../src/data/challenge75.js';
@@ -196,6 +197,56 @@ S('10 · De coachprompt krijgt de regels mee');
     /reken.*gemiste dag niet af/s.test(t), t.slice(-300));
   store();
   ok('niet gestart betekent geen blok', challengeAsText({ currentDate: START }) === null);
+}
+
+S('De startdatum alsnog goedzetten');
+{
+  // WAT ER MIS WAS
+  //
+  // De uitdaging werd aangezet om twee uur 's nachts: technisch zaterdag,
+  // voor haar nog vrijdagavond. Haar dag 1 werd daarmee een dag
+  // opgeschoven, en de teller klopte vanaf dag één niet meer met wat zij
+  // meemaakte. Zonder correctie kijk je 75 dagen naar een fout getal.
+  store();
+  startChallenge({ startDate: '2026-10-24' });
+  markDay('2026-10-24', { kind: DONE_KIND.CIRCUIT });
+  markPhoto('2026-10-24', { type: 'dag', photoId: 'p1' });
+  ok('voor de correctie is 24 oktober dag 1',
+    dayNumber('2026-10-24') === 1, String(dayNumber('2026-10-24')));
+
+  const na = setStartDate('2026-10-23');
+  ok('de startdatum is verzet', na.startDate === '2026-10-23', na.startDate);
+  ok('24 oktober is nu dag 2', dayNumber('2026-10-24') === 2,
+    String(dayNumber('2026-10-24')));
+  ok('en 23 oktober is dag 1', dayNumber('2026-10-23') === 1,
+    String(dayNumber('2026-10-23')));
+  ok('het afvinken blijft op zijn eigen datum staan',
+    na.days['2026-10-24']?.kind === DONE_KIND.CIRCUIT,
+    JSON.stringify(na.days));
+  ok('maar het dagnummer schuift mee', na.days['2026-10-24']?.day === 2,
+    String(na.days['2026-10-24']?.day));
+  ok('de foto blijft bij diezelfde dag', !!na.days['2026-10-24']?.photo);
+  ok('niets viel buiten het venster', na.buitenVenster === 0,
+    String(na.buitenVenster));
+
+  const st = challengeStatus({ currentDate: '2026-10-24' });
+  ok('de stand telt vandaag als dag 2', st.day === 2, String(st.day));
+  ok('en één afgeronde dag', st.doneCount === 1, String(st.doneCount));
+  ok('de einddatum schuift mee', st.endDate === addDays('2026-10-23', 74),
+    st.endDate);
+
+  // Een verschuiving die werk buiten het venster duwt, moet dat melden en
+  // niet stilletjes weggooien.
+  const ver = setStartDate('2026-01-01');
+  ok('een te grote verschuiving meldt wat erbuiten valt', ver.buitenVenster === 1,
+    String(ver.buitenVenster));
+  ok('en gooit de dag niet weg', !!ver.days['2026-10-24'],
+    JSON.stringify(Object.keys(ver.days)));
+
+  // En terug: de correctie is omkeerbaar.
+  const terug = setStartDate('2026-10-23');
+  ok('teruggezet klopt alles weer', terug.days['2026-10-24']?.day === 2
+    && terug.buitenVenster === 0, JSON.stringify(terug.days));
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
