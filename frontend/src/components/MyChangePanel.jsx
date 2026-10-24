@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { photoStore } from '../photoStore';
+import { photoStore, DAILY_TYPES, DAILY_LABELS } from '../photoStore';
+import { markPhoto } from '../challenge75';
 import { prepareImage } from '../imagePrep';
 import {
   PHOTO_VIEWS, PHOTO_INSTRUCTIONS, VISUAL_OBSERVATIONS,
@@ -218,6 +219,57 @@ export default function MyChangePanel({
   const [shootDate, setShootDate] = useState(null);
   const [zoom, setZoom] = useState(null);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [fotoMelding, setFotoMelding] = useState('');
+
+  // ── Een foto die in de verkeerde reeks staat ──────────────────
+  //
+  // Bij het starten van de 75-dagenuitdaging belandde een dagfoto tussen de
+  // wekelijkse progressiefoto's. Dat was mijn fout in de opslag, maar het
+  // punt is algemener: een foto kan in de verkeerde reeks terechtkomen, en
+  // dan hoort zij dat zelf recht te kunnen zetten zonder dat er iemand in
+  // de database graaft.
+  //
+  // Verplaatsen en niet kopiëren: twee exemplaren van dezelfde foto in twee
+  // reeksen maakt beide reeksen onbetrouwbaar. En de volgorde is bewust —
+  // eerst opslaan op de nieuwe plek, pas daarna weghalen van de oude.
+  async function naarChallenge(datum, viewKey, foto) {
+    if (!foto?.base64) return;
+    try {
+      const dagelijks = await photoStore.getDaily?.() || [];
+      const bezet = new Set(dagelijks.filter(p => p.date === datum).map(p => p.type));
+      const plek = DAILY_TYPES.find(t => !bezet.has(t));
+      if (!plek) {
+        setFotoMelding(`Bij ${formatNLLong(datum)} staan al twee dagfoto's. `
+          + 'Vervang er daar eerst één, of verwijder deze.');
+        return;
+      }
+      if (!window.confirm(`Deze foto verplaatsen naar de 75-dagenreeks `
+        + `(${DAILY_LABELS[plek]} van ${formatNLLong(datum)})? `
+        + 'Hij verdwijnt dan hier uit je progressiefoto\'s.')) return;
+      const uit = await photoStore.save(datum, plek, foto.base64,
+        foto.mimeType || 'image/jpeg',
+        { source: 'challenge75', movedFrom: viewKey });
+      markPhoto(datum, { type: plek, photoId: uit?.photoId || null });
+      await photoStore.delete(datum, viewKey);
+      setFotoMelding(`Verplaatst naar de 75-dagenreeks als ${DAILY_LABELS[plek]} `
+        + `van ${formatNLLong(datum)}.`);
+      onReload?.();
+    } catch {
+      setFotoMelding('Verplaatsen lukte niet. Probeer het nog eens.');
+    }
+  }
+
+  async function verwijderFoto(datum, viewKey) {
+    if (!window.confirm(`Deze foto van ${formatNLLong(datum)} definitief verwijderen? `
+      + 'Dat kan niet ongedaan worden gemaakt.')) return;
+    try {
+      await photoStore.delete(datum, viewKey);
+      setFotoMelding(`Foto van ${formatNLLong(datum)} verwijderd.`);
+      onReload?.();
+    } catch {
+      setFotoMelding('Verwijderen lukte niet. Probeer het nog eens.');
+    }
+  }
 
   const story = useMemo(
     () => changeStory({ sessions, measurements, logs, currentDate }),
@@ -313,8 +365,13 @@ export default function MyChangePanel({
       <div className="os-card" style={{ marginBottom: 12 }}>
         <PhotoSessions sessions={sessions} logs={logs} onOpen={setZoom}
           onShoot={(datum) => setShootDate(datum)}
+          onMove={naarChallenge} onRemove={verwijderFoto}
           lege={<>Nog geen foto&apos;s. Eén serie van voor, zij, achter en gezicht is
             genoeg om te beginnen — over vier weken heb je er iets aan.</>} />
+        {fotoMelding && (
+          <div data-foto-melding style={{ fontSize: 11, color: 'var(--sage)',
+            marginTop: 8, lineHeight: 1.5 }}>{fotoMelding}</div>
+        )}
         {comp.available && comp.note && (
           <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 8 }}>
             {comp.note}

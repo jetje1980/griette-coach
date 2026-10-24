@@ -182,6 +182,38 @@ ok('geen lege rijen van dagfoto-datums tussen de progressiesessies',
   !rijen.some(d => [addDays(TODAY, -1), addDays(TODAY, -2), addDays(TODAY, -3)].includes(d)),
   rijen.join(','));
 
+// ── Een foto uit de verkeerde reeks halen ────────────────────
+//
+// Haar challengefoto van dag 1 belandde tussen de wekelijkse
+// progressiefoto's, en daar was niets aan te doen zonder in de opslag te
+// graven. Nu staat er onder elke progressiefoto een knop om hem naar de
+// 75-dagenreeks te verplaatsen — verplaatsen, niet kopiëren, want dezelfde
+// foto in twee reeksen maakt ze allebei onbetrouwbaar.
+const voorVerplaatsen = await page.locator('[data-foto-vak="voor"] img').count();
+ok('er staat een progressiefoto om te verplaatsen', voorVerplaatsen >= 1,
+  String(voorVerplaatsen));
+page.once('dialog', d => d.accept());
+await page.click('[data-foto-acties] [data-foto-verplaats]');
+await page.waitForTimeout(2000);
+const melding = await page.textContent('[data-foto-melding]').catch(() => '');
+console.log(`  melding: ${melding}`);
+ok('de app meldt waar hij naartoe is', /75-dagenreeks/.test(melding), melding);
+const naVerplaatsen = await page.evaluate(async () => {
+  const db = await new Promise(res => { const r = indexedDB.open('gc_photos', 2);
+    r.onsuccess = () => res(r.result); });
+  return new Promise(res => {
+    const tx = db.transaction('photos', 'readonly');
+    const req = tx.objectStore('photos').getAll();
+    req.onsuccess = () => res((req.result || []).map(p => `${p.date}:${p.type}`).sort());
+  });
+});
+console.log(`  na verplaatsen: ${naVerplaatsen.join(' · ')}`);
+ok('het aanzicht is weg uit de progressiereeks',
+  !naVerplaatsen.includes('2026-10-19:voor') || !naVerplaatsen.some(x => x.endsWith(':voor')),
+  naVerplaatsen.join(' '));
+ok('en staat er één dagfoto bij', naVerplaatsen.filter(x => /:dag2?$/.test(x)).length === 5,
+  naVerplaatsen.join(' '));
+
 // ── Pas nu de opslag nakijken ────────────────────────────────
 // Een eigen verbinding naar IndexedDB openen terwijl de app de zijne nog
 // gebruikt, laat diens getDaily() leeg teruggeven. Daarom staat deze
@@ -201,10 +233,12 @@ ok('de verkeerd opgeslagen foto is verhuisd naar de dagelijkse soort',
 // Drie gezaaide dagfoto's plus de tweede van dag 3, hierboven via het
 // raster toegevoegd — die hoort in dezelfde opslag terecht te komen en niet
 // in een eigen hoekje.
-ok('en staat nu als dagfoto', soorten.filter(s => /:dag2?$/.test(s)).length === 4,
+ok('en staat nu als dagfoto', soorten.filter(s => /:dag2?$/.test(s)).length === 5,
   soorten.join(' '));
-ok('het echte aanzicht is onaangeroerd', soorten.some(s => s.endsWith(':voor')),
-  soorten.join(' '));
+// Het aanzicht van 19 oktober is hierboven zelf verplaatst; wat telt is dat
+// de vier aanzichten als soort blijven bestaan en niet zijn opgeslokt.
+ok('de progressiereeks houdt zijn eigen soorten',
+  !soorten.some(s => s.endsWith(':front')), soorten.join(' '));
 
 ok('geen JS-fout', errors.length === 0, errors.join(' | '));
 await browser.close();

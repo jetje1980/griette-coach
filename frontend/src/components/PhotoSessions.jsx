@@ -33,6 +33,11 @@ import { weightNear } from '../bodyProgress';
 
 const src = (p) => (p ? `data:${p.mimeType};base64,${p.base64}` : null);
 
+const miniKnop = {
+  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+  fontSize: 8.5, color: 'var(--sage)', fontWeight: 700, lineHeight: 1.2,
+};
+
 // Hoeveel rijen er eerst getoond worden. Meer is één tik.
 export const EERSTE_LADING = 8;
 
@@ -41,8 +46,15 @@ function korteDatum(datum) {
   return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
 }
 
+// onMove / onRemove zijn optioneel. Ze staan er omdat een foto in de
+// verkeerde reeks terecht kan komen — dat is hier ook gebeurd: een
+// challengefoto belandde tussen de wekelijkse progressiefoto's. Zonder
+// deze twee kon zij dat niet zelf rechtzetten en moest er in de opslag
+// gegraven worden. Verplaatsen staat vóór verwijderen, want een foto hoort
+// niet weggegooid te worden als hij alleen op de verkeerde plek staat.
 export default function PhotoSessions({
   sessions = [], onOpen, onShoot, lege = null, stap = EERSTE_LADING, logs = null,
+  onMove = null, onRemove = null,
 }) {
   const [zichtbaar, setZichtbaar] = useState(stap);
 
@@ -138,6 +150,23 @@ export default function PhotoSessions({
                     )}
                     <div style={{ fontSize: 9, color: 'var(--ghost)', textAlign: 'center',
                       marginTop: 2 }}>{v.label}</div>
+                    {foto && (onMove || onRemove) && (
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: 6,
+                        marginTop: 1 }} data-foto-acties={`${sessie.date}_${v.key}`}>
+                        {onMove && (
+                          <button type="button" data-foto-verplaats
+                            title="Deze foto hoort bij de 75-dagenreeks"
+                            onClick={() => onMove(sessie.date, v.key, foto)}
+                            style={miniKnop}>→ 75 dagen</button>
+                        )}
+                        {onRemove && (
+                          <button type="button" data-foto-verwijder
+                            title="Deze foto verwijderen"
+                            onClick={() => onRemove(sessie.date, v.key, foto)}
+                            style={{ ...miniKnop, color: 'var(--ghost)' }}>×</button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
