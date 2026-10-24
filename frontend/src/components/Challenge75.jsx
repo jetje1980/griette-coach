@@ -6,6 +6,7 @@ import { loadChallenge, startChallenge, challengeStatus, dailyMessage,
 import { photoStore, DAILY_TYPE } from '../photoStore';
 import { downscaleForStorage } from '../imageDownscale';
 import { todayLocal } from '../datetime';
+import Challenge75Grid from './Challenge75Grid';
 
 // De 75-dagenkaart: wat je vandaag doet, afvinken, de foto, en wat er
 // verandert.
@@ -283,6 +284,9 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
             borderRadius: 6, border: '1px solid var(--border)', background: 'transparent',
             color: 'var(--text)', fontFamily: 'inherit', boxSizing: 'border-box' }} />
       )}
+
+      {/* ── Alle 75 dagen, en afvinken per dag ──────────────── */}
+      <Challenge75Grid currentDate={currentDate} onChanged={ververs} />
 
       {/* ── Hoe dit naast het hardlopen staat ───────────────── */}
       <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 8,
