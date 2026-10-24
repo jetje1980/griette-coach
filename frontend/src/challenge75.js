@@ -153,9 +153,22 @@ export function markPhoto(datum, { type = 'dag', photoId = null } = {}) {
   const n = dayNumber(datum, s);
   if (!n) return s;
   const dagen = { ...(s.days || {}) };
-  dagen[datum] = { ...(dagen[datum] || { day: n }), day: n,
-    photo: { type, photoId, at: new Date().toISOString() } };
+  const rec = dagen[datum] || { day: n };
+  // Twee plekken per dag. Wat er al stond (één `photo`) blijft gelden als de
+  // eerste plek, zodat een bestaande dag niet ineens leeg lijkt.
+  const fotos = { ...(rec.photos || (rec.photo ? { [rec.photo.type || 'dag']: rec.photo } : {})) };
+  fotos[type] = { type, photoId, at: new Date().toISOString() };
+  dagen[datum] = { ...rec, day: n, photos: fotos,
+    // `photo` blijft meelopen voor alles wat nog één foto per dag verwacht.
+    photo: fotos.dag || rec.photo || fotos[type] };
   return schrijf({ ...s, days: dagen });
+}
+
+// Hoeveel foto's staan er bij een dag? Leest beide vormen.
+export function photosOf(rec) {
+  if (!rec) return [];
+  if (rec.photos) return Object.values(rec.photos);
+  return rec.photo ? [rec.photo] : [];
 }
 
 // ── De stand ────────────────────────────────────────────────────
@@ -167,7 +180,11 @@ export function challengeStatus({ currentDate = todayLocal() } = {}) {
   const vandaagNr = dayNumber(currentDate, s);
   const dagen = s.days || {};
   const gedaan = Object.values(dagen).filter(d => d.kind);
-  const metFoto = Object.values(dagen).filter(d => d.photo);
+  const metFoto = Object.values(dagen).filter(d => photosOf(d).length);
+  // Het aantal foto's is sinds er twee per dag kunnen iets anders dan het
+  // aantal dagen mét foto. Beide worden geteld, want ze beantwoorden een
+  // andere vraag: hoeveel dagen heb ik vastgelegd, en hoeveel beelden heb ik.
+  const fotoTotaal = Object.values(dagen).reduce((a, d) => a + photosOf(d).length, 0);
 
   // Opeenvolgend vanaf vandaag terug. Deze teller is informatief, niet de
   // maat waarop iets afhangt — zie regel 2 bovenaan.
@@ -206,9 +223,11 @@ export function challengeStatus({ currentDate = todayLocal() } = {}) {
     beforeStart: voorStart,
     doneToday: !!dagen[currentDate]?.kind,
     kindToday: dagen[currentDate]?.kind || null,
-    photoToday: !!dagen[currentDate]?.photo,
+    photoToday: photosOf(dagen[currentDate]).length > 0,
+    photosToday: photosOf(dagen[currentDate]).length,
     doneCount: gedaan.length,
     photoCount: metFoto.length,
+    photoTotal: fotoTotaal,
     recoveryCount: gedaan.filter(d => d.kind === DONE_KIND.RECOVERY).length,
     extraCount: gedaan.filter(d => d.kind === DONE_KIND.EXTRA).length,
     streak: aanEenStuk,

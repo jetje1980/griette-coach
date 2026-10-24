@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CHALLENGE, phaseForDay, PHASES } from '../data/challenge75';
 import { loadChallenge, dateOfDay, markDay, unmarkDay, DONE_KIND } from '../challenge75';
+import { photoStore } from '../photoStore';
+import DagFotos from './DagFotos';
 import { todayLocal, formatNLLong } from '../datetime';
 
 // Alle 75 dagen in één raster, en per dag afvinken.
@@ -53,6 +55,27 @@ export default function Challenge75Grid({ currentDate = todayLocal(), onChanged 
   const state = useMemo(() => loadChallenge(), [tick]);
   const vandaag = todayLocal();
 
+  // Of er een foto bij een dag hoort, staat op twee plekken: in de reeks
+  // (markPhoto) en in de fotoopslag zelf. Die twee kunnen uit elkaar lopen —
+  // een foto die vóór deze versie is opgeslagen staat wél in de opslag maar
+  // niet in de reeks. De foto's zelf zijn de waarheid, dus die worden hier
+  // gelezen en met de reeks samengevoegd. Eén bron per feit, en als er toch
+  // twee zijn, wint het bewijs boven de boekhouding.
+  // Per dag hóeveel foto's er staan — er kunnen er twee zijn.
+  const [fotodagen, setFotodagen] = useState(() => new Map());
+  useEffect(() => {
+    let levend = true;
+    photoStore.getDaily?.()
+      .then(l => {
+        if (!levend) return;
+        const m = new Map();
+        for (const p of l || []) m.set(p.date, (m.get(p.date) || 0) + 1);
+        setFotodagen(m);
+      })
+      .catch(() => {});
+    return () => { levend = false; };
+  }, [tick]);
+
   const dagen = useMemo(() => {
     if (!state?.startDate) return [];
     return Array.from({ length: CHALLENGE.days }, (_, i) => {
@@ -60,12 +83,16 @@ export default function Challenge75Grid({ currentDate = todayLocal(), onChanged 
       const datum = dateOfDay(nr, state);
       const rec = state.days?.[datum] || null;
       return {
-        nr, datum, kind: rec?.kind || null, foto: !!rec?.photo,
+        nr, datum, kind: rec?.kind || null,
+        // De foto's in de opslag zijn het bewijs; de boekhouding in de reeks
+        // is de terugval als de opslag nog niet gelezen is.
+        fotos: fotodagen.get(datum)
+          ?? (rec?.photos ? Object.keys(rec.photos).length : (rec?.photo ? 1 : 0)),
         toekomst: datum > vandaag, isVandaag: datum === vandaag,
         gemist: datum < vandaag && !rec?.kind,
       };
     });
-  }, [state, vandaag, tick]);
+  }, [state, vandaag, tick, fotodagen]);
 
   if (!state?.startDate) return null;
 
@@ -127,10 +154,17 @@ export default function Challenge75Grid({ currentDate = todayLocal(), onChanged 
                     opacity: d.toekomst ? 0.55 : 1,
                   }}>
                   {d.nr}
-                  {d.foto && (
-                    <span style={{ position: 'absolute', bottom: 1, left: '50%',
-                      transform: 'translateX(-50%)', width: 3, height: 3,
-                      borderRadius: 99, background: k ? k.fg : 'var(--sage)' }} />
+                  {/* Eén stipje per foto: zo zie je in één oogopslag welke
+                      dagen er maar één hebben. */}
+                  {d.fotos > 0 && (
+                    <span style={{ position: 'absolute', bottom: 2, left: 0, right: 0,
+                      display: 'flex', justifyContent: 'center', gap: 2 }}
+                      data-dag-fotos={d.fotos}>
+                      {Array.from({ length: Math.min(d.fotos, 2) }, (_, i) => (
+                        <span key={i} style={{ width: 3, height: 3, borderRadius: 99,
+                          background: k ? k.fg : 'var(--sage)' }} />
+                      ))}
+                    </span>
                   )}
                 </button>
               );
@@ -159,7 +193,7 @@ export default function Challenge75Grid({ currentDate = todayLocal(), onChanged 
               </div>
               <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginTop: 1 }}>
                 {phaseForDay(detail.nr).label}
-                {detail.foto ? ' · foto gemaakt' : ''}
+                {` · ${detail.fotos} van 2 foto's`}
               </div>
 
               {detail.toekomst ? (
@@ -188,13 +222,16 @@ export default function Challenge75Grid({ currentDate = todayLocal(), onChanged 
                         </button>
                       ))}
                   </div>
-                  {!detail.isVandaag && (
-                    <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 6,
-                      lineHeight: 1.45 }}>
-                      Een foto bij deze dag voeg je toe via Vandaag → "← Een eerdere dag
-                      alsnog invullen", want daar hoort de dag zelf bij.
-                    </div>
-                  )}
+                  {/* ── De foto's bij déze dag ────────────────────
+                      Hier stond een verwijzing naar "een eerdere dag alsnog
+                      invullen" op Vandaag. Dat is drie schermen ver voor één
+                      foto, en het is precies de vraag die zij stelde: waar
+                      voeg ik ze toe? Nu: hier, bij de dag waar ze bij horen,
+                      allebei, en ook te vervangen als er al een staat. */}
+                  <div style={{ marginTop: 8 }}>
+                    <DagFotos date={detail.datum} dayNr={detail.nr}
+                      onChanged={ververs} />
+                  </div>
                 </>
               )}
             </div>

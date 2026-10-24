@@ -1486,6 +1486,10 @@ function TabFreedom() {
 // ═══════════════════════════════════════════════════════════════
 export default function ProgressieScreen({ logs, streak }) {
   const [activeTab, setActiveTab] = useState(0);
+  // Een teller zodat de fotofeed opnieuw leest zodra er op de kaart erboven
+  // een foto bij komt. Zonder dit bleef de feed de stand van het moment van
+  // openen tonen — je voegt een foto toe en ziet hem niet verschijnen.
+  const [feedTik, setFeedTik] = useState(0);
   const [sessions, setSessions] = useState([]);
   const [measurements, setMeasurements] = useState([]);
 
@@ -1543,8 +1547,8 @@ export default function ProgressieScreen({ logs, streak }) {
           stand kan niet uit elkaar lopen. */}
       {activeTab === 4 && (
         <>
-          <Challenge75 currentDate={todayStr()} />
-          <DailyFeed currentDate={todayStr()} />
+          <Challenge75 currentDate={todayStr()} onChanged={() => setFeedTik(t => t + 1)} />
+          <DailyFeed currentDate={todayStr()} refreshKey={feedTik} />
         </>
       )}
       {activeTab === 5 && <TabEnergie logs={logs} />}

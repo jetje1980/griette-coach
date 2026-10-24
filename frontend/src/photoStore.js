@@ -101,9 +101,26 @@ const PHOTO_TYPES = ['voor', 'zij', 'achter', 'gezicht'];
 // doel en een ander ritme — en hij krijgt zijn eigen tijdlijn.
 export const DAILY_TYPE = 'dag';
 
+// ── Twee foto's per dag ─────────────────────────────────────────
+//
+// Zij wil er elke dag twee kunnen maken. Dat is geen luxe: één beeld van
+// voren zegt weinig over een middel dat strakker wordt, en twee hoeken op
+// hetzelfde moment vergelijken veel eerlijker dan twee hoeken op
+// verschillende dagen.
+//
+// Het blijft een eigen reeks, los van de wekelijkse progressiefoto's — die
+// hebben vier vaste aanzichten, een ander ritme en een ander doel. Hier
+// zijn het gewoon twee plekken per dag; wat erop staat bepaalt zij.
+//
+// 'dag' blijft de eerste plek en verandert niet van naam: alles wat al is
+// opgeslagen (haar foto van dag 2) blijft precies waar het staat.
+export const DAILY_TYPE_2 = 'dag2';
+export const DAILY_TYPES = [DAILY_TYPE, DAILY_TYPE_2];
+export const DAILY_LABELS = { [DAILY_TYPE]: 'foto 1', [DAILY_TYPE_2]: 'foto 2' };
+
 // Alle soorten die teruggehaald moeten worden. De vier aanzichten plus de
 // dagelijkse: zonder deze lijst blijft een hele reeks op één toestel staan.
-const ALL_TYPES = [...PHOTO_TYPES, DAILY_TYPE];
+const ALL_TYPES = [...PHOTO_TYPES, ...DAILY_TYPES];
 
 // ── Namen uit een eerdere versie ────────────────────────────────
 //
@@ -148,8 +165,11 @@ export function photoPath({ prefix, date, type, id, ext }) {
 }
 
 // Het nieuwe pad herken je aan de aanzichtmap: .../{datum}/{type}/{id}.{ext}
+// Langste naam eerst: anders knabbelt 'dag' aan 'dag2' en moet de regex
+// terugkrabbelen om alsnog te kloppen. Dat werkt, maar het is het soort
+// detail dat bij de volgende soort wél misgaat.
 const NEW_LAYOUT = new RegExp(
-  `/\\d{4}-\\d{2}-\\d{2}/(?:${ALL_TYPES.join('|')})/[^/]+\\.[A-Za-z0-9]+$`);
+  `/\\d{4}-\\d{2}-\\d{2}/(?:${[...ALL_TYPES].sort((a, b) => b.length - a.length).join('|')})/[^/]+\\.[A-Za-z0-9]+$`);
 
 export function isNewLayout(path) {
   return !!path && NEW_LAYOUT.test(path);
@@ -305,9 +325,12 @@ export const photoStore = {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readonly');
       const req = tx.objectStore(STORE).getAll();
+      // Beide dagplekken, nieuwste dag eerst en binnen een dag foto 1 vóór
+      // foto 2 — zo staat een dag in de feed altijd in dezelfde volgorde.
       req.onsuccess = () => resolve((req.result || [])
-        .filter(p => p.type === DAILY_TYPE)
-        .sort((a, b) => b.date.localeCompare(a.date)));
+        .filter(p => DAILY_TYPES.includes(p.type))
+        .sort((a, b) => b.date.localeCompare(a.date)
+          || a.type.localeCompare(b.type)));
       req.onerror = () => reject(req.error);
     });
   },
@@ -328,8 +351,11 @@ export const photoStore = {
       req.onsuccess = () => res(req.result || []);
       req.onerror = () => rej(req.error);
     });
+    // DAILY_TYPES en niet DAILY_TYPE: anders wordt de tweede dagfoto ('dag2')
+    // gezien als verkeerd opgeslagen en over de eerste heen geschreven — een
+    // verhuizing die een foto wist in plaats van redt.
     const teVerhuizen = alle.filter(p =>
-      p.type === 'front' || (p.source === 'challenge75' && p.type !== DAILY_TYPE));
+      p.type === 'front' || (p.source === 'challenge75' && !DAILY_TYPES.includes(p.type)));
     if (!teVerhuizen.length) return { moved: 0 };
 
     for (const p of teVerhuizen) {

@@ -2,9 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { CHALLENGE, CIRCUIT, CIRCUIT_TOTAL_SECONDS, RECOVERY_VERSION }
   from '../data/challenge75';
 import { loadChallenge, startChallenge, challengeStatus, dailyMessage,
-  markDay, unmarkDay, markPhoto, setStartDate, DONE_KIND } from '../challenge75';
-import { photoStore, DAILY_TYPE } from '../photoStore';
-import { downscaleForStorage } from '../imageDownscale';
+  markDay, unmarkDay, setStartDate, DONE_KIND } from '../challenge75';
+import DagFotos from './DagFotos';
 import { todayLocal, formatNLLong, daysBetween } from '../datetime';
 import Challenge75Grid from './Challenge75Grid';
 
@@ -27,7 +26,6 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
   const [tick, setTick] = useState(0);
   const [openCircuit, setOpenCircuit] = useState(false);
   const [openHerstel, setOpenHerstel] = useState(false);
-  const [bezig, setBezig] = useState(false);
   const [melding, setMelding] = useState('');
   const [tweede, setTweede] = useState('');
   const [datumOpen, setDatumOpen] = useState(false);
@@ -71,32 +69,6 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
         </div>
       </div>
     );
-  }
-
-  async function fotoVanDaag(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBezig(true); setMelding('');
-    try {
-      // Verkleinen vóór opslaan. Haar eerste challengefoto was 2,65 MB
-      // tegenover 260 kB voor een progressiefoto; over 75 dagen is dat
-      // 200 MB in IndexedDB én in de cloud, en dan loopt het quotum vol of
-      // struikelt de feed. Zie imageDownscale.js.
-      const klein = await downscaleForStorage(file);
-      // DAILY_TYPE en niet een aanzicht: deze reeks staat los van de
-      // wekelijkse progressiefoto's. Zie photoStore.
-      const uit = await photoStore.save(currentDate, DAILY_TYPE, klein.base64,
-        klein.mimeType, { source: 'challenge75', day: st.day,
-          resized: klein.resized, originalBytes: klein.originalBytes });
-      markPhoto(currentDate, { type: DAILY_TYPE, photoId: uit?.photoId || null });
-      ververs();
-      const maat = klein.note ? ` ${klein.note}` : '';
-      setMelding((uit?.ok === false
-        ? 'Foto staat op dit toestel. Online opslaan lukte nog niet — hij gaat mee zodra er verbinding is.'
-        : `Foto van dag ${st.day} bewaard.`) + maat);
-    } catch {
-      setMelding('Die foto kon niet worden gelezen. Probeer een andere.');
-    } finally { setBezig(false); }
   }
 
   function afvinken(kind) {
@@ -222,25 +194,19 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
 
       {/* ── De foto van vandaag ──────────────────────────────── */}
       <div style={{ paddingTop: 8, borderTop: '1px solid var(--border)', marginBottom: 4 }}>
-        {st.photoToday ? (
-          <div style={{ fontSize: 11.5, color: 'var(--sage)' }} data-challenge-foto="ja">
-            ✓ foto van dag {st.day} staat erbij
-          </div>
-        ) : (
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontSize: 11.5, color: 'var(--gold)', cursor: 'pointer', fontWeight: 600 }}
-            data-challenge-foto="nee">
-            📷 {bezig ? 'bezig…' : `Foto van dag ${st.day} toevoegen`}{!isVandaag ? ' (achteraf)' : ''}
-            <input type="file" accept="image/*" onChange={fotoVanDaag} disabled={bezig}
-              style={{ display: 'none' }} />
-          </label>
-        )}
-        <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45, marginTop: 3 }}>
-          Zelfde plek, zelfde licht, zelfde moment van de dag. Dagelijks zie je niets —
-          over 75 dagen zie je het verschil alleen als de omstandigheden gelijk zijn.
-          Deze reeks staat apart van je wekelijkse progressiefoto's — je vindt hem
-          onder Progressie → 75 dagen.
+        {/* Twee plekken per dag, allebei altijd zichtbaar. Hier stond één
+            knop die verdween zodra er een foto stond — en dan is "waar voeg
+            ik de foto toe?" een terechte vraag met een onzichtbaar antwoord. */}
+        <div style={{ fontSize: 11, color: 'var(--sub)', marginBottom: 4 }}
+          data-challenge-foto={st.photoToday ? 'ja' : 'nee'}>
+          Dag {st.day}: {st.photosToday} van 2 foto's{!isVandaag ? ' (achteraf)' : ''}
         </div>
+        <DagFotos date={currentDate} dayNr={st.day} onChanged={ververs}
+          uitleg={'Zelfde plek, zelfde licht, zelfde moment van de dag. Dagelijks zie je '
+            + 'niets — over 75 dagen zie je het verschil alleen als de omstandigheden '
+            + 'gelijk zijn. Wat je op de twee plekken zet, bepaal je zelf: bijvoorbeeld '
+            + 'van voren en van opzij. Deze reeks staat apart van je wekelijkse '
+            + "progressiefoto's — je vindt hem onder Progressie → 75 dagen."} />
       </div>
 
       {melding && (

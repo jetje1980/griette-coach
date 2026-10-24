@@ -120,6 +120,59 @@ ok('en de uitleg dat dit los staat van de progressiefoto\'s',
 ok('vergelijken van eerste naast laatste kan',
   await page.locator('[data-feed-vergelijk]').count() === 1);
 
+// ── Twee foto's per dag, vanuit het raster ───────────────────
+//
+// Zij vroeg waar ze de foto's toevoegt, en daarna: ik wil er elke dag twee
+// kunnen uploaden. Op de dagkaart kon er één, en alleen voor vandaag, en
+// alleen zolang er nog géén foto stond. Nu zitten beide plekken bij de dag
+// zelf — ook bij een dag van vorige week.
+await page.click('[data-challenge-raster-knop]'); await page.waitForTimeout(600);
+
+// Let op de scope: de kaart zelf toont óók twee fotoplekken (die van
+// vandaag). Alles wat hier wordt aangewezen staat in het dagvenster van
+// het raster, anders test je per ongeluk de kaart van vandaag.
+const D = '[data-challenge-dagdetail] ';
+
+await page.click('[data-dag="2"]'); await page.waitForTimeout(600);
+ok('een eerdere dag heeft twee fotoplekken',
+  await page.locator(`${D}[data-dagfoto]`).count() === 2,
+  String(await page.locator(`${D}[data-dagfoto]`).count()));
+ok('de eerste plek is gevuld',
+  await page.getAttribute(`${D}[data-dagfoto="dag"]`, 'data-dagfoto-staat') === 'ja',
+  String(await page.getAttribute(`${D}[data-dagfoto="dag"]`, 'data-dagfoto-staat')));
+ok('en de tweede staat klaar',
+  await page.getAttribute(`${D}[data-dagfoto="dag2"]`, 'data-dagfoto-staat') === 'nee',
+  String(await page.getAttribute(`${D}[data-dagfoto="dag2"]`, 'data-dagfoto-staat')));
+
+// Dag 3 is gisteren, en heeft al één foto. Precies haar geval: er staat er
+// één, en ze wil er een tweede bij op dezelfde dag.
+await page.click('[data-dag="3"]'); await page.waitForTimeout(600);
+ok('een dag met één foto houdt één plek open',
+  await page.locator(`${D}[data-dagfoto][data-dagfoto-staat="nee"]`).count() === 1,
+  String(await page.locator(`${D}[data-dagfoto][data-dagfoto-staat="nee"]`).count()));
+await page.setInputFiles(`${D}[data-dagfoto="dag2"] input[type=file]`, {
+  name: 'tweede.png', mimeType: 'image/png', buffer: Buffer.from(PIXEL, 'base64') });
+await page.waitForTimeout(1800);
+ok('na toevoegen staan er twee bij die dag',
+  await page.locator(`${D}[data-dagfoto][data-dagfoto-staat="ja"]`).count() === 2,
+  await page.textContent('[data-challenge-dagdetail]').catch(() => ''));
+const bijDag3 = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('gc_challenge75') || '{}').days || {};
+  const rec = Object.values(d).find(x => x.day === 3);
+  return rec ? Object.keys(rec.photos || {}) : [];
+});
+ok('de tweede is vastgelegd bij dag 3', bijDag3.includes('dag2'), JSON.stringify(bijDag3));
+ok('het vakje in het raster toont twee stipjes',
+  await page.getAttribute('[data-dag="3"] [data-dag-fotos]', 'data-dag-fotos') === '2',
+  String(await page.getAttribute('[data-dag="3"] [data-dag-fotos]', 'data-dag-fotos')));
+
+// En in de feed staan het twee losse beelden van dezelfde dag.
+await page.waitForTimeout(600);
+const plekken = await page.evaluate(() => [...document.querySelectorAll('[data-feed-foto="3"]')]
+  .map(e => e.getAttribute('data-feed-plek')).sort());
+ok('de feed toont beide plekken van dag 3 apart',
+  plekken.join(',') === 'dag,dag2', JSON.stringify(plekken));
+
 // En nu de progressiesessies: daar mag geen dagfoto in staan
 await klik('Body'); await page.waitForTimeout(1500);
 const rijen = await page.evaluate(() => [...document.querySelectorAll('[data-foto-rij]')]
@@ -134,7 +187,7 @@ ok('geen lege rijen van dagfoto-datums tussen de progressiesessies',
 // gebruikt, laat diens getDaily() leeg teruggeven. Daarom staat deze
 // controle achteraan, en niet tussen het laden en de feed.
 const soorten = await page.evaluate(async () => {
-  const db = await new Promise(res => { const r = indexedDB.open('gc_photos', 3);
+  const db = await new Promise(res => { const r = indexedDB.open('gc_photos', 2);
     r.onsuccess = () => res(r.result); });
   return new Promise(res => {
     const tx = db.transaction('photos', 'readonly');
@@ -145,11 +198,13 @@ const soorten = await page.evaluate(async () => {
 console.log(`  opslag: ${soorten.join(' · ')}`);
 ok('de verkeerd opgeslagen foto is verhuisd naar de dagelijkse soort',
   !soorten.some(s => s.endsWith(':front')), soorten.join(' '));
-ok('en staat nu als dagfoto', soorten.filter(s => s.endsWith(':dag')).length === 3,
+// Drie gezaaide dagfoto's plus de tweede van dag 3, hierboven via het
+// raster toegevoegd — die hoort in dezelfde opslag terecht te komen en niet
+// in een eigen hoekje.
+ok('en staat nu als dagfoto', soorten.filter(s => /:dag2?$/.test(s)).length === 4,
   soorten.join(' '));
 ok('het echte aanzicht is onaangeroerd', soorten.some(s => s.endsWith(':voor')),
   soorten.join(' '));
-
 
 ok('geen JS-fout', errors.length === 0, errors.join(' | '));
 await browser.close();
