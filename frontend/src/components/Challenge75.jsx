@@ -4,6 +4,7 @@ import { CHALLENGE, CIRCUIT, CIRCUIT_TOTAL_SECONDS, RECOVERY_VERSION }
 import { loadChallenge, startChallenge, challengeStatus, dailyMessage,
   markDay, unmarkDay, markPhoto, DONE_KIND } from '../challenge75';
 import { photoStore, DAILY_TYPE } from '../photoStore';
+import { downscaleForStorage } from '../imageDownscale';
 import { todayLocal } from '../datetime';
 
 // De 75-dagenkaart: wat je vandaag doet, afvinken, de foto, en wat er
@@ -58,21 +59,22 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
     if (!file) return;
     setBezig(true); setMelding('');
     try {
-      const base64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(String(r.result).split(',')[1]);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
+      // Verkleinen vóór opslaan. Haar eerste challengefoto was 2,65 MB
+      // tegenover 260 kB voor een progressiefoto; over 75 dagen is dat
+      // 200 MB in IndexedDB én in de cloud, en dan loopt het quotum vol of
+      // struikelt de feed. Zie imageDownscale.js.
+      const klein = await downscaleForStorage(file);
       // DAILY_TYPE en niet een aanzicht: deze reeks staat los van de
       // wekelijkse progressiefoto's. Zie photoStore.
-      const uit = await photoStore.save(currentDate, DAILY_TYPE, base64, file.type,
-        { source: 'challenge75', day: st.day });
+      const uit = await photoStore.save(currentDate, DAILY_TYPE, klein.base64,
+        klein.mimeType, { source: 'challenge75', day: st.day,
+          resized: klein.resized, originalBytes: klein.originalBytes });
       markPhoto(currentDate, { type: DAILY_TYPE, photoId: uit?.photoId || null });
       ververs();
-      setMelding(uit?.ok === false
+      const maat = klein.note ? ` ${klein.note}` : '';
+      setMelding((uit?.ok === false
         ? 'Foto staat op dit toestel. Online opslaan lukte nog niet — hij gaat mee zodra er verbinding is.'
-        : `Foto van dag ${st.day} bewaard.`);
+        : `Foto van dag ${st.day} bewaard.`) + maat);
     } catch {
       setMelding('Die foto kon niet worden gelezen. Probeer een andere.');
     } finally { setBezig(false); }
