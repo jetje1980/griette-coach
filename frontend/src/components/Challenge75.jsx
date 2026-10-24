@@ -116,7 +116,8 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
           {st.finished ? '75' : st.day}
         </div>
         <div style={{ fontSize: 12, color: 'var(--sub)', flex: 1 }}>
-          van {st.totalDays} · {st.doneCount} afgerond · {st.photoCount} foto's
+          van {st.totalDays} · {st.doneCount} afgerond · {st.photoCount}
+          {st.photoCount === 1 ? ' foto' : " foto's"}
           {!isVandaag && (
             <div style={{ fontSize: 10.5, color: 'var(--gold)' }}>
               je kijkt naar {currentDate} — achteraf invullen kan hier
