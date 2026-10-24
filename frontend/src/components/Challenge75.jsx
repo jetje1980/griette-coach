@@ -3,7 +3,7 @@ import { CHALLENGE, CIRCUIT, CIRCUIT_TOTAL_SECONDS, RECOVERY_VERSION }
   from '../data/challenge75';
 import { loadChallenge, startChallenge, challengeStatus, dailyMessage,
   markDay, unmarkDay, markPhoto, DONE_KIND } from '../challenge75';
-import { photoStore } from '../photoStore';
+import { photoStore, DAILY_TYPE } from '../photoStore';
 import { todayLocal } from '../datetime';
 
 // De 75-dagenkaart: wat je vandaag doet, afvinken, de foto, en wat er
@@ -64,9 +64,11 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
         r.onerror = rej;
         r.readAsDataURL(file);
       });
-      const uit = await photoStore.save(currentDate, 'front', base64, file.type,
+      // DAILY_TYPE en niet een aanzicht: deze reeks staat los van de
+      // wekelijkse progressiefoto's. Zie photoStore.
+      const uit = await photoStore.save(currentDate, DAILY_TYPE, base64, file.type,
         { source: 'challenge75', day: st.day });
-      markPhoto(currentDate, { type: 'front', photoId: uit?.photoId || null });
+      markPhoto(currentDate, { type: DAILY_TYPE, photoId: uit?.photoId || null });
       ververs();
       setMelding(uit?.ok === false
         ? 'Foto staat op dit toestel. Online opslaan lukte nog niet — hij gaat mee zodra er verbinding is.'
@@ -163,7 +165,8 @@ export default function Challenge75({ currentDate = todayLocal(), onChanged }) {
         <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45, marginTop: 3 }}>
           Zelfde plek, zelfde licht, zelfde moment van de dag. Dagelijks zie je niets —
           over 75 dagen zie je het verschil alleen als de omstandigheden gelijk zijn.
-          De foto's komen in je bestaande fotovergelijking terecht.
+          Deze reeks staat apart van je wekelijkse progressiefoto's — je vindt hem
+          onder Progressie → 75 dagen.
         </div>
       </div>
 

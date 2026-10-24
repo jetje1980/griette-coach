@@ -21,6 +21,26 @@ function openDB() {
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = () => reject(req.error);
+
+    // ── Een geblokkeerde opening hing stil ─────────────────────
+    //
+    // Hier stonden alleen onsuccess en onerror. Houdt een ander tabblad de
+    // database nog open op een oudere versie, dan vuurt IndexedDB
+    // `onblocked` en géén van die twee: de belofte bleef dan eeuwig open
+    // staan, en elk scherm dat op een foto wachtte bleef leeg zonder
+    // melding. Dat is precies het soort stille leegte waar je als
+    // gebruiker niets aan kunt doen omdat je niet weet dát er iets wacht.
+    //
+    // Ik liep hiertegenaan in een test die een tweede verbinding opende.
+    // Twee tabbladen van deze app is net zo goed twee verbindingen.
+    req.onblocked = () => reject(new Error(
+      'De fotodatabase is in gebruik door een ander tabblad van deze app. '
+      + 'Sluit dat tabblad en probeer het opnieuw.'));
+
+    // En een harde bovengrens, voor het geval de browser noch success, noch
+    // error, noch blocked geeft. Liever een nette fout dan een scherm dat
+    // blijft laden.
+    setTimeout(() => reject(new Error('De fotodatabase reageerde niet.')), 8000);
   });
 }
 
@@ -62,6 +82,29 @@ export async function userPrefix() {
 // een herstelactie stilzwijgend overgeslagen.
 const PHOTO_TYPES = ['voor', 'zij', 'achter', 'gezicht'];
 
+// ── De dagelijkse challengefoto is een eigen soort ──────────────
+//
+// WAT ER MIS WAS
+//
+// De 75-dagenfoto werd opgeslagen als type 'front'. Dat is geen aanzicht
+// uit PHOTO_TYPES, dus:
+//
+//   · in de progressieschermen verscheen hij nergens (die filteren op de
+//     vier aanzichten), maar de datum verscheen wél als fotosessie — een
+//     lege rij "0/4" tussen haar echte progressiesessies;
+//   · restoreFromCloud loopt de mappen per aanzicht af, en een map die
+//     niet in de lijst staat wordt stilzwijgend overgeslagen. Op een nieuw
+//     toestel zouden de challengefoto's dus niet terugkomen.
+//
+// Nu is het een eigen soort met een eigen naam. Hij hoort niet tussen de
+// wekelijkse progressiefoto's — dat is een andere reeks, met een ander
+// doel en een ander ritme — en hij krijgt zijn eigen tijdlijn.
+export const DAILY_TYPE = 'dag';
+
+// Alle soorten die teruggehaald moeten worden. De vier aanzichten plus de
+// dagelijkse: zonder deze lijst blijft een hele reeks op één toestel staan.
+const ALL_TYPES = [...PHOTO_TYPES, DAILY_TYPE];
+
 function newPhotoId() {
   return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -72,7 +115,7 @@ export function photoPath({ prefix, date, type, id, ext }) {
 
 // Het nieuwe pad herken je aan de aanzichtmap: .../{datum}/{type}/{id}.{ext}
 const NEW_LAYOUT = new RegExp(
-  `/\\d{4}-\\d{2}-\\d{2}/(?:${PHOTO_TYPES.join('|')})/[^/]+\\.[A-Za-z0-9]+$`);
+  `/\\d{4}-\\d{2}-\\d{2}/(?:${ALL_TYPES.join('|')})/[^/]+\\.[A-Za-z0-9]+$`);
 
 export function isNewLayout(path) {
   return !!path && NEW_LAYOUT.test(path);
@@ -193,6 +236,12 @@ export const photoStore = {
     return res;
   },
 
+  // De progressiesessies: uitsluitend de vier aanzichten.
+  //
+  // Hier stond geen filter, en daardoor maakte één foto van een ander soort
+  // een lege sessierij tussen haar echte progressiesessies. Een reeks die
+  // iets toont wat er niet bij hoort, is een reeks die je niet meer
+  // vertrouwt.
   async getAll() {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -201,6 +250,7 @@ export const photoStore = {
       req.onsuccess = () => {
         const byDate = {};
         for (const p of req.result) {
+          if (!PHOTO_TYPES.includes(p.type)) continue;
           if (!byDate[p.date]) byDate[p.date] = {};
           byDate[p.date][p.type] = p;
         }
@@ -211,6 +261,59 @@ export const photoStore = {
       };
       req.onerror = () => reject(req.error);
     });
+  },
+
+  // ── De dagelijkse reeks ──────────────────────────────────────
+  // Nieuwste eerst, want zo kijk je naar een feed. Het dagnummer komt uit
+  // de uitdaging zelf en wordt hier niet opnieuw berekend.
+  async getDaily() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve((req.result || [])
+        .filter(p => p.type === DAILY_TYPE)
+        .sort((a, b) => b.date.localeCompare(a.date)));
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  // Eenmalige verhuizing van de foto's die als 'front' waren opgeslagen.
+  //
+  // Dat was mijn fout: de eerste versie van de 75-dagenkaart schreef type
+  // 'front' in plaats van een eigen soort. Haar foto van dag 1 staat zo in
+  // haar opslag, en die hoort niet verloren te gaan en niet tussen de
+  // progressiesessies te blijven staan. Deze functie draait bij het
+  // opstarten, doet niets als er niets te verhuizen is, en raakt de vier
+  // aanzichten nooit aan.
+  async migrateDailyPhotos() {
+    const db = await openDB();
+    const alle = await new Promise((res, rej) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => rej(req.error);
+    });
+    const teVerhuizen = alle.filter(p =>
+      p.type === 'front' || (p.source === 'challenge75' && p.type !== DAILY_TYPE));
+    if (!teVerhuizen.length) return { moved: 0 };
+
+    for (const p of teVerhuizen) {
+      await new Promise(done => {
+        const tx = db.transaction(STORE, 'readwrite');
+        const st = tx.objectStore(STORE);
+        st.put({ ...p, id: `${p.date}_${DAILY_TYPE}`, type: DAILY_TYPE });
+        st.delete(p.id);
+        tx.oncomplete = done;
+        tx.onerror = done;
+      });
+      // Opnieuw uploaden onder het juiste pad; het oude pad blijft staan en
+      // doet geen kwaad, maar dit zorgt dat een nieuw toestel hem terugvindt.
+      try {
+        await uploadToCloud(p.date, DAILY_TYPE, p.base64, p.mimeType, p.photoId);
+      } catch { /* komt mee bij de volgende pushMissingToCloud */ }
+    }
+    return { moved: teVerhuizen.length };
   },
 
   async delete(date, type) {
@@ -347,7 +450,7 @@ export const photoStore = {
               path: `${folderPath}/${entry.name}`,
               photoId: null,
             });
-          } else if (PHOTO_TYPES.includes(entry.name)) {
+          } else if (ALL_TYPES.includes(entry.name)) {
             // Map per aanzicht: {type}/{id}.{ext}. Bij meerdere bestanden
             // wint de nieuwste — het scherm toont er één per aanzicht.
             const { data: files } = await supabase.storage.from(BUCKET)

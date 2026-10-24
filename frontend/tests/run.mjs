@@ -42,6 +42,10 @@ function node(cmd, args, opties = {}) {
 // ── Draaien de node-suites? ─────────────────────────────────────
 function draaiNode() {
   const bestanden = readdirSync(join(hier, 'node')).filter(f => f.endsWith('.js'))
+    // Bestanden die met een liggend streepje beginnen zijn hulpmiddelen
+    // (zoals _storage-stub.js), geen suites.
+    .filter(f => !f.startsWith('_'))
+    .filter(f => !f.endsWith('.bundle.mjs'))
     .filter(f => !filter || f.includes(filter)).sort();
   const uit = [];
   for (const f of bestanden) {

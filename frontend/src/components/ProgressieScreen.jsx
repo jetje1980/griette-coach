@@ -17,6 +17,7 @@ import SubTabs from './SubTabs';
 import RunForecastPanel from './RunForecastPanel';
 import RunDashboard from './RunDashboard';
 import StrengthPanel from './StrengthPanel';
+import DailyFeed from './DailyFeed';
 import MyChangePanel from './MyChangePanel';
 import BodyCheckIn from './BodyCheckIn';
 import WhyPanel from './WhyPanel';
@@ -29,7 +30,9 @@ import { measuredPaces } from '../easyPace';
 import { todayLocal } from '../datetime';
 
 // Zeven domeinen: Body · Run · Strength · Fresh · Money · Freedom · Routines
-const SUBTABS = ['Overzicht', 'Body', 'Run', 'Strength', 'Fresh', 'Money', 'Freedom', 'Routines', 'Tijdlijn'];
+// '75 dagen' staat direct na Strength: het is dagelijks krachtwerk, en de
+// fotoreeks hoort niet tussen de wekelijkse progressiefoto's onder Body.
+const SUBTABS = ['Overzicht', 'Body', 'Run', 'Strength', '75 dagen', 'Fresh', 'Money', 'Freedom', 'Routines', 'Tijdlijn'];
 
 const TRAIL_DATE = '2026-10-03';
 
@@ -1531,11 +1534,12 @@ export default function ProgressieScreen({ logs, streak }) {
           </ExpandSection>
         </>
       )}
-      {activeTab === 4 && <TabEnergie logs={logs} />}
-      {activeTab === 5 && <TabMoney />}
-      {activeTab === 6 && <TabFreedom />}
-      {activeTab === 7 && <TabRoutines />}
-      {activeTab === 8 && <TabTijdlijn sessions={sessions} logs={logs} />}
+      {activeTab === 4 && <DailyFeed currentDate={todayStr()} />}
+      {activeTab === 5 && <TabEnergie logs={logs} />}
+      {activeTab === 6 && <TabMoney />}
+      {activeTab === 7 && <TabFreedom />}
+      {activeTab === 8 && <TabRoutines />}
+      {activeTab === 9 && <TabTijdlijn sessions={sessions} logs={logs} />}
     </div>
   );
 }

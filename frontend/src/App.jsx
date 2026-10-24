@@ -120,6 +120,10 @@ export default function App() {
     // maken, dan pas opruimen.
     (async () => {
       await photoStore.restoreFromCloud().catch(() => 0);
+      // Eenmalige verhuizing van de challengefoto's die als 'front' waren
+      // opgeslagen — mijn fout in de eerste versie van de 75-dagenkaart.
+      // Doet niets als er niets te verhuizen is.
+      await photoStore.migrateDailyPhotos?.().catch(() => {});
       await photoStore.pushMissingToCloud?.().catch(() => {});
       await photoStore.migratePaths?.().catch(() => {});
     })();
