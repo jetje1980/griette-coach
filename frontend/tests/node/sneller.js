@@ -20,6 +20,7 @@ import './_storage-stub.js';
 import { hrPrescription } from '../../src/hrModel.js';
 import { stridesFor, STRIDES } from '../../src/raceplan.js';
 import { cadenceTarget, STAP_PCT, BOVENGRENS } from '../../src/cadence.js';
+import { prescribedPace } from '../../src/easyPace.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -165,6 +166,42 @@ S('6 · Zonder meting wordt er niets verzonnen');
   ]));
   ok('een sessie buiten het venster telt niet mee',
     cadenceTarget({ currentDate: TODAY }).known === false);
+}
+
+S('7 · Een doeltempo is geen trainingstempo');
+{
+  // WAT ER MIS WAS
+  //
+  // Haar doeltijd staat op 5 km in 35 minuten: 7:00/km. Haar snelste
+  // gemeten kilometer was 9:08 en haar rustige tempo ligt rond 10:30. Het
+  // voorschrift nam het doeltempo onvoorwaardelijk over, dus een blok van
+  // twee minuten "op 7:00" — in de praktijk een sprint voorbij VT2, met
+  // dagen herstel en geen enkele training van wat dit blok zou moeten doen.
+  const doel = { distanceKm: 5, targetTimeSec: 2100, targetPaceSecPerKm: 420 };
+  const easy = { available: true, paceMin: 10.5, usable: 4, note: 'gemeten' };
+
+  const p = prescribedPace({ purpose: 'FIVE_K_SPECIFIC', goal: doel, easy });
+  console.log(`      ${p.paceMin} min/km · ${p.source}`);
+  ok('het voorgeschreven tempo is niet het doeltempo', p.paceMin !== 7,
+    String(p.paceMin));
+  ok('maar anderhalve minuut onder haar rustige tempo', p.paceMin === 9,
+    String(p.paceMin));
+  ok('en dat is herkenbaar aan de bron', p.source === 'race_goal_capped', p.source);
+  ok('de uitleg noemt het doeltempo', /7:00/.test(p.why), p.why.slice(0, 120));
+  ok('en zegt dat het doel niet verlaagd is', /niet verlaagd/.test(p.why),
+    p.why.slice(-120));
+
+  // Een doel dat wél binnen bereik ligt, wordt gewoon voorgeschreven.
+  const dichtbij = { distanceKm: 5, targetTimeSec: 2850, targetPaceSecPerKm: 570 };
+  const q = prescribedPace({ purpose: 'FIVE_K_SPECIFIC', goal: dichtbij, easy });
+  ok('een haalbaar doeltempo blijft staan', q.paceMin === 9.5 && q.source === 'race_goal',
+    `${q.paceMin} ${q.source}`);
+
+  // Zonder gemeten tempo valt er niets te begrenzen; dan is het doel het
+  // enige wat er is, en dat hoort zichtbaar te blijven.
+  const r = prescribedPace({ purpose: 'FIVE_K_SPECIFIC', goal: doel,
+    easy: { available: false } });
+  ok('zonder meting blijft het doeltempo staan', r.paceMin === 7, String(r.paceMin));
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

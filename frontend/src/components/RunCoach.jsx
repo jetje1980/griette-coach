@@ -424,6 +424,9 @@ function bronTekst(source, easy) {
     capability: uitMeting,
     goal: 'uit je racedoel',
     race_goal: 'uit je racedoel',
+    // Het doeltempo lag verder onder het gemeten tempo dan in één blok
+    // uitvoerbaar is; de reden staat voluit in plan.paceWhy.
+    race_goal_capped: 'zo dicht bij je racedoel als nu uitvoerbaar is',
     between: 'tussen easy en racetempo in',
     fallback: 'voorlopig, nog geen meting',
     schema: 'voorlopig, nog geen meting',

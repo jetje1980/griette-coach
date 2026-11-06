@@ -173,6 +173,18 @@ export function measuredPaces({ logs = {}, currentDate = todayLocal() } = {}) {
   };
 }
 
+// Hoeveel sneller dan het gemeten rustige tempo een tempoblok hoogstens mag
+// zijn. Anderhalve minuut per kilometer is al fors: bij een rustig tempo van
+// 10:30 komt daar 9:00 uit, en dat is exact haar snelste gemeten kilometer.
+// Alles daarboven is geen tempoblok meer maar een poging.
+export const MAX_STAP_ONDER_EASY = 1.5;
+
+function fmtMin(min) {
+  if (min == null || !Number.isFinite(min)) return '—';
+  const totaal = Math.round(min * 60);
+  return `${Math.floor(totaal / 60)}:${String(totaal % 60).padStart(2, '0')}`;
+}
+
 export function prescribedPace({ purpose, goal = null, easy = null,
   logs = {}, currentDate = todayLocal() }) {
   const e = easy || easyRunPace({ logs, currentDate });
@@ -181,9 +193,43 @@ export function prescribedPace({ purpose, goal = null, easy = null,
 
   switch (purpose) {
     case 'FIVE_K_SPECIFIC':
-    case 'TEN_K_SPECIFIC':
+    case 'TEN_K_SPECIFIC': {
+      // ── Een doeltempo is geen trainingstempo ──────────────────
+      //
+      // WAT ER MIS WAS
+      //
+      // Hier werd het doeltempo onvoorwaardelijk voorgeschreven. Haar
+      // doeltijd staat op 5 km in 35 minuten — 7:00/km — terwijl haar
+      // snelste gemeten kilometer 9:08 was en haar rustige tempo rond
+      // 10:30 ligt. Een blok van 2 minuten "op 7:00" is dan geen
+      // tempoblok maar een sprint: de hartslag schiet voorbij VT2, het
+      // herstel kost dagen, en getraind wordt er niets van wat dit blok
+      // zou moeten trainen.
+      //
+      // Een doel mag ambitieus zijn. Een voorschrift moet uitvoerbaar
+      // zijn. Daarom: nooit meer dan anderhalve minuut per kilometer
+      // sneller dan het gemeten rustige tempo, en als het doel daarbuiten
+      // valt, staat dat er met zoveel woorden bij — want dan is niet de
+      // training te langzaam, maar het doel nog niet gedekt door bewijs.
+      if (raceMin == null) {
+        return { paceMin: null, source: 'unknown', why: 'nog geen doeltempo bekend' };
+      }
+      const doelTekst = `${goal?.distanceKm} km in ${Math.round(goal?.targetTimeSec / 60)} minuten`;
+      const haalbaar = easyMin != null ? easyMin - MAX_STAP_ONDER_EASY : null;
+      if (haalbaar != null && raceMin < haalbaar) {
+        return {
+          paceMin: +haalbaar.toFixed(2),
+          source: 'race_goal_capped',
+          why: `Je doeltempo (${fmtMin(raceMin)}/km voor ${doelTekst}) ligt `
+            + `${fmtMin(easyMin - raceMin)} per kilometer onder je gemeten rustige tempo `
+            + `(${fmtMin(easyMin)}/km). Dit blok loopt daarom op ${fmtMin(haalbaar)}/km: `
+            + 'merkbaar sneller, en uitvoerbaar. Het doel is niet verlaagd — het is nog '
+            + 'niet gedekt door wat je hebt laten zien.',
+        };
+      }
       return { paceMin: raceMin, source: 'race_goal',
-        why: `Het doeltempo van ${goal?.distanceKm} km in ${Math.round(goal?.targetTimeSec / 60)} minuten.` };
+        why: `Het doeltempo van ${doelTekst}.` };
+    }
     case 'QUALITY_LITE': {
       if (easyMin == null) return { paceMin: null, source: 'unknown', why: 'nog geen gemeten easy tempo' };
       // Halverwege easy en racetempo, maar nooit sneller dan racetempo:
