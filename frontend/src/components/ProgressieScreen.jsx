@@ -11,6 +11,7 @@ import { coachPlan } from '../coachPlan';
 import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
 import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
 import { efficiencyTrend } from '../efficiency';
+import { efficiencyFactors } from '../efficiencyWhy';
 import { protectedHours } from './WeekScreen';
 import { store } from '../store';
 import { recoveryScore, runBuildScore, shapeScore, capacityLevel } from '../performance';
@@ -622,6 +623,9 @@ function TabHardlopen({ logs }) {
   const economy = paceAtHRTrend();
   // De loopblok-gebaseerde maat: zie het blok "Loopeconomie" verderop.
   const eff = efficiencyTrend({ currentDate: tod });
+  // Waaróm de ene sessie efficiënter was dan de andere: cyclusdag,
+  // rusthartslag en slaap naast elk meetpunt. Zie efficiencyWhy.js.
+  const effWhy = efficiencyFactors({ currentDate: tod, logs });
 
   const runWeekStreak = getRunWeekStreak(logs);
   const trailDays = daysBetween(tod, TRAIL_DATE);
@@ -737,6 +741,56 @@ function TabHardlopen({ logs }) {
             <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 5, lineHeight: 1.5 }}>
               {eff.note} Gemeten over {eff.count} sessie{eff.count === 1 ? '' : 's'}.
             </div>
+
+            {/* ── Waar kwam het verschil vandaan? ──────────────
+                Een efficiëntiegetal zonder context is een thermometer
+                zonder weerbericht. Hier staat per meetpunt de cyclusdag,
+                de rusthartslag van die ochtend en de slaap ernaast, zodat
+                een lager getal te herleiden is in plaats van alleen
+                verontrustend. */}
+            {effWhy.known && (
+              <div style={{ marginTop: 9, paddingTop: 8,
+                borderTop: '1px solid var(--border)' }} data-economie-waarom>
+                <div style={{ fontSize: 11.5, fontWeight: 800, marginBottom: 4 }}>
+                  {effWhy.line}
+                </div>
+                {effWhy.findings.filter(f => f.enough && f.meaningful).map(f => (
+                  <div key={f.id} style={{ fontSize: 11, color: 'var(--sub)',
+                    lineHeight: 1.5, marginBottom: 3 }} data-factor={f.id}>
+                    {f.note}
+                  </div>
+                ))}
+                {effWhy.findings.filter(f => f.enough && !f.meaningful).length > 0 && (
+                  <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.45 }}>
+                    {effWhy.findings.filter(f => f.enough && !f.meaningful)
+                      .map(f => f.label).join(', ')}: geen verschil tussen je betere en
+                    mindere sessies.
+                  </div>
+                )}
+
+                <div style={{ marginTop: 7 }}>
+                  {effWhy.points.map(p => (
+                    <div key={p.date} data-punt={p.date}
+                      style={{ display: 'flex', gap: 6, fontSize: 10.5,
+                        color: 'var(--sub)', padding: '2px 0',
+                        fontVariantNumeric: 'tabular-nums' }}>
+                      <span style={{ width: 44, color: 'var(--ghost)' }}>{p.date.slice(5)}</span>
+                      <span style={{ width: 38, fontWeight: 700 }}>{p.ef}</span>
+                      <span style={{ flex: 1 }}>
+                        rust {p.hr_rest ?? '—'}{p.hrFromNextDay ? '*' : ''}
+                        {p.sleep_hours != null ? ` · ${String(p.sleep_hours).replace('.', ',')} u` : ''}
+                        {p.cycleDay ? ` · dag ${p.cycleDay} ${p.phase}` : ''}
+                      </span>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 9.5, color: 'var(--ghost)', marginTop: 3,
+                    lineHeight: 1.45 }}>
+                    * rusthartslag van de ochtend erna, want een avondloop valt tussen
+                    twee metingen in. {effWhy.caveat}
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5 }}>

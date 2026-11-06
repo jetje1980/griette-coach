@@ -10,6 +10,7 @@
 import './_storage-stub.js';
 import { efficiencyOf, efficiencyTrend, paceAtHr } from '../../src/efficiency.js';
 import { pemFreeWeeks } from '../../src/symptoms.js';
+import { efficiencyFactors } from '../../src/efficiencyWhy.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -261,6 +262,101 @@ S('10 · Een meetfout is geen vormsprong');
     /hartslagmeter/.test(t.note), t.note.slice(-120));
   ok('zonder de uitbijter is de richting niet vertekend',
     t.direction !== 'beter', `${t.direction} ${t.deltaPct}%`);
+}
+
+S('11 · Waaróm was de ene sessie beter dan de andere?');
+{
+  // Zij vroeg of het cyclusgerelateerd kan zijn, of slaap, of een
+  // combinatie — en of dat terug te leiden is. Dat kan, zolang de app
+  // erbij zegt hoeveel sessies eronder liggen en dat samenhang geen
+  // oorzaak is.
+  globalThis.__testStorage.reset();
+  const loop = (datum, hr, meters) => ({ id: datum, date: datum,
+    laps: [{ avgHr: hr, distance: meters, movingTime: 480 }] });
+  const dagen = [
+    // datum, hartslag tijdens lopen, meters, rusthartslag, cyclusdag-start
+    [addDays(TODAY, -40), 140, 880, 59],
+    [addDays(TODAY, -34), 142, 875, 60],
+    [addDays(TODAY, -28), 144, 870, 61],
+    [addDays(TODAY, -16), 149, 830, 64],
+    [addDays(TODAY, -10), 150, 825, 65],
+    [addDays(TODAY, -4), 151, 820, 66],
+  ];
+  localStorage.setItem('gc_workouts', JSON.stringify(dagen.map(d => loop(d[0], d[1], d[2]))));
+  const logs = {};
+  for (const [d, , , rust] of dagen) logs[d] = { date: d, hr_rest: rust, sleep_quality: 2 };
+  // Eén menstruatiestart, zodat er cyclusdagen te berekenen zijn.
+  const start = addDays(TODAY, -42);
+  logs[start] = { date: start, cycle_day_one: true };
+  for (const [d, l] of Object.entries(logs)) localStorage.setItem(`gc_log_${d}`, JSON.stringify(l));
+
+  const r = efficiencyFactors({ currentDate: TODAY, logs });
+  ok('er is een uitspraak', r.known === true, JSON.stringify(r).slice(0, 160));
+  ok('elk meetpunt heeft zijn context', r.points.every(p => p.hr_rest != null),
+    JSON.stringify(r.points.map(p => p.hr_rest)));
+  ok('en een cyclusdag', r.points.every(p => p.cycleDay > 0),
+    JSON.stringify(r.points.map(p => p.cycleDay)));
+
+  const rust = r.findings.find(f => f.id === 'hr_rest');
+  console.log(`      ${rust.note}`);
+  ok('rusthartslag wordt vergeleken', rust.enough === true, JSON.stringify(rust));
+  ok('en is lager in de betere helft', rust.best < rust.worst, `${rust.best} vs ${rust.worst}`);
+  ok('dat wordt als bruikbaar benoemd', /vóór je de deur uitgaat/.test(rust.note), rust.note);
+
+  const slaap = r.findings.find(f => f.id === 'sleep_quality');
+  ok('een factor die niet meebeweegt wordt ook benoemd',
+    slaap.enough === true && slaap.meaningful === false, JSON.stringify(slaap));
+  ok('met zoveel woorden', /verklaart het verschil niet/.test(slaap.note), slaap.note);
+
+  ok('het aantal sessies staat in het voorbehoud', /6 sessies/.test(r.caveat), r.caveat);
+  ok('en samenhang wordt geen oorzaak genoemd',
+    /geen oorzaak/.test(r.caveat), r.caveat);
+  ok('het verschil wordt in tempo uitgedrukt', /per kilometer/.test(r.spread), r.spread);
+}
+
+S('12 · De rusthartslag van een avondloop staat in het log van morgen');
+{
+  // Een avondloop valt tussen twee ochtendmetingen in. Las de app alleen
+  // het log van de dag zelf, dan viel precies die sessie weg en meldde hij
+  // "te weinig ingevuld" terwijl het getal er wél was — dat gebeurde bij
+  // haar sessie van 18 oktober.
+  globalThis.__testStorage.reset();
+  const loop = (datum, hr, meters) => ({ id: datum, date: datum,
+    laps: [{ avgHr: hr, distance: meters, movingTime: 480 }] });
+  const data = [
+    [addDays(TODAY, -40), 140, 880, 59], [addDays(TODAY, -34), 142, 875, 60],
+    [addDays(TODAY, -28), 144, 870, 61], [addDays(TODAY, -16), 149, 830, 64],
+    [addDays(TODAY, -10), 150, 825, 65], [addDays(TODAY, -4), 151, 820, 66],
+  ];
+  localStorage.setItem('gc_workouts', JSON.stringify(data.map(d => loop(d[0], d[1], d[2]))));
+  const logs = {};
+  for (const [d, , , rust] of data) {
+    logs[d] = { date: d, sleep_quality: 2 };                 // geen rusthartslag
+    logs[addDays(d, 1)] = { date: addDays(d, 1), hr_rest: rust };  // wel de ochtend erna
+  }
+  for (const [d, l] of Object.entries(logs)) localStorage.setItem(`gc_log_${d}`, JSON.stringify(l));
+
+  const r = efficiencyFactors({ currentDate: TODAY, logs });
+  const rust = r.findings.find(f => f.id === 'hr_rest');
+  ok('de rusthartslag van de ochtend erna wordt gebruikt', rust.enough === true,
+    JSON.stringify(rust));
+  ok('en dat is zichtbaar gemarkeerd', r.points.every(p => p.hrFromNextDay === true),
+    JSON.stringify(r.points.map(p => p.hrFromNextDay)));
+}
+
+S('13 · Te weinig sessies geeft geen verband');
+{
+  globalThis.__testStorage.reset();
+  const loop = (datum, hr, meters) => ({ id: datum, date: datum,
+    laps: [{ avgHr: hr, distance: meters, movingTime: 480 }] });
+  localStorage.setItem('gc_workouts', JSON.stringify([
+    loop(addDays(TODAY, -10), 145, 850), loop(addDays(TODAY, -6), 146, 848),
+    loop(addDays(TODAY, -2), 147, 846),
+  ]));
+  const r = efficiencyFactors({ currentDate: TODAY, logs: {} });
+  ok('drie sessies is te weinig', r.known === false, JSON.stringify(r).slice(0, 120));
+  ok('met het aantal erbij', /3 sessies/.test(r.why), r.why);
+  ok('en wat er nodig is', /6/.test(r.why), r.why);
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
