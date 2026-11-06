@@ -36,7 +36,9 @@ import { todayLocal } from '../datetime';
 // Zeven domeinen: Body · Run · Strength · Fresh · Money · Freedom · Routines
 // '75 dagen' staat direct na Strength: het is dagelijks krachtwerk, en de
 // fotoreeks hoort niet tussen de wekelijkse progressiefoto's onder Body.
-const SUBTABS = ['Overzicht', 'Body', 'Run', 'Strength', '75 dagen', 'Fresh', 'Money', 'Freedom', 'Routines', 'Tijdlijn'];
+// Fresh en Routines zijn eruit: geen enkel opgeslagen gegeven, en
+// Routines stond ook al in Leven. Money en Freedom blijven.
+const SUBTABS = ['Overzicht', 'Body', 'Run', 'Strength', '75 dagen', 'Money', 'Freedom', 'Tijdlijn'];
 
 const TRAIL_DATE = '2026-10-03';
 
@@ -1029,167 +1031,6 @@ function TabHardlopen({ logs }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// TAB 3: ENERGIE
-// ═══════════════════════════════════════════════════════════════
-function TabEnergie({ logs }) {
-  const allLogs = Object.values(logs).sort((a, b) => b.date.localeCompare(a.date));
-  const recent30 = allLogs.slice(0, 30);
-
-  const avgEnergy = avg(recent30.map(l => l.energy).filter(x => x != null));
-  const avgSleep  = avg(recent30.map(l => l.sleep_hours).filter(x => x != null));
-  const avgBatt   = avg(recent30.map(l => l.battery_start).filter(x => x != null));
-
-  const pemDays = recent30.filter(l => l.symptom_pem).length;
-
-  // Sleep quality breakdown
-  const sleepCounts = [0, 1, 2, 3].map(q => ({
-    val: q,
-    label: ['Slecht', 'Matig', 'Goed', 'Top'][q],
-    count: recent30.filter(l => l.sleep_quality === q).length,
-  }));
-  const maxSleepCount = Math.max(...sleepCounts.map(s => s.count), 1);
-
-  // Consecutive logged streak
-  let logStreak = 0;
-  const tod = todayStr();
-  for (let i = 0; i < 90; i++) {
-    const d = new Date(tod);
-    d.setDate(d.getDate() - i);
-    const dk = d.toISOString().slice(0, 10);
-    if (logs[dk]) logStreak++;
-    else if (i > 0) break;
-  }
-
-  return (
-    <div>
-      <div className="os-section-label" style={{ marginTop: 0 }}>Gemiddelden (30 dagen)</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
-        {[
-          { label: 'Energie', val: avgEnergy != null ? avgEnergy.toFixed(1) : '—', sub: 'van 3', color: 'var(--sage)' },
-          { label: 'Slaap', val: avgSleep != null ? avgSleep.toFixed(1) : '—', sub: 'uren', color: 'var(--blue)' },
-          { label: 'Batterij', val: avgBatt != null ? Math.round(avgBatt) + '%' : '—', sub: 'start', color: 'var(--gold)' },
-        ].map(({ label, val, sub, color }) => (
-          <div key={label} className="os-card" style={{ textAlign: 'center', padding: '12px 8px' }}>
-            <div style={{ fontSize: 22, fontWeight: 900, fontFamily: 'var(--font-serif)', color }}>{val}</div>
-            <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 2 }}>{label}</div>
-            <div style={{ fontSize: 10, color: 'var(--ghost)' }}>{sub}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="os-section-label">Energie — 30 dagen</div>
-      <div className="os-card">
-        <EnergySparkline logs={logs} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ghost)', marginTop: 4 }}>
-          <span>leeg (0)</span>
-          <span>hoog (3)</span>
-        </div>
-      </div>
-
-      <div className="os-section-label">Slaapkwaliteit (30 dagen)</div>
-      <div className="os-card">
-        {sleepCounts.map(({ label, count }) => (
-          <div key={label} style={{ marginBottom: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12,
-              color: 'var(--sub)', marginBottom: 3 }}>
-              <span>{label}</span>
-              <span>{count}×</span>
-            </div>
-            <div style={{ height: 4, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${(count / maxSleepCount) * 100}%`,
-                background: 'var(--blue)', borderRadius: 99 }} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-        <div className="os-card" style={{ flex: 1, textAlign: 'center', padding: '12px 8px' }}>
-          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: 'var(--font-serif)',
-            color: pemDays > 2 ? 'var(--rust)' : 'var(--text)' }}>{pemDays}</div>
-          <div style={{ fontSize: 11, color: 'var(--sub)' }}>PEM-dagen (30d)</div>
-        </div>
-        <div className="os-card" style={{ flex: 1, textAlign: 'center', padding: '12px 8px' }}>
-          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: 'var(--font-serif)', color: 'var(--green)' }}>{logStreak}</div>
-          <div style={{ fontSize: 11, color: 'var(--sub)' }}>dagen gelogd (rij)</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// TAB 4: ROUTINES
-// ═══════════════════════════════════════════════════════════════
-function TabRoutines() {
-  const routines = (() => {
-    try { return JSON.parse(localStorage.getItem('gc_routines') || '[]'); } catch { return []; }
-  })();
-
-  const stages = [
-    { id: 'learning',  emoji: '🌱', label: 'Aan het leren',   color: 'var(--gold)' },
-    { id: 'stable',    emoji: '🌿', label: 'Stabiel',          color: 'var(--sage)' },
-    { id: 'automatic', emoji: '🌳', label: 'Automatisch',      color: 'var(--green)' },
-  ];
-
-  if (routines.length === 0) {
-    return (
-      <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--sub)', fontSize: 13 }}>
-        Nog geen routines bijgehouden.<br />
-        <span style={{ fontSize: 11, color: 'var(--ghost)' }}>Voeg ze toe via Leven → Routines.</span>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {/* Stage counts */}
-      <div className="os-section-label" style={{ marginTop: 0 }}>Status</div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {stages.map(s => {
-          const count = routines.filter(r => r.stage === s.id).length;
-          return (
-            <div key={s.id} className="os-card" style={{ flex: 1, textAlign: 'center', padding: '12px 8px' }}>
-              <div style={{ fontSize: 22, marginBottom: 2 }}>{s.emoji}</div>
-              <div style={{ fontSize: 22, fontWeight: 900, fontFamily: 'var(--font-serif)', color: s.color }}>
-                {count}
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.3 }}>
-                {s.label}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Per stage lists */}
-      {stages.map(s => {
-        const stageRoutines = routines.filter(r => r.stage === s.id);
-        if (!stageRoutines.length) return null;
-        return (
-          <React.Fragment key={s.id}>
-            <div className="os-section-label">{s.emoji} {s.label}</div>
-            <div className="os-card">
-              {stageRoutines.map(r => (
-                <div key={r.id} className="os-detail-row">
-                  <span className="os-dk">{r.name}</span>
-                  {r.trigger && <span className="os-dv" style={{ fontSize: 11, color: 'var(--ghost)' }}>
-                    na: {r.trigger}
-                  </span>}
-                </div>
-              ))}
-            </div>
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// TAB 5: TIJDLIJN
-// ═══════════════════════════════════════════════════════════════
 function TabTijdlijn({ sessions, logs }) {
   const tod = todayStr();
 
@@ -1677,11 +1518,9 @@ export default function ProgressieScreen({ logs, streak }) {
           <DailyFeed currentDate={todayStr()} refreshKey={feedTik} />
         </>
       )}
-      {activeTab === 5 && <TabEnergie logs={logs} />}
-      {activeTab === 6 && <TabMoney />}
-      {activeTab === 7 && <TabFreedom />}
-      {activeTab === 8 && <TabRoutines />}
-      {activeTab === 9 && <TabTijdlijn sessions={sessions} logs={logs} />}
+      {activeTab === 5 && <TabMoney />}
+      {activeTab === 6 && <TabFreedom />}
+      {activeTab === 7 && <TabTijdlijn sessions={sessions} logs={logs} />}
     </div>
   );
 }

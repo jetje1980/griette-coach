@@ -112,14 +112,18 @@ async function klik(tekst) {
 }
 
 // Hoofdschermen uit de navigatiebalk, en per scherm de subtabs.
+// Fresh en Routines zijn uit Progressie gehaald (geen opgeslagen gegevens,
+// en Routines stond ook in Leven); Geld en Glow uit Leven. Het tabblad
+// Ameland is erbij gekomen.
 const ROUTES = [
   ['Vandaag', []],
+  ['Ameland', []],
   ['Lichaam', ['Training', 'Herstel', 'Body', 'Cyclus', 'Voeding', 'Medicatie']],
-  ['Progressie', ['Overzicht', 'Body', 'Run', 'Strength', 'Fresh', 'Money', 'Freedom',
-    'Routines', 'Tijdlijn']],
+  ['Progressie', ['Overzicht', 'Body', 'Run', 'Strength', '75 dagen', 'Money', 'Freedom',
+    'Tijdlijn']],
   ['Week', []],
   ['Coach', []],
-  ['Leven', []],
+  ['Leven', ['Focus', 'Routines', 'Toekomst', 'Eten']],
 ];
 
 for (const [hoofd, subs] of ROUTES) {
