@@ -8,6 +8,7 @@ import { workoutImages } from './workoutImages';
 import { backfillFromHistory, scorePredictions } from './predictionLog';
 
 import VandaagScreen   from './components/VandaagScreen';
+import RacePlanScreen from './components/RacePlanScreen';
 import WeekScreen      from './components/WeekScreen';
 import LichaamScreen   from './components/LichaamScreen';
 import LevenScreen     from './components/LevenScreen';
@@ -20,7 +21,7 @@ import StravaCallback  from './components/StravaCallback';
 import { todayLocal, addDays } from './datetime';
 import { ingestStravaWorkouts, enrichRecentSegments, deriveSegmentsFromStreams } from './stravaIngest';
 
-const TABS = ['Vandaag', 'Week', 'Lichaam', 'Leven', 'Progressie', 'Coach'];
+const TABS = ['Vandaag', 'Ameland', 'Week', 'Lichaam', 'Leven', 'Progressie', 'Coach'];
 const MAX_FUTURE_DAYS = 90;
 
 // Kalenderdag in Europe/Amsterdam — nooit de UTC-datum, die rond
@@ -225,8 +226,14 @@ export default function App() {
           goToTab={setTab}
         />
       )}
-      {tab === 1 && <WeekScreen logs={logs} />}
-      {tab === 2 && (
+      {/* Het dagplan naar de race. Staat direct naast Vandaag omdat het de
+          vraag beantwoordt die zij elke dag stelt: wat moet ik vandaag doen
+          en waarom — met de weken eromheen zichtbaar. */}
+      {tab === 1 && (
+        <RacePlanScreen logs={logs} currentDate={currentDate} saveField={saveField} />
+      )}
+      {tab === 2 && <WeekScreen logs={logs} />}
+      {tab === 3 && (
         <LichaamScreen
           log={log}
           logs={logs}
@@ -239,9 +246,9 @@ export default function App() {
           isFuture={isFuture}
         />
       )}
-      {tab === 3 && <LevenScreen logs={logs} />}
-      {tab === 4 && <ProgressieScreen logs={logs} streak={streak} />}
-      {tab === 5 && <CoachScreen logs={logs} />}
+      {tab === 4 && <LevenScreen logs={logs} />}
+      {tab === 5 && <ProgressieScreen logs={logs} streak={streak} />}
+      {tab === 6 && <CoachScreen logs={logs} />}
     </>
   );
 }

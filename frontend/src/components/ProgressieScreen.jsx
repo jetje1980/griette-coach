@@ -412,7 +412,10 @@ function TabOverzicht({ logs, streak, sessions, goToTab }) {
       {trio && (
         <>
           <div className="os-section-label">Zichtbaar verschil</div>
-          <div className="os-card" style={{ cursor: 'pointer' }} onClick={() => goToTab(8)}>
+          {/* Naar Body: daar staan de fotosessies zelf. Dit wees naar
+              subtabblad 8 (Routines) — vermoedelijk blijven staan toen er
+              een tabblad tussen is geschoven. */}
+          <div className="os-card" style={{ cursor: 'pointer' }} onClick={() => goToTab(1)}>
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${trio.length}, 1fr)`, gap: 6 }}>
               {trio.map(t => (
                 <div key={t.label} style={{ textAlign: 'center' }}>

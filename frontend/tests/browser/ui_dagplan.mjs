@@ -1,0 +1,137 @@
+// Het dagplan naar Ameland in het echte scherm: staat het tabblad er,
+// klopt de inhoud, en komt een ingevuld veld werkelijk in het dagboek?
+import { chromium } from 'playwright';
+const BASE = 'http://127.0.0.1:4173/griette-coach/';
+let pass = 0, fail = 0;
+const ok = (n, c, e = '') => {
+  if (c) { pass++; console.log(`  ✓ ${n}`); }
+  else { fail++; console.log(`  ✗ ${n}${e ? ' — ' + String(e).slice(0, 250) : ''}`); }
+};
+const NL = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam',
+  year: 'numeric', month: '2-digit', day: '2-digit' });
+const TODAY = NL.format(new Date());
+const addDays = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n);
+  return x.toISOString().slice(0, 10); };
+
+// Een race over vijf weken, en genoeg geschiedenis om een niveau en een
+// cyclus uit te rekenen.
+const RACE = addDays(TODAY, 35);
+
+const loop = (datum, meters, sec, hr) => ({
+  id: `w_${datum}`, date: datum, activityType: 'run',
+  distance: +(meters / 1000).toFixed(2), duration: Math.round(sec / 60) + 5, averageHR: hr,
+  laps: [{ movingTime: sec, distance: meters, avgHr: hr }],
+});
+
+const seed = {
+  gc_onboarding_done: '1',
+  gc_race_goals: JSON.stringify([{ id: 'ameland', name: 'Ameland Adventure Run 5 km',
+    distanceKm: 5, targetTimeSec: 2100, date: RACE, type: 'TARGET', priority: 1,
+    enabled: true, terrain: 'trail' }]),
+  gc_workouts: JSON.stringify([
+    loop(addDays(TODAY, -19), 988, 480, 142),
+    loop(addDays(TODAY, -15), 935, 480, 147),
+    loop(addDays(TODAY, -13), 1000, 548, 144),
+    loop(TODAY, 1000, 525, 137),
+  ]),
+  gc_hr_settings: JSON.stringify({ easyLow: 106, easyHigh: 145, walkTrigger: 150,
+    resumeBelow: 105, recoveryHR: null, rpeEasy: 4, rpeThreshold: 6 }),
+  gc_auth_session: JSON.stringify({ access_token: 't', refresh_token: 't',
+    token_type: 'bearer', expires_in: 999999,
+    expires_at: Math.floor(Date.now() / 1000) + 999999,
+    user: { id: '00000000-0000-0000-0000-000000000001', email: 't@t.nl',
+      aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {} } }),
+};
+// Twee menstruatiestarts, zodat de laatluteale week te berekenen is.
+seed[`gc_log_${addDays(TODAY, -38)}`] = JSON.stringify({ date: addDays(TODAY, -38), cycle_day_one: true });
+seed[`gc_log_${addDays(TODAY, -10)}`] = JSON.stringify({ date: addDays(TODAY, -10), cycle_day_one: true });
+// Een oplopende rusthartslag, zodat het eetadvies scherp hoort te staan.
+[[-40, 54], [-38, 55], [-36, 57], [-4, 63], [-2, 64], [0, 66]].forEach(([d, hr]) => {
+  const datum = addDays(TODAY, d);
+  const bestaand = seed[`gc_log_${datum}`] ? JSON.parse(seed[`gc_log_${datum}`]) : { date: datum };
+  seed[`gc_log_${datum}`] = JSON.stringify({ ...bestaand, hr_rest: hr,
+    weight: d < -20 ? 63.5 : 61.5 });
+});
+
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
+const page = await b.newPage({ viewport: { width: 390, height: 900 } });
+const errors = [];
+page.on('pageerror', e => errors.push(String(e)));
+await page.route('**/*supabase.co/**', r => r.abort());
+await page.addInitScript(([d]) => {
+  for (const [k, v] of Object.entries(d)) localStorage.setItem(k, v);
+}, [seed]);
+
+console.log('\n████ Dagplan naar Ameland op het scherm ████\n');
+await page.goto(BASE, { waitUntil: 'networkidle' });
+await page.waitForTimeout(1800);
+
+const klik = async t => page.evaluate(x => {
+  const re = new RegExp(`^${x}$`, 'i');
+  const el = [...document.querySelectorAll('button, a, div, span')]
+    .find(e => re.test(e.textContent.trim()) && e.offsetHeight > 0);
+  el?.click(); return !!el;
+}, t);
+
+ok('er is een tabblad Ameland', await klik('Ameland'), 'tabblad niet gevonden');
+await page.waitForTimeout(1200);
+await page.waitForSelector('[data-raceplan]', { timeout: 8000 }).catch(() => {});
+
+const aantal = Number(await page.getAttribute('[data-raceplan]', 'data-raceplan'));
+ok('het plan loopt tot de race', aantal === 36, String(aantal));
+
+const weken = Number(await page.getAttribute('[data-weken]', 'data-weken'));
+ok('de weken staan er', weken >= 5, String(weken));
+const wekenTekst = await page.textContent('[data-weken]');
+console.log(`  weken: ${wekenTekst.replace(/\s+/g, ' ').slice(0, 150)}`);
+ok('met loop- en krachtdagen per week', /× lopen/.test(wekenTekst) && /× kracht/.test(wekenTekst));
+
+const knoppen = Number(await page.getAttribute('[data-knoppen]', 'data-knoppen'));
+ok('de knoppen om aan te draaien staan er', knoppen >= 4, String(knoppen));
+ok('met frequentie erbij', await page.locator('[data-knop="frequentie"]').count() === 1);
+ok('en eten', await page.locator('[data-knop="eten"]').count() === 1);
+const eten = await page.textContent('[data-knop="eten"]');
+ok('de eetknop noemt de oplopende rusthartslag',
+  /Rusthartslag \+/.test(eten), eten.replace(/\s+/g, ' ').slice(0, 140));
+
+// De dagkaarten
+const dagen = await page.locator('[data-dag]').count();
+ok('er staan dagkaarten', dagen >= 30, String(dagen));
+const vandaag = page.locator(`[data-dag="${TODAY}"]`);
+ok('vandaag staat erbij', await vandaag.count() === 1);
+ok('en staat open', await page.locator('[data-vandaag-let-op]').count() === 1,
+  'de kaart van vandaag hoort uitgeklapt te beginnen');
+const letop = await page.textContent('[data-vandaag-let-op]');
+ok('met de waarschuwing dat Vandaag leidend is', /op Vandaag/.test(letop), letop);
+
+// Een krachtdag heeft oefeningen
+const krachtDagen = await page.locator('[data-dag-soort="kracht"]').count();
+ok('er staan krachtdagen', krachtDagen >= 8, String(krachtDagen));
+
+// De race zelf
+const raceKaart = page.locator(`[data-dag="${RACE}"]`);
+ok('de racedag staat erin', await raceKaart.count() === 1);
+ok('en is als race gemarkeerd',
+  await page.getAttribute(`[data-dag="${RACE}"]`, 'data-dag-soort') === 'race',
+  String(await page.getAttribute(`[data-dag="${RACE}"]`, 'data-dag-soort')));
+
+// Invullen: een waarde moet in het dagboek belanden
+await vandaag.locator('[data-veld="stress_load"][data-waarde="1"]').click();
+await page.waitForTimeout(900);
+const opgeslagen = await page.evaluate((d) => {
+  try { return JSON.parse(localStorage.getItem(`gc_log_${d}`) || '{}'); } catch { return {}; }
+}, TODAY);
+ok('een ingevuld veld komt in het dagboek van die dag',
+  opgeslagen.stress_load === 1, JSON.stringify(opgeslagen).slice(0, 160));
+
+// En de uitleg bij een veld is op te vragen
+await vandaag.locator('text=Spanning vandaag').first().click();
+await page.waitForTimeout(400);
+const uitleg = await vandaag.textContent();
+ok('bij een veld staat wat ermee gebeurt',
+  /stressvolle dag|belasting/.test(uitleg), uitleg.replace(/\s+/g, ' ').slice(0, 200));
+
+ok('geen JS-fout', errors.length === 0, errors.join(' | '));
+await b.close();
+console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
+process.exit(fail ? 1 : 0);
