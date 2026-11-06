@@ -220,7 +220,7 @@ S('7 · De knoppen staan met hun werkelijke stand erbij');
   ok('elke knop heeft een gemeten stand',
     p.levers.every(k => !!k.stand && !!k.doel && !!k.waarom));
   const freq = p.levers.find(k => k.id === 'frequentie');
-  ok('de frequentie telt haar echte loopdagen', /loopdagen per week/.test(freq.stand),
+  ok('de frequentie telt haar echte loopdagen', /loopdag(en)? per week/.test(freq.stand),
     freq.stand);
   const eten = p.levers.find(k => k.id === 'eten');
   ok('de eetknop noemt de rusthartslag', /Rusthartslag/.test(eten.stand), eten.stand);
