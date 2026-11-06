@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { computeHeadCoach } from './CoachAdvice';
+import { racePlan } from '../racePlanDays';
+import { loadRaceGoals } from '../raceGoalModel';
 import { PERSONAL_EVENTS } from '../config';
 import { todayLocal } from '../datetime';
 
@@ -124,15 +126,6 @@ const DOT = { GREEN: 'os-dot-green', AMBER: 'os-dot-amber', BLUE: 'os-dot-blue',
 const DECISION_NL = { GREEN: 'Groen', AMBER: 'Amber', BLUE: 'Blauw', RED: 'Rood' };
 
 // ── training types ──────────────────────────────────────────────
-const TRAIN_TYPES = [
-  { id: 'run',   emoji: '🏃', label: 'Hardlopen' },
-  { id: 'walk',  emoji: '🚶', label: 'Wandelen' },
-  { id: 'swim',  emoji: '🏊', label: 'Zwemmen' },
-  { id: 'bike',  emoji: '🚴', label: 'Fietsen' },
-  { id: 'core',  emoji: '💪', label: 'Core' },
-  { id: 'rest',  emoji: '🛌', label: 'Rust' },
-  { id: 'free',  emoji: '🌿', label: 'Vrij' },
-];
 
 const FREE_BLOCKS = [
   { id: 'morning',  emoji: '🌅', label: 'Ochtend' },
@@ -329,17 +322,6 @@ function DayPlanEditor({ date, weekDates, onClose }) {
     update(key, cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
   }
 
-  // Training verplaatsen naar een andere dag — telt NIET als gemist
-  function moveTraining(targetDate) {
-    const target = getDayPlan(targetDate);
-    saveDayPlan(targetDate, { ...target, training: plan.training, kracht: plan.kracht });
-    const cleared = { ...plan, training: null, kracht: null };
-    saveDayPlan(date, cleared);
-    setPlan(cleared);
-    const td = new Date(targetDate + 'T12:00:00');
-    setMovedMsg(`Verplaatst naar ${NL_DAYS_FULL[td.getDay()]} ${td.getDate()} — telt niet als gemist`);
-    setTimeout(() => setMovedMsg(''), 3000);
-  }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 200,
@@ -354,60 +336,15 @@ function DayPlanEditor({ date, weekDates, onClose }) {
               color: 'var(--sub)', lineHeight: 1 }}>×</button>
         </div>
 
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
-            letterSpacing: '0.5px', fontWeight: 700, marginBottom: 8 }}>Training gepland</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-            {TRAIN_TYPES.map(t => (
-              <button key={t.id}
-                className={`os-scale-btn ${plan.training === t.id ? 'active' : ''}`}
-                onClick={() => update('training', plan.training === t.id ? null : t.id)}
-                style={{ padding: '10px 4px' }}>
-                <div style={{ fontSize: 18 }}>{t.emoji}</div>
-                <div style={{ fontSize: 10, marginTop: 3 }}>{t.label}</div>
-              </button>
-            ))}
-          </div>
+        {/* Training en kracht stonden hier als keuzeknoppen, en op Vandaag
+            ook. Daarmee waren er drie plekken die bepaalden wat je een dag
+            doet: hier, daar, en de coach zelf. Wat je traint komt uit het
+            dagplan naar de race en uit de dagkaart; hier plan je de dag
+            eromheen — beschermde tijd, werkblokken en herstel. */}
+        <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5,
+          marginBottom: 14 }} data-training-elders>
+          Je training voor deze dag staat in het tabblad Ameland en op Vandaag.
         </div>
-
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
-            letterSpacing: '0.5px', fontWeight: 700, marginBottom: 8 }}>Kracht gepland</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {KRACHT_OPTS.map(k => (
-              <button key={String(k.id)}
-                className={`os-toggle-chip ${(plan.kracht ?? null) === k.id ? 'active green' : ''}`}
-                onClick={() => update('kracht', k.id)}
-                style={{ fontSize: 12 }}>
-                {k.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {(plan.training || plan.kracht) && weekDates && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
-              letterSpacing: '0.5px', fontWeight: 700, marginBottom: 8 }}>Verplaats training naar…</div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-              {weekDates.filter(wd => wd !== date).map(wd => {
-                const wdd = new Date(wd + 'T12:00:00');
-                return (
-                  <button key={wd} className="os-toggle-chip" style={{ fontSize: 12 }}
-                    onClick={() => moveTraining(wd)}>
-                    {NL_DAYS[wdd.getDay()]} {wdd.getDate()}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--ghost)', marginTop: 5 }}>
-              Verplaatsen telt niet als gemist — het plan schuift gewoon mee.
-            </div>
-            {movedMsg && (
-              <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, marginTop: 5 }}>✓ {movedMsg}</div>
-            )}
-          </div>
-        )}
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
@@ -560,6 +497,19 @@ export default function WeekScreen({ logs }) {
   const currentMonday = addDays(monday, weekOffset * 7);
   const currentMonday_d = new Date(currentMonday + 'T12:00:00');
 
+  // Hetzelfde dagplan als het tabblad Ameland. Eén bron voor wat er op een
+  // dag gepland staat; dit scherm rekent er niets zelf meer bij.
+  const planPerDag = useMemo(() => {
+    const race = loadRaceGoals()
+      .filter(g => g.enabled !== false && g.date >= tod)
+      .sort((a, b) => a.date.localeCompare(b.date))[0] || null;
+    const p = racePlan({ currentDate: tod, logs: logs || {},
+      raceDate: race?.date || null, raceName: race?.name });
+    const m = new Map();
+    if (p.known) for (const d of p.days) m.set(d.date, d);
+    return m;
+  }, [tod, logs]);
+
   const days = Array.from({ length: 7 }, (_, i) => {
     const date  = addDays(currentMonday, i);
     const d     = new Date(date + 'T12:00:00');
@@ -585,11 +535,16 @@ export default function WeekScreen({ logs }) {
       headline = 'Vandaag';
       sub = 'Data invullen';
     } else if (future) {
-      const planned = dayPlan.training;
-      if (planned) {
-        const t = TRAIN_TYPES.find(x => x.id === planned);
-        headline = t ? `${t.emoji} ${t.label}` : 'Gepland';
+      // Uit hetzelfde dagplan als het tabblad Ameland, zodat de week niet
+      // iets anders zegt dan het plan.
+      const gepland = planPerDag.get(date);
+      if (gepland?.run) {
+        headline = `🏃 ${gepland.run.description}`;
         dotClass = 'os-dot-empty';
+      } else if (gepland?.strength) {
+        headline = `🏋️ ${gepland.strength.naam}`;
+      } else if (gepland?.kind === 'rust') {
+        headline = 'Rust';
       } else {
         headline = '—';
       }
@@ -622,8 +577,10 @@ export default function WeekScreen({ logs }) {
     const date = addDays(currentMonday, 7 + i);
     const d = new Date(date + 'T12:00:00');
     const plan = getDayPlan(date);
-    const t = plan.training ? TRAIN_TYPES.find(x => x.id === plan.training) : null;
-    return { date, d, emoji: t?.emoji || (plan.kracht ? '🏋️' : ''), protected: (plan.freeBlocks || []).length > 0 };
+    const gepland = planPerDag.get(date);
+    return { date, d,
+      emoji: gepland?.run ? '🏃' : gepland?.strength ? '🏋️' : '',
+      protected: (plan.freeBlocks || []).length > 0 };
   });
 
   const priorities = getPriorities(currentMonday);
@@ -636,8 +593,8 @@ export default function WeekScreen({ logs }) {
     return log && (log.run_done || log.core_done);
   }).length;
   const plannedTraining = days.filter(d => {
-    const plan = getDayPlan(d.date);
-    return plan.training && plan.training !== 'rest' && plan.training !== 'free';
+    const gepland = planPerDag.get(d.date);
+    return !!(gepland?.run || gepland?.strength);
   }).length;
 
   const upcoming = PERSONAL_EVENTS

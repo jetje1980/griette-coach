@@ -81,14 +81,25 @@ const MIN_SESSIE_SECONDEN = 480;
 // zodat zij zelf kan zeggen wat er die dag anders was.
 const UITBIJTER_AFWIJKING = 0.25;
 
+// Eén lap, twee schrijfwijzen.
+//
+// Deze app slaat laps op als movingTime/avgHr, maar laps die rechtstreeks
+// uit Strava komen heten moving_time/average_heartrate, en allBreakdowns
+// in pace.js leest allebei. Hier stond alleen de eerste, dus een sessie in
+// de andere schrijfwijze leverde stilzwijgend geen enkel loopblok op — en
+// dan zegt het scherm "nog geen sessies" terwijl de gegevens er zijn.
+const lapSeconden = (l) => Number(l?.movingTime ?? l?.moving_time ?? l?.elapsed_time);
+const lapMeters = (l) => Number(l?.distance);
+const lapHartslag = (l) => Number(l?.avgHr ?? l?.average_heartrate ?? l?.hr);
+
 function loopBlokken(w) {
   const laps = Array.isArray(w?.laps) ? w.laps : [];
   const uit = [];
   for (const l of laps) {
     if (l?.derivedKind === 'walk') continue;
-    const sec = Number(l?.movingTime);
-    const meter = Number(l?.distance);
-    const hr = Number(l?.avgHr);
+    const sec = lapSeconden(l);
+    const meter = lapMeters(l);
+    const hr = lapHartslag(l);
     if (!sec || !meter || !hr) continue;
     if (sec < MIN_BLOK_SECONDEN) continue;
     const mpm = meter / (sec / 60);

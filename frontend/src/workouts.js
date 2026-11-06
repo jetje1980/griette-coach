@@ -190,32 +190,12 @@ export function compareWithPrevious(workout) {
 
 // ── Pace@HR: running economy over tijd ──────────────────────────
 // Workouts met HR in aerobe band → pace-trend bij vergelijkbare hartslag
-export function paceAtHRTrend(hrLow = 120, hrHigh = 135, minObservations = 3) {
-  const pts = loadWorkouts()
-    // Alleen hardlooptrainingen. Zonder dit filter kwamen wandelingen in de
-    // tempotrend terecht: op haar data waren zes van de zeven punten Hikes
-    // van 11:49 tot 17:20 per kilometer, waarmee de hele racevoorspelling
-    // op wandeltempo werd gebouwd.
-    .filter(w => w.activityType === 'run' || w.activityType == null)
-    .filter(w => w.averageHR != null && w.averageHR >= hrLow && w.averageHR <= hrHigh)
-    .map(w => {
-      const pace = paceToMin(w.averagePace) ?? (w.distance && w.duration ? w.duration / w.distance : null);
-      return pace ? { date: w.date, pace, hr: w.averageHR } : null;
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  if (pts.length < minObservations) return { enough: false, count: pts.length, points: pts };
-  const first = pts.slice(0, Math.max(1, Math.floor(pts.length / 3)));
-  const last  = pts.slice(-Math.max(1, Math.floor(pts.length / 3)));
-  const avgP = (a) => a.reduce((s, p) => s + p.pace, 0) / a.length;
-  const avgH = (a) => Math.round(a.reduce((s, p) => s + p.hr, 0) / a.length);
-  return {
-    enough: true, count: pts.length, points: pts,
-    early: { pace: avgP(first), hr: avgH(first), from: first[0].date },
-    late:  { pace: avgP(last),  hr: avgH(last),  to: last[last.length - 1].date },
-    improvementSec: Math.round((avgP(first) - avgP(last)) * 60),
-  };
-}
+// paceAtHRTrend stond hier: een economietrend op SESSIEgemiddelden,
+// gefilterd op sessies met een gemiddelde hartslag tussen 120 en 135. Bij
+// haar sessies zit het inwandelen in dat gemiddelde, dus een wandeling van
+// 10:34/km bij hartslag 122 kwam binnen als loopeconomie. De meting zit nu
+// in efficiency.js (per loopblok) en de vorm die andere modules gebruiken
+// in pace.js runEconomyTrend.
 
 // ── Cardiac drift: alleen als eerste/tweede-helft HR beschikbaar is ──
 export function cardiacDrift(w) {

@@ -15,6 +15,7 @@
 // geen norm voor vandaag.
 
 import { loadWorkouts, paceToMin, fmtPace } from './workouts';
+import { efficiencyTrend } from './efficiency';
 import { loadHrSettings } from './goals';
 import { todayLocal, addDays } from './datetime';
 import { RUNS } from './data/runningSchema';
@@ -434,19 +435,36 @@ export function allBreakdowns({ limit = 20, currentDate = todayLocal() } = {}) {
 // Dit is de kernvisual van de hele hardloopcoach. Hij gebruikt
 // uitdrukkelijk het RUN pace, niet het sessietempo — anders meet je
 // vooral hoeveel je gewandeld hebt.
+// ── Loopeconomie: één meting, hier omgerekend ──────────────────
+//
+// WAT ER MIS WAS
+//
+// Er waren drie metingen van hetzelfde:
+//
+//   · deze functie, op het tempo en de hartslag van de loopblokken;
+//   · paceAtHRTrend in workouts.js, op het SESSIEgemiddelde, gefilterd op
+//     sessies met een gemiddelde hartslag tussen 120 en 135 — waardoor
+//     haar wandeling van 1 november (10:34/km bij 122) binnenkwam als
+//     loopeconomie;
+//   · efficiencyTrend in efficiency.js, op meters per minuut gedeeld door
+//     hartslag, per loopblok van minstens twee minuten, met een
+//     minimumduur per sessie en uitbijters apart.
+//
+// Drie bronnen voor één begrip betekent dat twee schermen elkaar vroeg of
+// laat tegenspreken — precies wat in deze app al vaker gebeurde. De
+// derde is de beste: hij scheidt lopen van wandelen, negeert sessies met
+// drie minuten lopen erin, en laat een meetfout niet voor vormverlies
+// doorgaan.
+//
+// Dus: efficiency.js is voortaan de meting. Deze functie blijft bestaan
+// omdat vier modules haar vorm gebruiken (gainSec, hrDrift, points), maar
+// rekent die vorm nu uit dezelfde bron. paceAtHRTrend is verwijderd.
 export function runEconomyTrend({ currentDate = todayLocal(), minObservations = 3 } = {}) {
-  const hr = loadHrSettings();
-  const points = allBreakdowns({ limit: 40, currentDate })
-    .map(b => {
-      // Hartslag van de loopblokken zelf, niet van de hele sessie.
-      const heart = b.runHr ?? (b.workout.averageHR != null ? Number(b.workout.averageHR) : null);
-      if (!b.runPace || heart == null) return null;
-      return { date: b.workout.date, runPace: b.runPace, hr: heart,
-        derived: b.derived, source: b.workout.source || 'manual' };
-    })
-    .filter(Boolean)
-    .filter(p => p.hr >= hr.easyLow - 6 && p.hr <= hr.easyHigh + 8)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const t = efficiencyTrend({ currentDate });
+  const points = (t.sessions || []).map(s => ({
+    date: s.date, runPace: s.paceMin, hr: s.avgHr, ef: s.ef,
+    derived: true, source: 'laps',
+  }));
 
   if (points.length < minObservations) {
     return {
@@ -475,6 +493,9 @@ export function runEconomyTrend({ currentDate = todayLocal(), minObservations = 
     late: { pace: latePace, hr: lateHr, to: late[late.length - 1].date },
     gainSec, hrDrift,
     honest: hrDrift <= 2,
+    // De verhouding zelf erbij: dat is het getal waarop de app stuurt.
+    efficiency: t.current ?? null,
+    efficiencyDeltaPct: t.deltaPct ?? null,
     verdict: gainSec > 5 && hrDrift <= 2
       ? `Bij vrijwel dezelfde hartslag (${earlyHr} → ${lateHr}) loop je ${gainSec} sec/km sneller. Dat is echte loopeconomie: hetzelfde werk voor je hart levert meer snelheid op.`
       : gainSec > 5

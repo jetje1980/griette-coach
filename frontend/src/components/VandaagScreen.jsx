@@ -72,8 +72,6 @@ const ENERGIE_KEYS = ['energy_morning', 'energy_middag', 'energy_avond'];
 const ENERGIE_SLOT_LABELS = ['Ochtend', 'Middag', 'Avond'];
 
 const FREE_BLOCK_LABELS = { morning: 'Ochtend', midday: 'Middag', evening: 'Avond', fullday: 'Hele dag' };
-const TRAIN_LABELS = { run: '🏃 Hardlopen', walk: '🚶 Wandelen', swim: '🏊 Zwemmen',
-  bike: '🚴 Fietsen', core: '💪 Kracht', rest: '🛌 Rust', free: '🌿 Vrij' };
 
 function ExpandSection({ label, children, initialOpen = false, badge }) {
   const [open, setOpen] = useState(initialOpen);
@@ -260,16 +258,17 @@ function DagPlanning({ currentDate, log, nextSession, goToTab }) {
   const plan = getDayPlan(currentDate);
   const rows = [];
 
+  // De training komt uit de planner, niet uit een losse keuze in dit
+  // scherm: anders staat er iets anders in je dagplanning dan je coach
+  // zegt, en dat is precies wat deze app eerder deed.
   const trainDone = log?.run_done || log?.strength_done || log?.core_done;
-  if (plan.training && plan.training !== 'rest' && plan.training !== 'free') {
-    rows.push({ icon: TRAIN_LABELS[plan.training]?.slice(0, 2) || '🏃',
-      label: TRAIN_LABELS[plan.training]?.slice(2) || 'Training',
-      note: trainDone ? 'gedaan' : nextSession?.run ? `${nextSession.run.duration} min` : 'gepland',
-      done: !!trainDone });
+  if (nextSession?.run) {
+    rows.push({ icon: '🏃', label: nextSession.run.description || 'Hardlopen',
+      note: log?.run_done ? 'gedaan' : `${nextSession.run.duration} min`,
+      done: !!log?.run_done });
   }
-  if (plan.kracht) {
-    rows.push({ icon: '🏋️', label: plan.kracht === 'snack' ? 'Strength snack' : `Kracht ${plan.kracht}`,
-      note: log?.strength_done ? 'gedaan' : 'gepland', done: !!log?.strength_done });
+  if (log?.strength_done) {
+    rows.push({ icon: '🏋️', label: 'Kracht', note: 'gedaan', done: true });
   }
   for (const b of plan.workBlocks || []) {
     rows.push({ icon: '💼', label: `Werkblok ${FREE_BLOCK_LABELS[b] || b}`, note: null, done: false });
@@ -368,8 +367,7 @@ function PlanEditor({ currentDate, onClose, onSaved }) {
   // De agendaknop bouwt een gewone Google Calendar-link. Hij staat apart,
   // hij zegt wat hij doet, en hij is het enige dat de app verlaat.
   const agendaUrl = (() => {
-    const t = TRAIN_LABELS[plan.training];
-    const titel = t ? `${t.slice(2)} — Coach G` : 'Coach G — dagplanning';
+    const titel = 'Coach G — dagplanning';
     const d = currentDate.replace(/-/g, '');
     const p = new URLSearchParams({
       action: 'TEMPLATE', text: titel, dates: `${d}/${d}`,
@@ -390,19 +388,16 @@ function PlanEditor({ currentDate, onClose, onSaved }) {
         )}
       </div>
 
-      <Rij label="Training">
-        {['run', 'walk', 'swim', 'bike', 'core', 'rest', 'free'].map(k => (
-          <Chip key={k} actief={plan.training === k} onClick={() => zet('training', k)}>
-            {TRAIN_LABELS[k]}
-          </Chip>
-        ))}
-      </Rij>
-
-      <Rij label="Kracht">
-        {[['snack', 'Strength snack'], ['30', 'Kracht 30'], ['45', 'Kracht 45']].map(([k, l]) => (
-          <Chip key={k} actief={plan.kracht === k} onClick={() => zet('kracht', k)}>{l}</Chip>
-        ))}
-      </Rij>
+      {/* Training en kracht stonden hier als keuzechips. Dat was een
+          tweede plek die bepaalde wat je vandaag doet, naast de coach op
+          deze pagina en naast het dagplan naar de race — drie antwoorden
+          op één vraag. Wat je traint komt van de coach; wat je hier plant
+          is de rest van je dag. */}
+      <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5,
+        marginBottom: 12 }} data-training-elders>
+        Je training staat hierboven in het dagadvies en in het tabblad Ameland.
+        Hier plan je de dag eromheen.
+      </div>
 
       <Rij label="Beschermde blokken — niet vullen">
         {Object.entries(FREE_BLOCK_LABELS).map(([k, l]) => (

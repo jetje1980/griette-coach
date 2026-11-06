@@ -123,7 +123,13 @@ export function strengthDataState({ asOf = todayLocal() } = {}) {
 // hetzelfde tempo — betekent iets anders als er een herhaald cycluspatroon
 // onder ligt dan wanneer het over meerdere cycluscontexten heen blijft
 // staan.
-export function economyReading({ logs = {}, currentDate = todayLocal() } = {}) {
+// LET OP DE NAAM. Deze functie heette economyReading, net als die in
+// economyReading.js — twee functies met dezelfde naam en een heel andere
+// uitkomst ({known, verdict} tegenover {level, label, detail}). Wie de
+// verkeerde importeerde kreeg geen foutmelding maar een leeg scherm of een
+// verkeerde uitspraak. Deze doet iets specifiekers: hij legt een
+// economieverandering naast de cyclus, en heet daar nu naar.
+export function economyVersusCycle({ logs = {}, currentDate = todayLocal() } = {}) {
   const econ = runEconomyTrend({ currentDate });
   const attributie = attributeSymptoms({ logs, currentDate });
   const positie = cyclePosition(currentDate, { asOf: currentDate });
@@ -220,7 +226,7 @@ export function coachDecision({ logs = null, currentDate = todayLocal() } = {}) 
   const voorstel = progressionProposal({ logs: daglogs, currentDate: asOf });
   const recomp = recompositionSignal({ asOf });
   const kracht = strengthDataState({ asOf });
-  const economie = economyReading({ logs: daglogs, currentDate: asOf });
+  const economie = economyVersusCycle({ logs: daglogs, currentDate: asOf });
   const fotos = photoReading({ asOf });
   const cyclus = cyclePosition(asOf, { asOf });
   const regelmaat = cycleRegularity({ asOf });

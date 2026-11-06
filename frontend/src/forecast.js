@@ -16,7 +16,7 @@ import { RUNS, runDistanceKm } from './data/runningSchema';
 import { racePerformanceEstimate } from './racePerformance';
 import { loadRaceGoals } from './raceGoalModel';
 import {
-  loadWorkouts, toleranceFor, paceToMin, fmtPace, cardiacDrift, paceAtHRTrend,
+  loadWorkouts, toleranceFor, paceToMin, fmtPace, cardiacDrift,
 } from './workouts';
 import { loadHrSettings } from './goals';
 import { longestToleratedRun, addDays } from './restday';
@@ -309,22 +309,27 @@ export function nextSessionForecast({ run, logs = {}, currentDate, gate = null }
 // ── Loopeconomie-trend: hoeveel wint er per week bij? ───────────
 // Gebaseerd op pace bij vergelijkbare hartslag; dat is de enige eerlijke
 // maat voor vooruitgang zolang er in één zone getraind wordt.
-export function economyTrend() {
-  const hr = loadHrSettings();
-  const t = paceAtHRTrend(hr.easyLow, hr.easyHigh, 3);
+// Dezelfde meting als overal elders: runEconomyTrend leest efficiency.js.
+// Hier stond paceAtHRTrend, die op sessiegemiddelden rekende en daarmee
+// een derde antwoord op dezelfde vraag gaf.
+export function economyTrend({ currentDate = todayLocal() } = {}) {
+  const t = runEconomyTrend({ currentDate });
   if (!t.enough) {
     return { enough: false, count: t.count,
-      note: `Nog ${Math.max(0, 3 - t.count)} sessie(s) met hartslag in de easy-band nodig voor een trendlijn.` };
+      note: t.note || `Nog ${Math.max(0, 3 - t.count)} sessie(s) met een af te leiden looptempo nodig voor een trendlijn.` };
   }
+  const improvementSec = t.gainSec;
   const weeks = Math.max(1, weeksBetween(t.early.from, t.late.to));
-  const rawRate = t.improvementSec / weeks;                   // sec/km per week
+  const rawRate = improvementSec / weeks;                     // sec/km per week
   const rate = Math.max(-MAX_GAIN_SEC_PER_KM_PER_WEEK,
     Math.min(MAX_GAIN_SEC_PER_KM_PER_WEEK, rawRate));
   return {
     enough: true, count: t.count, points: t.points,
     currentPace: t.late.pace, currentHR: t.late.hr,
     startPace: t.early.pace, startHR: t.early.hr,
-    improvementSec: t.improvementSec,
+    improvementSec,
+    hrDrift: t.hrDrift,
+    efficiency: t.efficiency,
     weeks: +weeks.toFixed(1),
     ratePerWeek: +rate.toFixed(2),
     capped: Math.abs(rawRate) > MAX_GAIN_SEC_PER_KM_PER_WEEK,

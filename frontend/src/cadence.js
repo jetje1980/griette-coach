@@ -64,7 +64,8 @@ function loopLaps(w) {
   const laps = Array.isArray(w?.laps) ? w.laps : [];
   return laps.filter(l => {
     if (l?.derivedKind === 'walk') return false;
-    const c = perMinuut(l?.cadence);
+    // Ook de Strava-schrijfwijze: average_cadence.
+    const c = perMinuut(l?.cadence ?? l?.average_cadence);
     if (c == null) return false;
     // Een lap met een cadans onder 130 is wandelen, hoe hij ook heet.
     return c >= 130;
@@ -85,8 +86,8 @@ export function cadenceTarget({ currentDate = todayLocal(), workouts = null } = 
     // van veertig seconden.
     let tijd = 0, som = 0;
     for (const l of laps) {
-      const t = Number(l.movingTime) || 0;
-      const c = perMinuut(l.cadence);
+      const t = Number(l.movingTime ?? l.moving_time) || 0;
+      const c = perMinuut(l.cadence ?? l.average_cadence);
       if (!t || c == null) continue;
       tijd += t; som += c * t;
     }

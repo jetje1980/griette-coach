@@ -9,7 +9,7 @@ import { USER, PERSONAL_EVENTS } from '../config';
 import { RUNS as LEGACY_RUNS, runDistance } from '../data/runningSchema';
 import { coachPlan } from '../coachPlan';
 import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
-import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
+import { actualTotals, fmtPace } from '../workouts';
 import { efficiencyTrend } from '../efficiency';
 import { efficiencyFactors } from '../efficiencyWhy';
 import { restingDrift } from '../restingDrift';
@@ -261,8 +261,6 @@ function TabOverzicht({ logs, streak, sessions, goToTab }) {
 
   const withWaist = measurements.filter(m => m.waist)
     .sort((a, b) => a.date.localeCompare(b.date));
-  const economy = paceAtHRTrend();
-  // Dezelfde loopblok-gebaseerde maat als op het hardlooptabblad.
   const eff = efficiencyTrend();
   const totals = actualTotals(logs);
 
@@ -624,7 +622,6 @@ function TabHardlopen({ logs }) {
   // voor sessies zonder registratie — en dan duidelijk gelabeld als schatting.
   const totals = actualTotals(logs);
   const totalKm = totals.actualKm + totals.estKm;
-  const economy = paceAtHRTrend();
   // De loopblok-gebaseerde maat: zie het blok "Loopeconomie" verderop.
   const eff = efficiencyTrend({ currentDate: tod });
   // Waaróm de ene sessie efficiënter was dan de andere: cyclusdag,
