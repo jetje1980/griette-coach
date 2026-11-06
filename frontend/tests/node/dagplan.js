@@ -17,6 +17,8 @@
 //   · wat er al gelopen is, staat als gelopen en niet als schuld.
 import './_storage-stub.js';
 import { racePlan, luteaalVenster, DAG, FASE, INVOER } from '../../src/racePlanDays.js';
+import { weightPlan, saveWeightPhase, fuelLine, FASE as GEWICHT, MAX_KG_PER_WEEK }
+  from '../../src/weightPhase.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -235,6 +237,90 @@ S('8 · Zonder race geen plan');
   const voorbij = racePlan({ currentDate: TODAY, logs, raceDate: '2026-10-01' });
   ok('een race in het verleden ook niet', voorbij.known === false, JSON.stringify(voorbij));
   ok('met uitleg', /racedatum/.test(voorbij.why), voorbij.why);
+}
+
+S('9 · Afvallen maakt sneller — en kost tegelijk snelheid');
+{
+  // Haar vraag: minder zwaar is toch sneller? Ja, en het is te becijferen.
+  // Maar het tekort waarin dat gebeurt kost economie, en bij haar heffen
+  // die twee elkaar grofweg op. De app rekent allebei en laat haar kiezen.
+  haarData();
+  saveWeightPhase({ target: 57, phase: null, holdUntil: null });  // ná haarData: die wist de opslag
+  const w = weightPlan({ currentDate: TODAY, raceDate: RACE, easyPaceMin: 9.5 });
+  console.log(`      ${w.current} → ${w.target} kg · ${w.gainSeconds} sec/km winst`);
+  ok('het weet haar gewicht', w.known === true && w.current > 55, String(w.current));
+  ok('en het doel', w.target === 57, String(w.target));
+  ok('het rekent de winst uit in seconden per kilometer',
+    w.gainSeconds > 15 && w.gainSeconds < 40, String(w.gainSeconds));
+  ok('met de vijf kilometer erbij', /op vijf kilometer/.test(w.tradeoff.totalLine),
+    w.tradeoff.totalLine);
+  ok('en benoemt wat het kost', /economie zakte/.test(w.tradeoff.costLine),
+    w.tradeoff.costLine);
+  ok('met het advies om het na elkaar te doen', /Ná elkaar/.test(w.tradeoff.advice),
+    w.tradeoff.advice);
+  ok(`een verantwoord tempo is ${MAX_KG_PER_WEEK} kg per week`,
+    w.weeksNeeded === Math.ceil(w.toGo / MAX_KG_PER_WEEK), String(w.weeksNeeded));
+  ok('en dat haalt 12 december niet', w.beforeRace === false,
+    `${w.weeksNeeded} weken nodig`);
+}
+
+S('10 · De gekozen fase stuurt het eetadvies');
+{
+  haarData();
+  saveWeightPhase({ target: 57, phase: GEWICHT.BEHOUD, holdUntil: RACE });
+  const behoud = fuelLine({ currentDate: TODAY, raceDate: RACE });
+  ok('onderhoud geeft het onderhoudsadvies', behoud.phase === GEWICHT.BEHOUD
+    && /Onderhoud/.test(behoud.line), JSON.stringify(behoud));
+  const logsB = haarData();
+  saveWeightPhase({ target: 57, phase: GEWICHT.BEHOUD, holdUntil: RACE });
+  const pBehoud = racePlan({ currentDate: TODAY, logs: logsB, raceDate: RACE });
+  const rust = pBehoud.days.find(d => d.kind === DAG.RUST);
+  ok('en komt in het dagplan terecht',
+    /onderhoud|Onderhoud/.test(rust.targets.find(t => t.id === 'eten').waarde),
+    rust.targets.find(t => t.id === 'eten').waarde);
+
+  saveWeightPhase({ phase: GEWICHT.AFVALLEN, holdUntil: null });
+  const afvallen = fuelLine({ currentDate: TODAY, raceDate: RACE });
+  ok('afvallen geeft een ander advies', afvallen.phase === GEWICHT.AFVALLEN,
+    JSON.stringify(afvallen));
+  ok('zonder te doen alsof het gratis is',
+    /minder tempowinst/.test(afvallen.why), afvallen.why);
+  ok('maar ook zonder preek — het mag',
+    /Dat mag/.test(afvallen.why), afvallen.why);
+  const logsA = haarData();
+  saveWeightPhase({ target: 57, phase: GEWICHT.AFVALLEN, holdUntil: null });
+  const pAfvallen = racePlan({ currentDate: TODAY, logs: logsA, raceDate: RACE });
+  const knop = pAfvallen.levers.find(k => k.id === 'gewicht');
+  ok('en er is een gewichtsknop met de afweging', !!knop && /scheelt ongeveer/.test(knop.waarom),
+    String(JSON.stringify(knop)).slice(0, 200));
+  const etenA = pAfvallen.days.find(d => d.kind === DAG.RUST)
+    .targets.find(t => t.id === 'eten');
+  ok('en het dagplan praat haar keuze niet tegen',
+    /Afvallen/.test(etenA.waarde), etenA.waarde);
+}
+
+S('11 · Te snel afvallen wordt benoemd');
+{
+  globalThis.__testStorage.reset();
+  // Anderhalve kilo in drie weken is een halve kilo per week — precies op
+  // de grens; twee kilo in drie weken zit erboven.
+  const zet = (d, kg) => localStorage.setItem(`gc_log_${d}`,
+    JSON.stringify({ date: d, weight: kg }));
+  zet(addDays(TODAY, -21), 62.5); zet(addDays(TODAY, -14), 62.2);
+  zet(addDays(TODAY, -7), 61.8); zet(TODAY, 61.5);
+  saveWeightPhase({ target: 57 });
+  const rustig = weightPlan({ currentDate: TODAY, raceDate: RACE, easyPaceMin: 9.5 });
+  ok('een verantwoord tempo wordt niet afgekeurd', rustig.tooFast === false,
+    rustig.rateNote);
+
+  globalThis.__testStorage.reset();
+  zet(addDays(TODAY, -21), 64.5); zet(addDays(TODAY, -14), 63);
+  zet(addDays(TODAY, -7), 62); zet(TODAY, 61);
+  saveWeightPhase({ target: 57 });
+  const snel = weightPlan({ currentDate: TODAY, raceDate: RACE, easyPaceMin: 9.5 });
+  console.log(`      ${snel.rateNote} → ${snel.rateVerdict}`);
+  ok('te snel wordt herkend', snel.tooFast === true, snel.rateNote);
+  ok('met de reden erbij', /spier/.test(snel.rateVerdict), snel.rateVerdict);
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

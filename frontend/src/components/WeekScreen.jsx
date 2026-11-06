@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { computeHeadCoach } from './CoachAdvice';
-import { completeTask } from '../tasks';
 import { PERSONAL_EVENTS } from '../config';
 import { todayLocal } from '../datetime';
 
@@ -244,11 +243,10 @@ function WeekPriorities({ monday }) {
   useEffect(() => { setItems(getPriorities(monday)); }, [monday]);
 
   function persist(arr) { savePriorities(monday, arr); setItems(arr); }
-  // Komt de prioriteit uit Capture? Dan het bronitem meteen afronden.
+  // De drie weekprioriteiten staan op zichzelf. Hier werd ook een bronitem
+  // uit Capture afgerond; die module bestaat niet meer.
   function toggleWithSource(id) {
-    const item = items.find(i => i.id === id);
     persist(items.map(i => i.id === id ? { ...i, done: !i.done } : i));
-    if (item?.taskId && !item.done) completeTask(item.taskId, null);
   }
   function add() {
     const t = text.trim();

@@ -20,7 +20,6 @@ import { highestLeverageAction, analyseDomain, activeDomainIds } from './leverag
 import { suggestExperience } from './aliveness';
 import { dueCheckpoint } from './bodyProgress';
 import { todayLocal, addDays } from './datetime';
-import { loadTasks, dueFollowUps } from './tasks';
 import {
   assessAll, goalRelations, salientGoals, doMaintainDontPush,
   runLimiter, distanceCoverage, FEASIBILITY,
@@ -374,14 +373,11 @@ function resolvePriorities({ currentDate, decision }) {
   try { top3 = JSON.parse(localStorage.getItem(`gc_top3_${currentDate}`) || '[]'); }
   catch { top3 = []; }
 
+  // Alleen de drie prioriteiten van vandaag. Hier stonden ook openstaande
+  // follow-ups uit de takenmodule; die module is eruit omdat zij hem niet
+  // gebruikte en hij naast deze drie een tweede lijst vormde.
   const open = top3.filter(t => !t.done).slice(0, 3);
-  const followUps = dueFollowUps(currentDate).slice(0, 1);
-
   const items = open.map(t => ({ text: t.text || t.title, kind: 'top3', done: false }));
-  for (const f of followUps) {
-    if (items.length >= 3) break;
-    items.push({ text: `Check bij ${f.delegatedTo || 'de ander'}: ${f.title}`, kind: 'followup' });
-  }
   return {
     items: items.slice(0, 3),
     empty: items.length === 0,

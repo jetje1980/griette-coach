@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import SubTabs from './SubTabs';
 import { dreamStore, fileToDreamImage } from '../dreamStore';
-import CaptureCenter from './CaptureCenter';
 import GoalSettings from './GoalSettings';
 import GoalDashboard from './GoalDashboard';
 import { todayLocal } from '../datetime';
@@ -9,7 +8,11 @@ import { AlivenessLibrary } from './AlivenessCard';
 
 // Leven = levensorganisatie en Future Self. Taken bundelt Capture en
 // projecten zodat er geen concurrerende taakmodules meer zijn.
-const SUBTABS = ['Taken', 'Focus', 'Routines', 'Geld', 'Toekomst', 'Glow', 'Eten'];
+// Taken is eruit. Zij gebruikte het niet en het concurreerde met wat wél
+// werkt: drie prioriteiten per dag (Vandaag) en per week (Week). Een
+// takenlijst die naast die drie bestaat, is een tweede plek waar hetzelfde
+// hoort te staan — en dan klopt er altijd één niet.
+const SUBTABS = ['Focus', 'Routines', 'Geld', 'Toekomst', 'Glow', 'Eten'];
 
 // ═══════════════════════════════════════════════════════════════
 // FOCUS SEASONS — twee expliciet gescheiden modellen
@@ -400,238 +403,6 @@ function TabGlow() {
 // ═══════════════════════════════════════════════════════════════
 // TAB: PROJECTEN
 // ═══════════════════════════════════════════════════════════════
-const PROJECTS_KEY = 'gc_projecten';
-const PROJECT_STATUS = [
-  { id: 'actief',   label: 'Actief',   color: 'var(--sage)' },
-  { id: 'wacht',    label: 'Wacht op', color: 'var(--gold)' },
-  { id: 'park',     label: 'Geparkeerd', color: 'var(--sub)' },
-  { id: 'klaar',    label: 'Klaar',    color: 'var(--green)' },
-];
-
-function loadProjects() {
-  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]'); } catch { return []; }
-}
-function saveProjects(arr) { localStorage.setItem(PROJECTS_KEY, JSON.stringify(arr)); }
-
-// WIP-limiet: max aantal actieve projecten (configureerbaar, standaard 3)
-const WIP_LIMIT_KEY = 'gc_wip_limit';
-export function getWipLimit() {
-  const v = parseInt(localStorage.getItem(WIP_LIMIT_KEY), 10);
-  return Number.isFinite(v) && v >= 1 ? v : 3;
-}
-
-function TabProjecten() {
-  const [projects, setProjects] = useState(loadProjects);
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ name: '', outcome: '', status: 'actief', nextAction: '' });
-  const [wipLimit, setWipLimit] = useState(getWipLimit);
-  const [wipMsg, setWipMsg] = useState('');
-
-  function persist(arr) { saveProjects(arr); setProjects(arr); }
-
-  function activeCount(excludeId = null) {
-    return projects.filter(p => p.status === 'actief' && p.id !== excludeId).length;
-  }
-
-  function blockByWip() {
-    setWipMsg(`Je hebt je actieve limiet (${wipLimit}) bereikt. Parkeer of rond eerst iets af.`);
-    setTimeout(() => setWipMsg(''), 4000);
-  }
-
-  function add() {
-    if (!form.name.trim()) return;
-    if (form.status === 'actief' && activeCount() >= wipLimit) { blockByWip(); return; }
-    persist([{ id: Date.now().toString(), ...form, createdAt: todayLocal() }, ...projects]);
-    setForm({ name: '', outcome: '', status: 'actief', nextAction: '' });
-    setAdding(false);
-  }
-
-  function updateStatus(id, status) {
-    if (status === 'actief' && activeCount(id) >= wipLimit) { blockByWip(); return; }
-    persist(projects.map(p => p.id === id ? { ...p, status } : p));
-  }
-
-  function updateProject(id, patch) {
-    persist(projects.map(p => p.id === id ? { ...p, ...patch } : p));
-  }
-
-  function removeProject(id) {
-    if (!window.confirm('Dit project verwijderen?')) return;
-    persist(projects.filter(p => p.id !== id));
-  }
-
-  function changeWipLimit(v) {
-    const n = Math.max(1, Math.min(9, parseInt(v, 10) || 3));
-    localStorage.setItem(WIP_LIMIT_KEY, String(n));
-    setWipLimit(n);
-  }
-
-  const active   = projects.filter(p => p.status === 'actief');
-  const waiting  = projects.filter(p => p.status === 'wacht');
-  const parked   = projects.filter(p => p.status === 'park');
-  const done     = projects.filter(p => p.status === 'klaar');
-
-  return (
-    <div>
-      {wipMsg && (
-        <div style={{ background: 'rgba(179,94,69,0.08)', border: '1px solid var(--rust)',
-          borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13,
-          color: 'var(--rust)', fontWeight: 600, lineHeight: 1.4 }}>
-          ⚠️ {wipMsg}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: 'var(--sub)' }}>
-          WIP-limiet: <span style={{ fontWeight: 700, color: active.length >= wipLimit ? 'var(--rust)' : 'var(--text)' }}>
-            {active.length}/{wipLimit} actief
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button className="os-toggle-chip" style={{ fontSize: 12, width: 28, padding: '4px 0', textAlign: 'center' }}
-            onClick={() => changeWipLimit(wipLimit - 1)}>−</button>
-          <span style={{ fontSize: 13, fontWeight: 700, minWidth: 16, textAlign: 'center' }}>{wipLimit}</span>
-          <button className="os-toggle-chip" style={{ fontSize: 12, width: 28, padding: '4px 0', textAlign: 'center' }}
-            onClick={() => changeWipLimit(wipLimit + 1)}>+</button>
-        </div>
-      </div>
-
-      {!adding && (
-        <button className="os-btn-save" style={{ marginBottom: 16, width: '100%' }}
-          onClick={() => setAdding(true)}>
-          + Nieuw project
-        </button>
-      )}
-
-      {adding && (
-        <div className="os-card" style={{ marginBottom: 16 }}>
-          <div style={{ marginBottom: 10 }}>
-            <label style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
-              letterSpacing: '0.5px', display: 'block', marginBottom: 4 }}>Projectnaam</label>
-            <input className="os-input" value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="Bijv. Website herschrijven…" autoFocus />
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <label style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
-              letterSpacing: '0.5px', display: 'block', marginBottom: 4 }}>Gewenst resultaat</label>
-            <input className="os-input" value={form.outcome}
-              onChange={e => setForm(f => ({ ...f, outcome: e.target.value }))}
-              placeholder="Als het klaar is, dan…" />
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 11, color: 'var(--ghost)', textTransform: 'uppercase',
-              letterSpacing: '0.5px', display: 'block', marginBottom: 4 }}>Eerstvolgende actie</label>
-            <input className="os-input" value={form.nextAction}
-              onChange={e => setForm(f => ({ ...f, nextAction: e.target.value }))}
-              placeholder="De kleinste volgende stap…" />
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="os-btn-save" onClick={add}>Toevoegen</button>
-            <button className="os-toggle-chip" onClick={() => setAdding(false)} style={{ fontSize: 13 }}>Annuleer</button>
-          </div>
-        </div>
-      )}
-
-      {active.length > 0 && (
-        <>
-          <div className="os-section-label" style={{ marginTop: 0 }}>Actief ({active.length})</div>
-          {active.map(p => <ProjectCard key={p.id} project={p} updateStatus={updateStatus} updateProject={updateProject} removeProject={removeProject} />)}
-        </>
-      )}
-      {waiting.length > 0 && (
-        <>
-          <div className="os-section-label">Wacht op…</div>
-          {waiting.map(p => <ProjectCard key={p.id} project={p} updateStatus={updateStatus} updateProject={updateProject} removeProject={removeProject} />)}
-        </>
-      )}
-      {parked.length > 0 && (
-        <ExpandSection label={`Geparkeerd (${parked.length})`}>
-          {parked.map(p => <ProjectCard key={p.id} project={p} updateStatus={updateStatus} updateProject={updateProject} removeProject={removeProject} />)}
-        </ExpandSection>
-      )}
-      {done.length > 0 && (
-        <ExpandSection label={`Afgerond (${done.length})`}>
-          {done.map(p => <ProjectCard key={p.id} project={p} updateStatus={updateStatus} updateProject={updateProject} removeProject={removeProject} />)}
-        </ExpandSection>
-      )}
-      {projects.length === 0 && !adding && (
-        <div style={{ textAlign: 'center', padding: '32px 20px', color: 'var(--sub)', fontSize: 13 }}>
-          Nog geen projecten.<br />
-          <span style={{ fontSize: 11, color: 'var(--ghost)' }}>
-            Alles wat meer dan één stap nodig heeft, is een project.
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Module-level zodat de kaart niet remount (en dichtklapt) bij elke wijziging
-function ProjectCard({ project, updateStatus, updateProject, removeProject }) {
-  const [open, setOpen] = useState(false);
-  const statusInfo = PROJECT_STATUS.find(s => s.id === project.status);
-    return (
-      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-          onClick={() => setOpen(o => !o)}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 2 }}>{project.name}</div>
-            {project.nextAction && (
-              <div style={{ fontSize: 12, color: 'var(--sage)', fontWeight: 600 }}>→ {project.nextAction}</div>
-            )}
-          </div>
-          <div style={{ background: statusInfo?.color + '22', color: statusInfo?.color,
-            borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
-            {statusInfo?.label}
-          </div>
-        </div>
-        {open && (
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--divide)' }}>
-            {/* Volledig bewerkbaar: naam, outcome, next action */}
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase', marginBottom: 3 }}>Naam</div>
-              <input className="os-input" defaultValue={project.name}
-                onBlur={e => e.target.value.trim() && updateProject(project.id, { name: e.target.value.trim() })} />
-            </div>
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase', marginBottom: 3 }}>Gewenst resultaat</div>
-              <input className="os-input" defaultValue={project.outcome || ''}
-                onBlur={e => updateProject(project.id, { outcome: e.target.value })} />
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 10, color: 'var(--ghost)', textTransform: 'uppercase', marginBottom: 3 }}>Eerstvolgende actie</div>
-              <input className="os-input" defaultValue={project.nextAction || ''}
-                onBlur={e => updateProject(project.id, { nextAction: e.target.value })} />
-            </div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-              {PROJECT_STATUS.map(s => (
-                <button key={s.id}
-                  className={`os-toggle-chip ${project.status === s.id ? 'active green' : ''}`}
-                  onClick={() => updateStatus(project.id, s.id)}
-                  style={{ fontSize: 11 }}>
-                  {s.label}
-                </button>
-              ))}
-              <button onClick={() => removeProject(project.id)}
-                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--rust)',
-                  cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                🗑 verwijder
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-
-// ═══════════════════════════════════════════════════════════════
-// TAB: GELD
-// ═══════════════════════════════════════════════════════════════
-const GELD_KEY = 'gc_geld';
-const BUFFER_DOEL = 15000;
-
 function loadGeld() {
   try {
     const stored = JSON.parse(localStorage.getItem(GELD_KEY) || 'null');
@@ -1478,26 +1249,6 @@ function TabEten() {
 // ═══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
-// Taken = één plek voor Capture (inbox met statussen) én projecten met
-// WIP-limiet. Geen concurrerende taakmodules meer.
-function TabTaken() {
-  const today = todayLocal();
-  const [view, setView] = useState('capture');
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-        {[{ id: 'capture', label: '📥 Capture' }, { id: 'projects', label: '📁 Projecten' }].map(v => (
-          <button key={v.id} className={`os-scale-btn ${view === v.id ? 'active' : ''}`}
-            onClick={() => setView(v.id)} style={{ flex: 1, padding: '9px 4px', fontSize: 12 }}>
-            {v.label}
-          </button>
-        ))}
-      </div>
-      {view === 'capture' ? <CaptureCenter currentDate={today} /> : <TabProjecten />}
-    </div>
-  );
-}
-
 export default function LevenScreen({ logs = {} }) {
   const [activeTab, setActiveTab] = useState(0);
 
@@ -1505,11 +1256,10 @@ export default function LevenScreen({ logs = {} }) {
     <div className="os-content">
       <SubTabs tabs={SUBTABS} active={activeTab} onChange={setActiveTab} />
 
-      {activeTab === 0 && <TabTaken />}
-      {activeTab === 1 && <TabFocus logs={logs} />}
-      {activeTab === 2 && <TabRoutines />}
-      {activeTab === 3 && <TabGeld />}
-      {activeTab === 4 && (
+      {activeTab === 0 && <TabFocus logs={logs} />}
+      {activeTab === 1 && <TabRoutines />}
+      {activeTab === 2 && <TabGeld />}
+      {activeTab === 3 && (
         <>
           <TabToekomst />
           {/* Persoonlijke ankers: hoe beter de coach weet welke muziek,
@@ -1517,8 +1267,8 @@ export default function LevenScreen({ logs = {} }) {
           <AlivenessLibrary />
         </>
       )}
-      {activeTab === 5 && <TabGlow />}
-      {activeTab === 6 && <TabEten />}
+      {activeTab === 4 && <TabGlow />}
+      {activeTab === 5 && <TabEten />}
     </div>
   );
 }

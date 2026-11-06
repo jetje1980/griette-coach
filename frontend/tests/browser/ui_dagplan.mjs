@@ -131,6 +131,42 @@ const uitleg = await vandaag.textContent();
 ok('bij een veld staat wat ermee gebeurt',
   /stressvolle dag|belasting/.test(uitleg), uitleg.replace(/\s+/g, ' ').slice(0, 200));
 
+// ── Gewicht: doel instellen en de afweging zien ──────────────
+await page.locator('[data-gewicht-doel]').fill('57');
+await page.locator('[data-gewicht-doel]').blur();
+await page.waitForTimeout(700);
+const gew = await page.textContent('[data-gewicht]');
+console.log(`  gewicht: ${gew.replace(/\s+/g, ' ').slice(0, 200)}`);
+ok('het doelgewicht wordt bewaard', /doel 57 kg/.test(gew), gew.slice(0, 120));
+ok('met de winst in seconden per kilometer',
+  /seconden per kilometer/.test(gew), gew.replace(/\s+/g, ' ').slice(0, 220));
+ok('en met wat het kost', /economie zakte/.test(gew));
+ok('en het advies om het na elkaar te doen', /Ná elkaar/.test(gew));
+
+await page.locator('[data-gewichtsfase="behoud"]').click();
+await page.waitForTimeout(700);
+ok('de gekozen fase staat in de app',
+  await page.locator('[data-brandstof="behoud"]').count() === 1,
+  'brandstofregel ontbreekt');
+
+// ── Met terugwerkende kracht invullen ────────────────────────
+await page.locator('[data-terugwerkend] >> text=Met terugwerkende kracht invullen').click();
+await page.waitForTimeout(500);
+ok('het invulpaneel gaat open',
+  await page.getAttribute('[data-terugwerkend]', 'data-terugwerkend') === 'open');
+ok('met zestig dagen in beeld',
+  Number(await page.getAttribute('[data-terugwerkend-rijen]', 'data-terugwerkend-rijen')) === 60,
+  String(await page.getAttribute('[data-terugwerkend-rijen]', 'data-terugwerkend-rijen')));
+const gisteren = addDays(TODAY, -1);
+await page.locator(`[data-dag-invoer="${gisteren}"]`).fill('58');
+await page.locator(`[data-dag-invoer="${gisteren}"]`).blur();
+await page.waitForTimeout(900);
+const terug = await page.evaluate((d) => {
+  try { return JSON.parse(localStorage.getItem(`gc_log_${d}`) || '{}'); } catch { return {}; }
+}, gisteren);
+ok('een rusthartslag van gisteren komt in dat dagboek', terug.hr_rest === 58,
+  JSON.stringify(terug));
+
 ok('geen JS-fout', errors.length === 0, errors.join(' | '));
 await b.close();
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

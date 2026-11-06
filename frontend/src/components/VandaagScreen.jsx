@@ -12,17 +12,12 @@ import { photoStore } from '../photoStore';
 import { dueCheckpoint, checkpointPrompt } from '../bodyProgress';
 import { fmtPace } from '../workouts';
 import RecoveryCheck from './RecoveryCheck';
-import CaptureCenter from './CaptureCenter';
 import { USER } from '../config';
-// getDayActions ontbrak hier.
-//
-// DagPlanning riep hem aan, hij was nooit geïmporteerd, en dus wierp het
-// scherm "getDayActions is not defined" zodra je de lade "Mijn dag plannen"
-// opende. React haalt dan de hele boom weg: je ziet een leeg scherm, en op
-// een telefoon voelt dat als uit de app gegooid worden.
-//
-// Het viel niet op omdat geen enkele test die lade ooit opende.
-import { loadTasks, getDayActions } from '../tasks';
+// Taken staan hier niet meer. De dagplanning toonde naast training en
+// beschermde blokken ook losse acties uit Capture; die module is eruit
+// omdat zij hem niet gebruikte en hij concurreerde met de drie
+// prioriteiten die wél werken. Wat overblijft is wat de dag vormgeeft:
+// training, kracht, werkblokken, beschermde tijd en herstel.
 import { loadExecutiveFocus } from './LevenScreen';
 import { todayLocal, formatNLLong } from '../datetime';
 
@@ -263,7 +258,6 @@ function Top3({ currentDate }) {
 // ── 4. Dagplanning — compacte tijdsweergave ─────────────────────
 function DagPlanning({ currentDate, log, nextSession, goToTab }) {
   const plan = getDayPlan(currentDate);
-  const actions = getDayActions(currentDate);
   const rows = [];
 
   const trainDone = log?.run_done || log?.strength_done || log?.core_done;
@@ -287,10 +281,6 @@ function DagPlanning({ currentDate, log, nextSession, goToTab }) {
   if (plan.recovery) {
     rows.push({ icon: '🌊', label: 'Herstelmoment', note: null, done: false });
   }
-  for (const a of actions) {
-    rows.push({ icon: '✅', label: a.title, note: a.trelloUrl ? 'Trello' : 'uit Capture', done: a.done, actionId: a.id });
-  }
-
   if (!rows.length) {
     return (
       <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.5 }}>
@@ -760,7 +750,6 @@ function ShutdownProtocol({ currentDate }) {
 
 // ── Hoofdcomponent ──────────────────────────────────────────────
 export default function VandaagScreen({ log, logs, currentDate, saveField, saveFields, shiftDay, setDate, isFuture, goToTab }) {
-  const [inboxCount, setInboxCount] = useState(0);
   // Zodat het overzicht eronder meteen laat zien wat je net hebt ingesteld.
   const [planVersie, setPlanVersie] = useState(0);
   const [openCheckIn, setOpenCheckIn] = useState(false);
@@ -798,10 +787,6 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
   const coach = computeHeadCoach(log, logs, currentDate);
   const nextSession = computeNextSession(log, logs, currentDate);
   const hasData = log && Object.keys(log).filter(k => k !== 'date').length > 1;
-
-  useEffect(() => {
-    setInboxCount(loadTasks().filter(t => t.status === 'inbox').length);
-  }, [currentDate]);
 
   // Overgangsmomenten alleen tonen als ze relevant zijn: er staat er al één,
   // of er is vandaag een training gepland waar een buffer bij hoort.
@@ -984,12 +969,10 @@ export default function VandaagScreen({ log, logs, currentDate, saveField, saveF
       ))}
 
       {!isFuture && (
-        <ExpandSection label="Meer" badge={inboxCount}>
+        <ExpandSection label="Meer">
           <PhotoCheckpointCard currentDate={currentDate} goToTab={goToTab} />
           <AlivenessCard log={log} logs={logs} currentDate={currentDate}
             coach={coach} state={log?.adhd_state} />
-          <CaptureCenter currentDate={currentDate}
-            onChange={() => setInboxCount(loadTasks().filter(t => t.status === 'inbox').length)} />
           <ShutdownProtocol currentDate={currentDate} />
         </ExpandSection>
       )}

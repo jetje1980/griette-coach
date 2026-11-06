@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { racePlan, INVOER, DAG, FASE } from '../racePlanDays';
 import { loadRaceGoals } from '../raceGoalModel';
+import { loadWeightPhase, saveWeightPhase, FASE as GEWICHTSFASE } from '../weightPhase';
+import BackfillPanel from './BackfillPanel';
 import { todayLocal, formatNLLong } from '../datetime';
 
 // Het dagplan naar Ameland.
@@ -298,6 +300,78 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
             .map(f => `${f.label}: ${f.doel}`).join(' · ')}
         </div>
       </div>
+
+      {/* ── Gewicht: het voordeel én de kosten ─────────────── */}
+      {plan.weight?.known && (
+        <>
+          <div className="os-section-label">Gewicht</div>
+          <div className="os-card" style={{ marginBottom: 12 }} data-gewicht>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 18, fontWeight: 900,
+                fontFamily: 'var(--font-serif)' }}>{plan.weight.current} kg</span>
+              <span style={{ fontSize: 11.5, color: 'var(--sub)', flex: 1 }}>
+                {plan.weight.target != null
+                  ? `doel ${plan.weight.target} kg · nog ${plan.weight.toGo} kg`
+                  : 'geen doelgewicht ingesteld'}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--sub)', marginTop: 3 }}>
+              {plan.weight.rateNote}{plan.weight.rateVerdict ? ` — ${plan.weight.rateVerdict}` : ''}
+            </div>
+
+            {plan.weight.tradeoff && (
+              <div style={{ marginTop: 7, fontSize: 11.5, lineHeight: 1.55 }}
+                data-gewicht-afweging>
+                <div style={{ color: 'var(--sage)' }}>{plan.weight.tradeoff.totalLine}</div>
+                {plan.weight.tradeoff.raceLine && (
+                  <div style={{ color: 'var(--sub)' }}>{plan.weight.tradeoff.raceLine}</div>
+                )}
+                <div style={{ color: 'var(--rust)', marginTop: 3 }}>
+                  {plan.weight.tradeoff.costLine}
+                </div>
+                <div style={{ color: 'var(--text)', marginTop: 3, fontWeight: 600 }}>
+                  {plan.weight.tradeoff.advice}
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 9, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ghost)',
+                letterSpacing: '0.4px', marginBottom: 4 }}>JOUW KEUZE</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <label style={{ fontSize: 11.5 }}>doel</label>
+                <input type="number" step="0.5" data-gewicht-doel
+                  defaultValue={plan.weight.target ?? ''}
+                  onBlur={e => { saveWeightPhase({ target: e.target.value === '' ? null
+                    : Number(e.target.value.replace(',', '.')) }); setTick(t => t + 1); }}
+                  style={{ width: 66, fontSize: 12, padding: '4px 6px', borderRadius: 6,
+                    border: '1px solid var(--border)', background: 'var(--surface)',
+                    color: 'var(--text)' }} /> kg
+                {[[GEWICHTSFASE.AFVALLEN, 'nu afvallen'],
+                  [GEWICHTSFASE.BEHOUD, `onderhoud tot ${plan.raceDate.slice(8)}-${plan.raceDate.slice(5, 7)}`]]
+                  .map(([id, lab]) => (
+                    <button key={id} type="button" data-gewichtsfase={id}
+                      className={`os-toggle-chip ${plan.weight.phase === id ? 'active green' : ''}`}
+                      onClick={() => {
+                        saveWeightPhase({ phase: plan.weight.phase === id ? null : id,
+                          holdUntil: id === GEWICHTSFASE.BEHOUD ? plan.raceDate : null });
+                        setTick(t => t + 1);
+                      }} style={{ fontSize: 11 }}>{lab}</button>
+                  ))}
+              </div>
+              {plan.fuel?.why && (
+                <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5, marginTop: 5 }}
+                  data-brandstof={plan.fuel.phase}>
+                  {plan.fuel.why}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Geschiedenis aanvullen ─────────────────────────── */}
+      <BackfillPanel logs={logs} currentDate={currentDate} saveField={saveField} />
 
       {/* ── De knoppen waaraan je kunt draaien ─────────────── */}
       <div className="os-section-label">Waar je aan kunt draaien</div>

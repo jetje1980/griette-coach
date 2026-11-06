@@ -68,6 +68,8 @@ import { restingDrift } from './restingDrift';
 import { pemFreeWeeks } from './symptoms';
 import { dayNumber as challengeDayNumber } from './challenge75';
 import { loadStrengthSessions } from './data/strengthSchema';
+import { fuelLine, weightPlan, FASE as GEWICHT } from './weightPhase';
+import { easyRunPace } from './easyPace';
 
 // ── Fasen ───────────────────────────────────────────────────────
 export const FASE = {
@@ -219,7 +221,7 @@ const KRACHT_B = {
 };
 
 // ── Slaap, eten en rust per dag ─────────────────────────────────
-function dagdoelen({ kind, rol, fase, drift, dagVoorSleutel }) {
+function dagdoelen({ kind, rol, fase, drift, dagVoorSleutel, brandstof }) {
   const slaap = dagVoorSleutel || kind === DAG.RUN ? 8.5 : 8;
   const doelen = [];
 
@@ -234,7 +236,13 @@ function dagdoelen({ kind, rol, fase, drift, dagVoorSleutel }) {
 
   // Eten: hangt aan de bevinding dat haar rusthartslag oploopt terwijl ze
   // afvalt. Zolang dat zo is, is dit de knop met de meeste opbrengst.
-  const tekort = drift?.known && (drift.direction === 'omhoog' || drift.direction === 'sterk_omhoog');
+  // De gekozen gewichtsfase wint van de afleiding uit de drift: als zij
+  // bewust voor afvallen kiest, hoort daar het bijpassende advies bij en
+  // niet een herhaald pleidooi om te stoppen.
+  const gekozen = brandstof?.phase || null;
+  const tekort = gekozen === GEWICHT.AFVALLEN
+    || (!gekozen && drift?.known
+      && (drift.direction === 'omhoog' || drift.direction === 'sterk_omhoog'));
   if (kind === DAG.RUN || kind === DAG.RUN_KRACHT || kind === DAG.RACE) {
     doelen.push({
       id: 'eten',
@@ -248,11 +256,13 @@ function dagdoelen({ kind, rol, fase, drift, dagVoorSleutel }) {
   } else {
     doelen.push({
       id: 'eten', label: 'Eten',
-      waarde: tekort ? 'Onderhoud, niet in tekort' : 'Normaal, eiwit op peil',
-      waarom: tekort
-        ? 'Houd je gewicht vast tot na 12 december. Je kunt geen motor bouwen in een tekort, '
-          + 'en je rusthartslag laat zien dat je er nu in zit.'
-        : 'Rond de 100 gram eiwit; dat is wat je krachttraining laat landen.',
+      waarde: brandstof?.line
+        || (tekort ? 'Onderhoud, niet in tekort' : 'Normaal, eiwit op peil'),
+      waarom: brandstof?.why
+        || (tekort
+          ? 'Houd je gewicht vast tot na 12 december. Je kunt geen motor bouwen in een tekort, '
+            + 'en je rusthartslag laat zien dat je er nu in zit.'
+          : 'Rond de 100 gram eiwit; dat is wat je krachttraining laat landen.'),
     });
   }
 
@@ -357,6 +367,18 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   const drift = restingDrift({ currentDate });
   const pem = pemFreeWeeks({ logs, currentDate });
   const luteaal = luteaalVenster({ currentDate, tot: race });
+  const brandstof = fuelLine({ currentDate, raceDate: race });
+  // Met haar gemeten rustige tempo erbij, anders kan het gewichtsvoordeel
+  // niet in seconden per kilometer worden uitgedrukt en blijft er een
+  // algemene zin staan waar een getal hoort.
+  // easyRunPace is de beste bron, maar hij vraagt verdragen sessies mét
+  // herstelcheck erna en valt dus stil zodra die ontbreken. Dan blijft er
+  // een algemene zin staan waar een getal hoort. Daarom een terugval op
+  // het gemeten tempo van haar loopblokken zelf.
+  const easy = easyRunPace({ logs, currentDate });
+  const tempoMin = (easy?.available ? easy.paceMin : null)
+    ?? gemetenLooptempo({ workouts, currentDate });
+  const gewicht = weightPlan({ currentDate, raceDate: race, easyPaceMin: tempoMin });
   const taperVanaf = addDays(race, -taperDays);
 
   const dagen = [];
@@ -457,7 +479,8 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
       challengeDay: challengeDayNumber(datum),
       cycleDay: cycleDayOf(datum, { asOf: currentDate }),
       lateLuteal: inLuteaal,
-      targets: dagdoelen({ kind, rol, fase, drift, dagVoorSleutel: volgendeIsSleutel }),
+      targets: dagdoelen({ kind, rol, fase, drift, dagVoorSleutel: volgendeIsSleutel,
+        brandstof }),
       inputs: invoerVoor({ kind, gelopen, dagNaLoop }),
       // Wat er werkelijk gebeurd is. Alleen voor vandaag en eerder; een
       // toekomstige dag heeft geen status, die heeft een voornemen.
@@ -483,7 +506,9 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     pemFreeWeeks: pem.weeks,
     days: dagen,
     weeks: perWeek(dagen),
-    levers: knoppen({ drift, proven, luteaal, dagen, currentDate, workouts }),
+    weight: gewicht,
+    fuel: brandstof,
+    levers: knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht }),
     note: 'Wat je vandaag loopt komt van de dagkaart zelf — die weegt je herstelcheck, '
       + 'de poort en de dosering van vandaag mee. Dit overzicht tekent de weken eromheen, '
       + 'en wordt elke keer opnieuw gerekend uit wat er werkelijk gebeurd is.',
@@ -507,6 +532,27 @@ function langsteBlokMinuten({ workouts, currentDate, dagen = 28 }) {
     }
   }
   return Math.round(langste * 10) / 10;
+}
+
+// Het mediane tempo van haar loopblokken, in minuten per kilometer.
+// Alleen blokken waarin werkelijk gelopen is, net als bij het niveau.
+function gemetenLooptempo({ workouts, currentDate, dagen = 42 }) {
+  const tempos = [];
+  for (const w of workouts) {
+    if (!w?.date || w.date > currentDate || daysBetween(w.date, currentDate) > dagen) continue;
+    for (const l of (Array.isArray(w.laps) ? w.laps : [])) {
+      if (l?.derivedKind === 'walk') continue;
+      const sec = Number(l?.movingTime), m = Number(l?.distance);
+      if (!sec || !m || sec < 120) continue;
+      const mpm = m / (sec / 60);
+      if (mpm < 95) continue;
+      tempos.push(1000 / mpm);
+    }
+  }
+  if (!tempos.length) return null;
+  const s = tempos.sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return +(s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2).toFixed(2);
 }
 
 function perWeek(dagen) {
@@ -543,7 +589,7 @@ function perWeek(dagen) {
 // Geen algemene tips: alleen knoppen waarvan in háár gegevens te zien is
 // hoe ze ervoor staan, met de huidige stand erbij. Een knop zonder meting
 // is een mening.
-function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts }) {
+function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht }) {
   const uit = [];
 
   // 1. Frequentie — de grootste, en meetbaar.
@@ -579,6 +625,23 @@ function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts }) {
           + 'harder trainen niets op.'
         : 'Je rusthartslag houdt gelijke tred met je training.',
       status: omhoog ? 'open' : 'goed',
+    });
+  }
+
+  // 2b. Gewicht — alleen als er een doel staat, met de afweging erbij.
+  if (gewicht?.known && gewicht.target != null) {
+    uit.push({
+      id: 'gewicht', label: 'Gewicht',
+      stand: `${gewicht.current} kg · doel ${gewicht.target} kg (${gewicht.toGo} te gaan) · `
+        + gewicht.rateNote,
+      doel: gewicht.phase === 'behoud'
+        ? `Onderhoud tot ${gewicht.holdUntil || 'de race'}, daarna verder`
+        : `Maximaal ${0.5} kg per week, met eiwit en koolhydraten rond je trainingen`,
+      waarom: gewicht.tradeoff
+        ? `${gewicht.tradeoff.totalLine} ${gewicht.tradeoff.costLine}`
+        : 'Minder gewicht scheelt tempo; een tekort kost economie. De volgorde bepaalt '
+          + 'of je allebei krijgt.',
+      status: gewicht.tooFast ? 'open' : 'goed',
     });
   }
 
