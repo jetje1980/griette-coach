@@ -12,6 +12,7 @@ import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
 import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
 import { efficiencyTrend } from '../efficiency';
 import { efficiencyFactors } from '../efficiencyWhy';
+import { restingDrift } from '../restingDrift';
 import { protectedHours } from './WeekScreen';
 import { store } from '../store';
 import { recoveryScore, runBuildScore, shapeScore, capacityLevel } from '../performance';
@@ -626,6 +627,9 @@ function TabHardlopen({ logs }) {
   // Waaróm de ene sessie efficiënter was dan de andere: cyclusdag,
   // rusthartslag en slaap naast elk meetpunt. Zie efficiencyWhy.js.
   const effWhy = efficiencyFactors({ currentDate: tod, logs });
+  // Loopt de rusthartslag over wéken op? Dat is het signaal dat verklaart
+  // waarom economie stilstaat terwijl er hard getraind wordt.
+  const drift = restingDrift({ currentDate: tod });
 
   const runWeekStreak = getRunWeekStreak(logs);
   const trailDays = daysBetween(tod, TRAIL_DATE);
@@ -748,6 +752,43 @@ function TabHardlopen({ logs }) {
                 de rusthartslag van die ochtend en de slaap ernaast, zodat
                 een lager getal te herleiden is in plaats van alleen
                 verontrustend. */}
+            {/* ── De rusthartslag over weken ────────────────────
+                Een oplopende rusthartslag verklaart een stilstaande
+                economie beter dan welke trainingsfout ook: zolang de
+                optelsom van belasting en herstel niet klopt, wordt tempo
+                bij een gegeven hartslag niet beter. Zie restingDrift.js. */}
+            {drift.known && drift.direction !== 'stabiel' && (
+              <div style={{ marginTop: 9, paddingTop: 8,
+                borderTop: '1px solid var(--border)' }}
+                data-rusthartslag={drift.direction}>
+                <div style={{ fontSize: 12.5, fontWeight: 800,
+                  color: drift.delta > 0 ? 'var(--rust)' : 'var(--green)' }}>
+                  {drift.line}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55,
+                  marginTop: 3 }}>{drift.verdict}</div>
+                {drift.causes.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ghost)',
+                      letterSpacing: '0.4px', marginBottom: 3 }}>
+                      WAAR JE HET EERST ZOU KIJKEN
+                    </div>
+                    {drift.causes.map(c => (
+                      <div key={c.id} data-oorzaak={c.id} style={{ marginBottom: 5 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 700 }}>{c.label}</div>
+                        <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5 }}>
+                          {c.why}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--sage)', lineHeight: 1.5 }}>
+                          {c.wat}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {effWhy.known && (
               <div style={{ marginTop: 9, paddingTop: 8,
                 borderTop: '1px solid var(--border)' }} data-economie-waarom>
