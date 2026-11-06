@@ -64,6 +64,23 @@ const MIN_METER_PER_MIN = 95;
 
 const VENSTER_DAGEN = 90;
 
+// Hoeveel loopminuten moet een sessie hebben om als meetpunt te tellen?
+//
+// Haar sessie van 1 november had één loopblok van bijna drie minuten in
+// een uur wandelen. Dat leverde een efficiëntie van 0,828 op — het hoogste
+// getal van de maand — en zou de trend omhoog getrokken hebben op grond
+// van 170 seconden. Acht minuten lopen is het minimum waarbij een sessie
+// iets zegt over hoe je loopt in plaats van over hoe je aan een blokje
+// begint.
+const MIN_SESSIE_SECONDEN = 480;
+
+// Een meetpunt dat meer dan een kwart van de mediaan afwijkt, is eerder een
+// meetfout dan een sprong in vorm — een borstband naast een polsmeting, een
+// optische meter die aan je pasfrequentie blijft hangen, of een band die
+// losliet. Zulke punten worden niet weggegooid maar apart gezet en gemeld,
+// zodat zij zelf kan zeggen wat er die dag anders was.
+const UITBIJTER_AFWIJKING = 0.25;
+
 function loopBlokken(w) {
   const laps = Array.isArray(w?.laps) ? w.laps : [];
   const uit = [];
@@ -124,18 +141,32 @@ export function paceAtHr(ef, hr) {
 
 export function efficiencyTrend({ currentDate = todayLocal(), workouts = null,
   targetHr = 132, window = VENSTER_DAGEN } = {}) {
-  const sessies = (workouts || loadWorkouts())
+  const alle = (workouts || loadWorkouts())
     .filter(w => w?.date && w.date <= currentDate && daysBetween(w.date, currentDate) <= window)
     .map(efficiencyOf)
     .filter(Boolean)
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Te korte sessies zeggen niets over hoe je loopt.
+  const telMee = alle.filter(s => s.runSeconds >= MIN_SESSIE_SECONDEN);
+  const teKort = alle.filter(s => s.runSeconds < MIN_SESSIE_SECONDEN);
+
+  // Uitbijters eruit voor de trend, maar wél zichtbaar.
+  const ruweMediaan = mediaan(telMee.map(s => s.ef));
+  const uitbijters = ruweMediaan
+    ? telMee.filter(s => Math.abs(s.ef - ruweMediaan) / ruweMediaan > UITBIJTER_AFWIJKING)
+    : [];
+  const sessies = telMee.filter(s => !uitbijters.includes(s));
+
   if (!sessies.length) {
     return {
-      known: false, sessions: [],
-      why: 'Nog geen loopblokken van twee minuten of langer mét hartslag in de '
-        + 'laatste drie maanden. Zodra die binnenkomen staat hier of je sneller '
-        + 'wordt bij dezelfde hartslag.',
+      known: false, sessions: [], tooShort: teKort, outliers: uitbijters,
+      why: teKort.length
+        ? `Wel ${teKort.length} sessie(s) met hartslag, maar met minder dan acht `
+          + 'minuten echt lopen erin. Daar is geen loopeconomie uit te lezen.'
+        : 'Nog geen loopblokken van twee minuten of langer mét hartslag in de '
+          + 'laatste drie maanden. Zodra die binnenkomen staat hier of je sneller '
+          + 'wordt bij dezelfde hartslag.',
     };
   }
 
@@ -159,9 +190,17 @@ export function efficiencyTrend({ currentDate = todayLocal(), workouts = null,
       : deltaPct <= -2 ? 'slechter'
         : 'gelijk';
 
+  const uitbijterTekst = uitbijters.length
+    ? ` Buiten de trend gehouden: ${uitbijters.map(u => `${u.date} (${u.ef})`).join(', ')} — `
+      + 'dat wijkt zover af dat een meetfout waarschijnlijker is dan een sprong in vorm. '
+      + 'Droeg je die dag een andere hartslagmeter?'
+    : '';
+
   return {
     known: true,
     sessions: sessies,
+    tooShort: teKort,
+    outliers: uitbijters,
     count: sessies.length,
     current: +nu.toFixed(3),
     previous: toen ? +toen.toFixed(3) : null,
@@ -187,8 +226,9 @@ export function efficiencyTrend({ currentDate = todayLocal(), workouts = null,
           : `Je efficiëntie staat stil (${deltaPct > 0 ? '+' : ''}${deltaPct}%). Bij hartslag `
             + `${targetHr} is dat ${fmtPace(tempoNu)}/km.`,
     note: 'Meters per minuut gedeeld door je hartslag, over loopblokken van '
-      + 'minstens twee minuten. Zacht zand, hitte, slaaptekort en de luteale fase '
-      + 'van je cyclus drukken dit getal zonder dat je vorm verandert — lees de '
-      + 'trend, niet één sessie.',
+      + 'minstens twee minuten in sessies met minstens acht minuten lopen. Zacht '
+      + 'zand, hitte, slaaptekort en de luteale fase van je cyclus drukken dit '
+      + 'getal zonder dat je vorm verandert — lees de trend, niet één sessie.'
+      + uitbijterTekst,
   };
 }

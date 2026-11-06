@@ -204,5 +204,64 @@ S('8 · Niet loggen is geen PEM');
   ok('en dat staat er eerlijk bij', /zonder invoer/.test(r.note), r.note);
 }
 
+S('9 · Drie minuten lopen is geen meetpunt');
+{
+  // Haar sessie van 1 november: één loopblok van 170 seconden in een uur
+  // wandelen. Dat leverde de hoogste efficiëntie van de maand op (0,828) en
+  // zou de trend omhoog hebben getrokken op grond van bijna niets.
+  globalThis.__testStorage.reset();
+  const lang = (datum, hr, meters) => ({ id: datum, date: datum,
+    laps: [{ avgHr: hr, distance: meters, movingTime: 480 }] });
+  const kort = { id: 'kort', date: addDays(TODAY, -1),
+    laps: [{ avgHr: 148, distance: 347, movingTime: 170 }] };
+  localStorage.setItem('gc_workouts', JSON.stringify([
+    lang(addDays(TODAY, -30), 149, 830), lang(addDays(TODAY, -26), 149, 835),
+    lang(addDays(TODAY, -22), 149, 828), lang(addDays(TODAY, -18), 149, 832),
+    lang(addDays(TODAY, -14), 149, 826), lang(addDays(TODAY, -10), 149, 834),
+    kort,
+  ]));
+  const t = efficiencyTrend({ currentDate: TODAY });
+  ok('de korte sessie telt niet mee in de trend', t.count === 6, String(t.count));
+  ok('maar wordt wel apart genoemd', t.tooShort.length === 1,
+    JSON.stringify(t.tooShort.map(x => x.date)));
+  ok('de losse berekening blijft bestaan', efficiencyOf(kort) !== null,
+    'de sessie zelf mag je nog wel bekijken');
+
+  // Alleen korte sessies: dan is er geen trend, met uitleg waarom.
+  globalThis.__testStorage.reset();
+  localStorage.setItem('gc_workouts', JSON.stringify([kort]));
+  const leeg = efficiencyTrend({ currentDate: TODAY });
+  ok('alleen korte sessies geeft geen getal', leeg.known === false);
+  ok('met de juiste reden', /acht minuten/.test(leeg.why), leeg.why);
+}
+
+S('10 · Een meetfout is geen vormsprong');
+{
+  // 4 oktober staat in haar data op efficiëntie 1,007: 7:51/km bij hartslag
+  // 127, met een inwandelblok op hartslag 94. Drie dagen later loopt ze
+  // 9:14/km bij 146. Zo'n verschil is eerder een andere hartslagmeter dan
+  // een lichaam dat in drie dagen dertig procent beter werd.
+  globalThis.__testStorage.reset();
+  const maak = (datum, hr, meters) => ({ id: datum, date: datum,
+    laps: [{ avgHr: hr, distance: meters, movingTime: 480 }] });
+  localStorage.setItem('gc_workouts', JSON.stringify([
+    maak(addDays(TODAY, -40), 127, 1022),   // de uitbijter: ef ~1.01
+    maak(addDays(TODAY, -30), 146, 870), maak(addDays(TODAY, -26), 148, 875),
+    maak(addDays(TODAY, -22), 149, 880), maak(addDays(TODAY, -18), 147, 872),
+    maak(addDays(TODAY, -14), 148, 878), maak(addDays(TODAY, -10), 146, 884),
+  ]));
+  const t = efficiencyTrend({ currentDate: TODAY });
+  console.log(`      ${t.count} in de trend, ${t.outliers.length} apart gezet`);
+  ok('de uitbijter zit niet in de trend', t.count === 6, String(t.count));
+  ok('maar is wel benoemd', t.outliers.length === 1,
+    JSON.stringify(t.outliers.map(o => `${o.date}:${o.ef}`)));
+  ok('met de datum erbij in de uitleg',
+    t.note.includes(addDays(TODAY, -40)), t.note.slice(-200));
+  ok('en de vraag die hem kan verklaren',
+    /hartslagmeter/.test(t.note), t.note.slice(-120));
+  ok('zonder de uitbijter is de richting niet vertekend',
+    t.direction !== 'beter', `${t.direction} ${t.deltaPct}%`);
+}
+
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
 process.exit(fail ? 1 : 0);
