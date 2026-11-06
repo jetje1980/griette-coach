@@ -10,6 +10,7 @@ import { RUNS as LEGACY_RUNS, runDistance } from '../data/runningSchema';
 import { coachPlan } from '../coachPlan';
 import { loadStrengthSessions, findExercise } from '../data/strengthSchema';
 import { actualTotals, paceAtHRTrend, fmtPace } from '../workouts';
+import { efficiencyTrend } from '../efficiency';
 import { protectedHours } from './WeekScreen';
 import { store } from '../store';
 import { recoveryScore, runBuildScore, shapeScore, capacityLevel } from '../performance';
@@ -259,6 +260,8 @@ function TabOverzicht({ logs, streak, sessions, goToTab }) {
   const withWaist = measurements.filter(m => m.waist)
     .sort((a, b) => a.date.localeCompare(b.date));
   const economy = paceAtHRTrend();
+  // Dezelfde loopblok-gebaseerde maat als op het hardlooptabblad.
+  const eff = efficiencyTrend();
   const totals = actualTotals(logs);
 
   const tests = (() => {
@@ -344,10 +347,18 @@ function TabOverzicht({ logs, streak, sessions, goToTab }) {
     proof.push({ label: 'Hardlopen', value: `${totals.actualCount + totals.estCount} sessies`,
       delta: totals.actualKm > 0 ? `${totals.actualKm} km` : null, good: true });
   }
-  if (economy.enough) {
-    proof.push({ label: 'Pace bij HR', value: `${fmtPace(economy.early.pace)} → ${fmtPace(economy.late.pace)}/km`,
-      delta: economy.improvementSec > 0 ? `${economy.improvementSec} s/km sneller` : null,
-      good: economy.improvementSec > 0 });
+  // Dezelfde bron als het blok "Loopeconomie" op het hardlooptabblad: per
+  // loopblok, niet per sessiegemiddelde. Twee plekken die hetzelfde heten
+  // maar anders rekenen is precies hoe deze app eerder zichzelf tegensprak.
+  if (eff.known && eff.enough) {
+    proof.push({
+      label: `Tempo bij HR ${eff.targetHr}`,
+      value: eff.paceAtTargetBefore
+        ? `${fmtPace(eff.paceAtTargetBefore)} → ${fmtPace(eff.paceAtTarget)}/km`
+        : `${fmtPace(eff.paceAtTarget)}/km`,
+      delta: eff.deltaPct ? `${eff.deltaPct > 0 ? '+' : ''}${eff.deltaPct}% economie` : null,
+      good: eff.direction === 'beter',
+    });
   }
   if (tests.length) {
     const t = tests[0];
@@ -609,6 +620,8 @@ function TabHardlopen({ logs }) {
   const totals = actualTotals(logs);
   const totalKm = totals.actualKm + totals.estKm;
   const economy = paceAtHRTrend();
+  // De loopblok-gebaseerde maat: zie het blok "Loopeconomie" verderop.
+  const eff = efficiencyTrend({ currentDate: tod });
 
   const runWeekStreak = getRunWeekStreak(logs);
   const trailDays = daysBetween(tod, TRAIL_DATE);
@@ -678,6 +691,59 @@ function TabHardlopen({ logs }) {
     <div>
       {/* NU · TREND · VOLGENDE MIJLPAAL · RACES — de vier vragen die tellen */}
       <RunDashboard logs={logs} currentDate={tod} />
+
+      {/* ── Loopeconomie: meters per hartslag ───────────────────
+          Hier stond pace-bij-HR op basis van het SESSIEgemiddelde, met een
+          filter op sessies waarvan de gemiddelde hartslag tussen 120 en 135
+          lag. Bij haar sessies zit het inwandelen en de wandelpauzes in dat
+          gemiddelde, dus een wandeling van 10:34/km bij hartslag 122 kwam
+          binnen als "loopeconomie". Dat is dezelfde fout als eerder bij de
+          loopdichtheid: een gemiddelde over twee verschillende dingen.
+
+          Nu wordt per loopblok van minstens twee minuten gerekend — meters
+          per minuut gedeeld door de hartslag van dát blok. Dat getal is
+          precies wat zij wil volgen: omhoog betekent sneller bij dezelfde
+          hartslag, of dezelfde snelheid bij een lagere. Zie efficiency.js. */}
+      <div className="os-section-label">Loopeconomie — meters per hartslag</div>
+      <div className="os-card" data-economie={eff.known ? eff.count : 0}>
+        {eff.known ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div style={{ fontSize: 24, fontWeight: 900, fontFamily: 'var(--font-serif)',
+                lineHeight: 1 }}>{eff.current}</div>
+              <div style={{ fontSize: 12, color: 'var(--sub)', flex: 1 }}>
+                meter per minuut, per hartslag
+                {eff.deltaPct != null && (
+                  <span style={{ color: eff.direction === 'beter' ? 'var(--green)'
+                    : eff.direction === 'slechter' ? 'var(--rust)' : 'var(--sub)',
+                  fontWeight: 700 }}>
+                    {' '}· {eff.deltaPct > 0 ? '+' : ''}{eff.deltaPct}%
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.6, marginTop: 6 }}>
+              {eff.line}
+              {eff.paceAtTargetBefore && (
+                <span style={{ color: 'var(--ghost)' }}>
+                  {' '}(was {fmtPace(eff.paceAtTargetBefore)})
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 12, marginTop: 6, lineHeight: 1.55,
+              color: eff.direction === 'beter' ? 'var(--green)' : 'var(--sub)' }}>
+              {eff.verdict}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 5, lineHeight: 1.5 }}>
+              {eff.note} Gemeten over {eff.count} sessie{eff.count === 1 ? '' : 's'}.
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5 }}>
+            {eff.why}
+          </div>
+        )}
+      </div>
 
       {/* Alles hieronder is onderbouwing. Het dashboard geeft het antwoord;
           wie wil zien waaróp dat antwoord rust, klapt dit open. */}
@@ -766,41 +832,6 @@ function TabHardlopen({ logs }) {
           </div>
           <div style={{ fontSize: 9, color: 'var(--ghost)', marginTop: 2, textAlign: 'center' }}>laatste 4 weken · &gt;3 = hoog</div>
         </div>
-      </div>
-
-      {/* Running economy: pace bij vergelijkbare HR */}
-      <div className="os-section-label">Running economy — pace bij vergelijkbare HR</div>
-      <div className="os-card">
-        {economy.enough ? (
-          <>
-            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-              <span style={{ color: 'var(--sub)' }}>Eerder ({economy.early.from?.slice(5)}):</span>{' '}
-              <strong>{fmtPace(economy.early.pace)}/km</strong> bij HR ~{economy.early.hr}
-              <br />
-              <span style={{ color: 'var(--sub)' }}>Nu ({economy.late.to?.slice(5)}):</span>{' '}
-              <strong style={{ color: economy.improvementSec > 0 ? 'var(--green)' : 'var(--text)' }}>
-                {fmtPace(economy.late.pace)}/km
-              </strong> bij HR ~{economy.late.hr}
-            </div>
-            <div style={{ fontSize: 12, marginTop: 6, fontWeight: 600,
-              color: economy.improvementSec > 5 ? 'var(--green)' : 'var(--sub)' }}>
-              {economy.improvementSec > 5
-                ? `${economy.improvementSec} sec/km sneller bij vergelijkbare hartslag — dit is echte aerobe progressie.`
-                : economy.improvementSec < -5
-                  ? `${Math.abs(economy.improvementSec)} sec/km langzamer bij vergelijkbare HR — kan vermoeidheid of omstandigheden zijn.`
-                  : 'Stabiel — dezelfde belasting bij dezelfde hartslag.'}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--ghost)', marginTop: 4 }}>
-              op basis van {economy.count} sessies met HR 120–135
-            </div>
-          </>
-        ) : (
-          <div style={{ fontSize: 12, color: 'var(--sub)', lineHeight: 1.5 }}>
-            Nog te weinig geregistreerde sessies met hartslag ({economy.count}/3) om pace-bij-HR
-            te vergelijken. Registreer je runs met gemiddelde HR — dan verschijnt hier je echte
-            aerobe progressie.
-          </div>
-        )}
       </div>
 
       {/* 5K tests */}

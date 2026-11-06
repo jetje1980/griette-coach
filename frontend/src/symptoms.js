@@ -320,24 +320,92 @@ export function headacheTrend({ logs = {}, currentDate = todayLocal(), weeks = 1
   };
 }
 
-// Hoeveel opeenvolgende weken zonder PEM-signaal?
-export function pemFreeWeeks({ logs = {}, currentDate = todayLocal(), max = 12 } = {}) {
-  let weeks = 0;
+// ── Wanneer telt een klacht als PEM? ────────────────────────────
+//
+// WAT ER MIS WAS, EN WAAROM HET ERTOE DOET
+//
+// Zij zei het zelf, en ze heeft gelijk: haar long-COVID-geschiedenis hoort
+// mee te tellen wanneer er een PEM-reactie ís, niet als staande aanname.
+// Deze functie deed het omgekeerde, op twee manieren.
+//
+//   1. Elke klacht telde als PEM-signaal, ook zonder inspanning ervoor.
+//      Een migraine op een rustdag zette de teller op nul. Maar PEM is per
+//      definitie een VERSLECHTERING NA INSPANNING: de klacht moet volgen op
+//      wat je deed. Een migraine op een dag zonder training is een
+//      migrainedag — vervelend, en iets om te loggen, maar het zegt niets
+//      over hoeveel belasting ze verdraagt.
+//
+//   2. Een week zónder invoer brak de reeks óók ("if (!any) break"). Niet
+//      loggen werd dus bestraft alsof haar lichaam iets had gemeld. Twee
+//      weken vakantie zonder app = nul PEM-vrije weken = alle poorten dicht.
+//
+// Allebei de fouten wijzen dezelfde kant op: ze maken van de diagnose een
+// permanente rem in plaats van een reactie op wat er werkelijk gebeurt.
+//
+// Nu:
+//   · een klacht telt als PEM-signaal wanneer ze binnen 72 uur op een
+//     training volgt, óf wanneer zij zelf het PEM-vinkje zet (dat is haar
+//     eigen oordeel en dat wint altijd), óf bij een rode vlag uit de
+//     post-exertionele lijst;
+//   · een week zonder invoer breekt niets; hij telt alleen niet mee als
+//     bewijs. Het aantal wordt apart gemeld, zodat niemand doet alsof een
+//     lege week een schone week is.
+const PEM_VENSTER_UREN = 72;
+
+function inspanningBinnenVenster(datum, sessieDatums) {
+  return sessieDatums.some(d => {
+    const verschil = daysBetween(d, datum);
+    return verschil >= 0 && verschil <= PEM_VENSTER_UREN / 24;
+  });
+}
+
+export function pemFreeWeeks({ logs = {}, currentDate = todayLocal(), max = 12,
+  workouts = null } = {}) {
+  // Elke dag waarop iets van belasting stond: een loop, of een
+  // krachtsessie. Zonder die lijst is "na inspanning" niet te bepalen.
+  const sessies = new Set();
+  for (const w of (workouts || loadWorkouts())) if (w?.date) sessies.add(w.date);
+  for (const l of Object.values(logs)) {
+    if (l?.date && (l.strength_done || l.run_session || l.workout_done)) sessies.add(l.date);
+  }
+  const sessieDatums = [...sessies];
+
+  const isSignaal = (l) => {
+    // Haar eigen vinkje en de rode vlaggen gelden altijd: dat is een
+    // oordeel over de reactie zelf, niet over een losse klacht.
+    if (l.symptom_pem) return true;
+    if (RED_FLAG_IDS.some(id => l[`pe_${id}`])) return true;
+    const klacht = l.training_recovery === 2 || l.recovery_check === 'bad'
+      || Number(l.headache_severity) >= 2 || l.muscle_type === 'diffuse';
+    if (!klacht) return false;
+    // Geen inspanning in de 72 uur ervoor: dan is dit geen post-exertionele
+    // reactie. Het blijft een slechte dag, en die staat gewoon in het
+    // dagboek — hij hoort alleen niet de opbouw te blokkeren.
+    return inspanningBinnenVenster(l.date, sessieDatums);
+  };
+
+  let weken = 0, zonderInvoer = 0;
+  let gebroken = null;
   for (let w = 0; w < max; w++) {
     const to = addDays(currentDate, -w * 7);
     const from = addDays(to, -6);
-    const bad = Object.values(logs).some(l => l.date >= from && l.date <= to && (
-      l.symptom_pem || l.training_recovery === 2 || l.recovery_check === 'bad' ||
-      Number(l.headache_severity) >= 2 || l.muscle_type === 'diffuse' ||
-      RED_FLAG_IDS.some(id => l[`pe_${id}`])));
-    if (bad) break;
-    // Alleen weken meetellen waarin er ook echt iets is ingevuld.
-    const any = Object.values(logs).some(l => l.date >= from && l.date <= to &&
-      (l.recovery_check || l.training_recovery != null || l.headache_severity != null));
-    if (!any) break;
-    weeks++;
+    const inWeek = Object.values(logs).filter(l => l?.date >= from && l.date <= to);
+    const signaal = inWeek.find(isSignaal);
+    if (signaal) { gebroken = signaal.date; break; }
+    const ingevuld = inWeek.some(l => l.recovery_check || l.training_recovery != null
+      || l.headache_severity != null);
+    // Een lege week breekt niets en bewijst niets.
+    if (!ingevuld) { zonderInvoer++; continue; }
+    weken++;
   }
-  return { weeks, note: weeks === 0
-    ? 'Nog geen volledige PEM-vrije week geregistreerd.'
-    : `${weeks} opeenvolgende week${weeks > 1 ? 'en' : ''} zonder PEM-signaal.` };
+
+  const note = weken === 0
+    ? (zonderInvoer
+      ? `Nog geen week met invoer om te beoordelen (${zonderInvoer} week/weken zonder gegevens).`
+      : 'Nog geen volledige PEM-vrije week geregistreerd.')
+    : `${weken} ${weken === 1 ? 'week' : 'weken'} zonder post-exertioneel signaal`
+      + (zonderInvoer ? `, plus ${zonderInvoer} week/weken zonder invoer (die tellen niet mee als bewijs).` : '.')
+      + (gebroken ? ` Laatste signaal: ${gebroken}.` : '');
+
+  return { weeks: weken, unloggedWeeks: zonderInvoer, lastSignal: gebroken, note };
 }
