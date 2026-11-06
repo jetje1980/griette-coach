@@ -1,0 +1,171 @@
+// Sneller worden bij een lagere hartslag: wat de app voorschrijft, en of
+// dat klopt met wat haar eigen data zegt.
+//
+// ─────────────────────────────────────────────────────────────────
+// DE VRAAG WAAR DIT UIT VOORTKOMT
+//
+// Zij wil richting 12 december van ~9:00/km naar 6:30/km, met de hartslag
+// onder 145. Haar gemeten loopblokken staan op 9:00–9:40/km bij 144–152
+// bpm, en haar VT1 ligt op 132.
+//
+// Wat de app daaraan fout deed: het afgesproken werkplafond van 145 werd
+// óók het richtgebied van een rustige training. Elke easy sessie mocht dus
+// tot 145, en dat is boven VT1. Daarmee traint ze elke keer net te zwaar
+// om aerobe basis op te bouwen en te licht om een prikkel te zijn — precies
+// het patroon waarin het tempo bij gelijke hartslag niet zakt.
+//
+// Wat erbij moest: versnellingen (de enige snelheidsprikkel zonder lange
+// hoge hartslag) en een pasfrequentiedoel (de goedkoopste economiewinst).
+import './_storage-stub.js';
+import { hrPrescription } from '../../src/hrModel.js';
+import { stridesFor, STRIDES } from '../../src/raceplan.js';
+import { cadenceTarget, STAP_PCT, BOVENGRENS } from '../../src/cadence.js';
+
+let pass = 0, fail = 0;
+const ok = (n, c, e = '') => {
+  if (c) { pass++; console.log(`  ✓ ${n}`); }
+  else { fail++; console.log(`  ✗ ${n}${e ? ' — ' + String(e).slice(0, 240) : ''}`); }
+};
+const S = (t) => console.log(`\n── ${t} ${'─'.repeat(Math.max(0, 48 - t.length))}`);
+
+const TODAY = '2026-11-06';
+const addDays = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n);
+  return x.toISOString().slice(0, 10); };
+
+// Haar werkelijke instellingen: plafond 145 (afspraak, 19 aug), VT1 132 en
+// VT2 156 uit de CPET van 4 februari 2025.
+function haarInstellingen() {
+  globalThis.__testStorage.reset();
+  localStorage.setItem('gc_hr_settings', JSON.stringify({
+    easyLow: 106, easyHigh: 145, walkTrigger: 150, resumeBelow: 105,
+    recoveryHR: null, rpeEasy: 4, rpeThreshold: 6 }));
+}
+
+console.log('\n████ Sneller bij een lagere hartslag ████');
+
+S('1 · Rustig is onder VT1, niet tot het plafond');
+{
+  haarInstellingen();
+  const p = hrPrescription({ purpose: 'EASY_ECONOMY', currentDate: TODAY });
+  console.log(`      ${p.line}`);
+  ok('het richtgebied stopt bij VT1', p.easy.high === 132, String(p.easy.high));
+  ok('en begint waar het begon', p.easy.low === 106, String(p.easy.low));
+  ok('de afgesproken 145 blijft bestaan als grens', p.agreedCeiling === 145,
+    String(p.agreedCeiling));
+  ok('de kaartregel noemt allebei', /132/.test(p.line) && /145/.test(p.line), p.line);
+  ok('de uitleg zegt waaróm onder VT1', /onder VT1/i.test(p.text), p.text.slice(0, 120));
+  ok('en legt het verband met sneller worden',
+    /lágere hartslag|economie|opbouw/i.test(p.why), p.why.slice(0, 140));
+
+  // Dit was de echte fout: een voorschrift dat 106–145 zei en er ónder
+  // schreef dat we rond of onder 132 blijven.
+  ok('geen tegenspraak meer tussen band en uitleg',
+    !(p.easy.high > p.vt1Hr && /rond of onder VT1/.test(p.why)),
+    `${p.easy.high} vs ${p.why.slice(0, 80)}`);
+}
+
+S('2 · De wandelgrens hangt aan de afspraak, niet aan VT1+8');
+{
+  haarInstellingen();
+  const p = hrPrescription({ purpose: 'EASY_ECONOMY', currentDate: TODAY });
+  ok('wandelen vanaf het afgesproken plafond', p.walkTrigger === 145,
+    String(p.walkTrigger));
+  ok('en dat is niet hoger dan de afspraak zelf', p.walkTrigger <= p.agreedCeiling,
+    `${p.walkTrigger} > ${p.agreedCeiling}`);
+}
+
+S('3 · Een kwaliteitsblok mag juist wél boven VT1');
+{
+  haarInstellingen();
+  const p = hrPrescription({ purpose: 'FIVE_K_SPECIFIC', currentDate: TODAY });
+  console.log(`      ${p.line}`);
+  ok('het easy deel blijft het afgesproken gebied', p.easy.high === 145,
+    String(p.easy.high));
+  ok('rustig en kwaliteit krijgen niet hetzelfde voorschrift',
+    hrPrescription({ purpose: 'EASY_ECONOMY', currentDate: TODAY }).easy.high
+      !== p.easy.high);
+}
+
+S('4 · Versnellingen horen achter een rustige sessie');
+{
+  const bij = (purpose, extra = {}) => stridesFor({ purpose, mayBuild: true, ...extra });
+  ok('achter een easy sessie', bij('EASY_ECONOMY')?.reps === STRIDES.REPS,
+    JSON.stringify(bij('EASY_ECONOMY')));
+  ok('achter een duursessie', !!bij('DURABILITY'));
+  ok('in de taper, maar minder', bij('TAPER')?.reps === STRIDES.TAPER_REPS,
+    String(bij('TAPER')?.reps));
+  ok('niet op een kwaliteitsdag — twee zware prikkels op één dag is stapelen',
+    bij('FIVE_K_SPECIFIC') === null);
+  ok('niet op een hersteldag', bij('RECOVERY') === null);
+  ok('niet op een amberdag', bij('EASY_ECONOMY', { amber: true }) === null);
+  ok('niet als er niet opgebouwd mag worden',
+    stridesFor({ purpose: 'EASY_ECONOMY', mayBuild: false }) === null);
+  ok('niet als de poort dicht staat',
+    bij('EASY_ECONOMY', { gate: { allowed: false } }) === null);
+
+  const s = bij('EASY_ECONOMY');
+  ok('twaalf seconden, niet een minuut', s.seconds === 12, String(s.seconds));
+  ok('met twee minuten wandelen ertussen', s.recoveryMin === 2, String(s.recoveryMin));
+  ok('en het zegt erbij dat hartslag hier niet telt', /hartslag telt hier niet/i.test(s.hr),
+    s.hr.slice(0, 80));
+}
+
+S('5 · Pasfrequentie: haar eigen getal plus vijf procent');
+{
+  globalThis.__testStorage.reset();
+  // Exact de vorm waarin haar Strava-sessies binnenkomen: cadans per been
+  // (77 betekent 154 passen), wandellaps ertussen.
+  localStorage.setItem('gc_workouts', JSON.stringify([
+    { id: 'a', date: addDays(TODAY, -5), distance: 3.4, duration: 33, laps: [
+      { derivedKind: 'walk', cadence: 59, movingTime: 300 },
+      { derivedKind: 'run', cadence: 77, movingTime: 480 },
+      { derivedKind: 'run', cadence: 79, movingTime: 480 },
+    ] },
+    { id: 'b', date: addDays(TODAY, -12), distance: 4.5, duration: 45, laps: [
+      { derivedKind: 'run', cadence: 78, movingTime: 548 },
+      { derivedKind: 'walk', cadence: 60, movingTime: 120 },
+    ] },
+  ]));
+  const c = cadenceTarget({ currentDate: TODAY });
+  console.log(`      ${c.line}`);
+  ok('de cadans is bekend', c.known === true, JSON.stringify(c));
+  ok('per been wordt verdubbeld — 78 is geen pasfrequentie',
+    c.current >= 150 && c.current <= 160, String(c.current));
+  ok('het wandelen telt niet mee', c.current > 140,
+    'anders zakt het gemiddelde naar wandelniveau');
+  ok('het doel is vijf procent erboven',
+    c.target === Math.min(BOVENGRENS, Math.round(c.current * (1 + STAP_PCT))),
+    `${c.current} → ${c.target}`);
+  ok('en dat is een handvol passen, geen sprong', c.delta >= 5 && c.delta <= 10,
+    String(c.delta));
+  ok('met uitleg hoe je het telt', /tien seconden|metronoom/i.test(c.how), c.how);
+  ok('en de bron erbij', /loopsessie/.test(c.why), c.why.slice(0, 90));
+  ok('180 wordt niet als norm verkocht', /geen norm/.test(c.why));
+}
+
+S('6 · Zonder meting wordt er niets verzonnen');
+{
+  globalThis.__testStorage.reset();
+  const c = cadenceTarget({ currentDate: TODAY });
+  ok('onbekend blijft onbekend', c.known === false);
+  ok('met uitleg waarom', /Nog geen loopblokken/.test(c.why), c.why);
+
+  // Een sessie die alleen uit wandelen bestaat, levert geen looptempo op.
+  localStorage.setItem('gc_workouts', JSON.stringify([
+    { id: 'w', date: addDays(TODAY, -2), laps: [
+      { derivedKind: 'walk', cadence: 59, movingTime: 1800 }] },
+  ]));
+  ok('een wandelsessie telt niet als loopcadans',
+    cadenceTarget({ currentDate: TODAY }).known === false);
+
+  // En een sessie van tien weken geleden zegt niets over nu.
+  localStorage.setItem('gc_workouts', JSON.stringify([
+    { id: 'oud', date: addDays(TODAY, -70), laps: [
+      { derivedKind: 'run', cadence: 77, movingTime: 600 }] },
+  ]));
+  ok('een sessie buiten het venster telt niet mee',
+    cadenceTarget({ currentDate: TODAY }).known === false);
+}
+
+console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
+process.exit(fail ? 1 : 0);

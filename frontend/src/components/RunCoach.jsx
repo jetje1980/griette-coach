@@ -313,6 +313,38 @@ function NextSession({ plan, budget, statuses, limiter, easy,
       <Row k="Verwachte loopafstand" v={math?.runKm ? `${math.runKm.toFixed(1)} km` : null} />
       <Row k="Verwachte totale afstand" v={math?.km ? `${math.km.toFixed(1)} km` : null} />
       <Row k="Hefboom" v={(plan.levers || []).join(' · ') || 'niveau vasthouden'} />
+
+      {/* ── Pasfrequentie ───────────────────────────────────────
+          De goedkoopste manier om sneller te lopen bij dezelfde hartslag:
+          kortere pasjes bij hetzelfde tempo. Het doel is haar eigen
+          gemeten getal plus vijf procent, geen norm van internet. */}
+      {run.cadence?.known && (
+        <Row k="Pasfrequentie"
+          v={run.cadence.target > run.cadence.current
+            ? `${run.cadence.current} → ${run.cadence.target} spm`
+            : `${run.cadence.current} spm`}
+          sub={run.cadence.how} />
+      )}
+
+      {/* ── Versnellingen ───────────────────────────────────────
+          Twaalf seconden vlot met twee minuten wandelen ertussen: de enige
+          snelheidsprikkel die geen lange hoge hartslag vraagt, en daarmee
+          de enige die bij een PEM-historie zonder voorbehoud past. */}
+      {run.strides && (
+        <div data-versnellingen={run.strides.reps}
+          style={{ background: 'var(--card)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '9px 11px', marginTop: 10 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 3 }}>
+            Erachteraan: {run.strides.label}
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55 }}>
+            {run.strides.how}
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 4 }}>
+            {run.strides.hr} {run.strides.why}
+          </div>
+        </div>
+      )}
       {/* RPE alleen als je hem werkelijk hebt ingevuld — een verwachte
           inspanning verzinnen zegt niets. */}
       <Row k="Verwachte RPE" v={easy?.avgRpe != null ? `~${easy.avgRpe}` : null}

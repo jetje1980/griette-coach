@@ -404,7 +404,35 @@ export function hrPrescription({
   const m = model || loadHrModel();
   const rel = release || intensityRelease({ logs, currentDate, model: m });
 
-  const easy = { low: m.easyTargetLow, high: m.easyTargetHigh };
+  // ── Rustig is niet "tot het plafond" ──────────────────────────
+  //
+  // WAT ER MIS WAS
+  //
+  // Het afgesproken werkplafond is 145, en dat is precies wat hier als
+  // richtgebied voor een rústige training uit kwam: 106–145. Daaronder
+  // stond tegelijk de zin "voor deze rustige training houden we je rond of
+  // onder VT1 (132)". Twee regels in één voorschrift, en de hoogste wint
+  // altijd — in de praktijk liep zij vrijwel elke loopblok op 144–152.
+  //
+  // Dat is ook precies waarom haar tempo bij gelijke hartslag niet zakt.
+  // Boven VT1 groeit de aerobe motor nauwelijks; die groeit van minuten
+  // eronder. Wie elke training op de grens loopt, traint elke dag een
+  // beetje te zwaar om op te bouwen en te licht om een echte prikkel te
+  // zijn — en komt niet sneller uit op dezelfde hartslag.
+  //
+  // Dus: bij een rustige sessie is het DOEL de band onder VT1. Het
+  // afgesproken plafond van 145 blijft gelden als grens (het is haar
+  // besluit, niet dat van de app), maar het is niet het mikpunt. Bij een
+  // kwaliteitsblok is het omgekeerd: dan is de ruimte boven VT1 juist de
+  // bedoeling, tot aan wat er is vrijgegeven.
+  const EASY_PURPOSES = ['EASY_ECONOMY', 'DURABILITY', 'RECOVERY', 'TAPER'];
+  const isEasy = EASY_PURPOSES.includes(purpose);
+  const afgesprokenPlafond = m.easyTargetHigh;
+  const easyTop = isEasy ? Math.min(afgesprokenPlafond, m.vt1Hr) : afgesprokenPlafond;
+  const easy = { low: m.easyTargetLow, high: easyTop, agreedCeiling: afgesprokenPlafond };
+  // Staat het plafond hoger dan VT1, dan is er een verschil tussen "waar ik
+  // op mik" en "waar mijn grens ligt", en dat hoort uitgelegd te worden.
+  const splitsing = isEasy && afgesprokenPlafond > easyTop;
   const hardPurposes = ['QUALITY_LITE', 'FIVE_K_SPECIFIC', 'TEN_K_SPECIFIC'];
   const wantsWork = hardPurposes.includes(purpose);
 
@@ -418,9 +446,12 @@ export function hrPrescription({
   // rustige opbouw waar hartslag boven het richtgebied betekent dat het
   // tempo eruit moet. Nooit gelijk aan VT1, want dan is het geen trigger
   // maar een verbod op het richtgebied zelf.
-  const walkTrigger = (purpose === 'EASY_ECONOMY' || purpose === 'DURABILITY' ||
-    purpose === 'RECOVERY' || purpose === 'TAPER')
-    ? Math.max(m.easyTargetHigh + 8, m.vt1Hr + 8)
+  //
+  // De trigger hangt aan het afgesproken plafond en niet meer aan het
+  // richtgebied: mikken op 132 met een wandelgrens van 153 is geen grens
+  // maar een vrijbrief.
+  const walkTrigger = isEasy
+    ? Math.max(afgesprokenPlafond, m.vt1Hr + 8)
     : null;
 
   const zone = zoneOf(easy.high, m);
@@ -434,6 +465,14 @@ export function hrPrescription({
     text = `Richtgebied ${easy.low}–${easy.high} bpm. Het tempoblok stuurt vandaag op tempo, ` +
       'niet op een hogere hartslag — daar is nog geen bewijs voor.';
     why = rel.why;
+  } else if (splitsing) {
+    text = `Richtgebied ${easy.low}–${easy.high} bpm — onder VT1 (${m.vt1Hr}). Kort erboven is geen fout, `
+      + `maar laat het tempo zakken zodra je structureel boven ${easy.high} zit, en wandel `
+      + `als je richting ${walkTrigger} gaat. Je afgesproken plafond van ${afgesprokenPlafond} `
+      + 'blijft de grens; vandaag is het niet het doel.';
+    why = `Sneller worden bij een lágere hartslag komt van de minuten ónder VT1 (${m.vt1Hr}), niet `
+      + `van de minuten eronder blijven hangen bij ${afgesprokenPlafond}. Rustige trainingen op het `
+      + 'plafond zijn te zwaar om van op te bouwen en te licht om een prikkel te zijn.';
   } else {
     text = `Richtgebied ${easy.low}–${easy.high} bpm. Kort oplopen daarboven is geen fout; ` +
       `laat het tempo zakken wanneer je hartslag structureel boven ${easy.high} blijft` +
@@ -448,11 +487,17 @@ export function hrPrescription({
   // verkorting van de lange, geen andere regel.
   const line = work
     ? `Easy ${easy.low}–${easy.high} bpm · werkblokken ${work.low}–${work.high} bpm`
-    : `Richtgebied ${easy.low}–${easy.high} bpm — kort erboven is geen fout`;
+    : splitsing
+      ? `Mik op ${easy.low}–${easy.high} bpm (onder VT1) · grens ${afgesprokenPlafond}`
+      : `Richtgebied ${easy.low}–${easy.high} bpm — kort erboven is geen fout`;
 
   return {
     purpose,
     easy, work, walkTrigger,
+    // Het afgesproken plafond blijft apart leesbaar: het richtgebied kan
+    // lager liggen zonder dat de afspraak verdwijnt.
+    agreedCeiling: afgesprokenPlafond,
+    aerobicTarget: splitsing,
     resumeBelow: m.resumeBelow,
     ceiling: rel.ceiling,
     release: rel,

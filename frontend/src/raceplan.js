@@ -35,6 +35,7 @@ import { runningState } from './raceGoals';
 import { loadRaceGoals, saveRaceGoal, resetRaceGoals, DEFAULT_GOALS } from './raceGoalModel';
 import { restDayDecision, MAX_WEEKLY_VOLUME_GROWTH } from './restday';
 import { SESSIONS as LIBRARY } from './data/sessionLibrary';
+import { cadenceTarget } from './cadence';
 
 // ── Fasen, op de kalender ───────────────────────────────────────
 // De fase staat niet meer hier.
@@ -79,6 +80,27 @@ export const PURPOSE = {
   QUALITY_LITE: {
     id: 'QUALITY_LITE', label: 'Quality-lite',
     aim: 'Korte, gecontroleerde versnelling zonder de herstelkosten van racetempo.',
+  },
+  // ── Versnellingen ─────────────────────────────────────────────
+  //
+  // Dit doel ontbrak, en het is juist het doel dat bij haar het meeste
+  // oplevert voor het minste herstelgeld.
+  //
+  // Tien seconden hard met twee minuten wandelen ertussen is geen
+  // uithoudingsprikkel: de hartslag komt amper boven het rustige gebied uit
+  // omdat de inspanning voorbij is voordat het hart erop reageert, en het
+  // energiesysteem dat je aanspreekt (creatinefosfaat) is in een paar
+  // minuten weer vol. Wat je wél traint is de aansturing: hoe snel je
+  // spieren vuren, hoe lang je voet op de grond staat, hoe weinig je afremt
+  // bij elke pas. Dat is loopeconomie, en loopeconomie is precies wat
+  // bepaalt hoe snel je loopt bij een gegeven hartslag.
+  //
+  // Bij een PEM-historie telt dat dubbel: dit is de enige vorm van snelheid
+  // die je kunt trainen zonder een lange inspanning hoog in de hartslag,
+  // die juist het patroon is dat bij haar een terugslag geeft.
+  STRIDES: {
+    id: 'STRIDES', label: 'Versnellingen',
+    aim: 'Sneller lopen bij dezelfde hartslag door betere aansturing, niet door harder werken.',
   },
   FIVE_K_SPECIFIC: {
     id: 'FIVE_K_SPECIFIC', label: '5 km-specifiek',
@@ -477,6 +499,48 @@ function buildRun({ purpose, base, targetPace, hrZone, race, walkPace }) {
   };
 }
 
+// ── Versnellingen aan een rustige sessie hangen ─────────────────
+//
+// Geen eigen trainingsdag en geen vierde prikkel: versnellingen horen áchter
+// een rustige duurloop, als de benen warm zijn en vóórdat er vermoeidheid in
+// zit. Zo kosten ze bijna niets aan herstel en leveren ze het enige wat ze
+// moeten leveren — betere aansturing.
+//
+// Waarom ze niet op een kwaliteitsdag staan: dan zou één dag twee soorten
+// zware prikkels dragen, en bij een PEM-historie is het stapelen van
+// prikkels op één dag precies wat je niet wilt. En niet op een hersteldag,
+// want dan is het geen hersteldag meer.
+export const STRIDES = {
+  SECONDS: 12,
+  REPS: 6,
+  TAPER_REPS: 4,
+  RECOVERY_MIN: 2,
+};
+
+const STRIDES_PURPOSES = ['EASY_ECONOMY', 'DURABILITY', 'TAPER'];
+
+export function stridesFor({ purpose, mayBuild = true, amber = false,
+  gate = null } = {}) {
+  if (!STRIDES_PURPOSES.includes(purpose)) return null;
+  // Een amberdag verlaagt al het aantal blokken; er dan nog snelheid
+  // bovenop zetten maakt die verlaging zinloos.
+  if (amber || !mayBuild) return null;
+  if (gate && gate.allowed === false) return null;
+  const reps = purpose === 'TAPER' ? STRIDES.TAPER_REPS : STRIDES.REPS;
+  return {
+    reps, seconds: STRIDES.SECONDS, recoveryMin: STRIDES.RECOVERY_MIN,
+    label: `${reps} × ${STRIDES.SECONDS} sec versnelling`,
+    how: 'Na afloop, benen warm. Twaalf seconden vlot — niet sprinten, wel '
+      + 'duidelijk sneller dan je looptempo — en daarna twee minuten wandelen '
+      + 'tot je weer rustig ademt. Vorm boven snelheid: hoge pasfrequentie, '
+      + 'voet onder je lichaam, schouders los.',
+    why: PURPOSE.STRIDES.aim,
+    hr: 'Hartslag telt hier niet. Twaalf seconden is te kort om je hart te '
+      + 'laten reageren; loopt hij op, dan komt dat door het wandelen erna, '
+      + 'niet door de versnelling zelf.',
+  };
+}
+
 function fmtBlock(min) {
   if (min == null) return '—';
   return Number.isInteger(min) ? `${min} min` : `${String(min).replace('.', ',')} min`;
@@ -634,6 +698,22 @@ export function planNextSession({
   }
   run.hrDetail = hrDetail;
   run.hrWhy = hrx.why;
+
+  // Versnellingen achter een rustige sessie: de enige snelheidsprikkel die
+  // zonder lange hoge hartslag werkt, en daarmee de enige die hier past.
+  //
+  // De beschrijving blijft onaangeroerd. Die is de tekst van de blokvorm en
+  // moet exact kloppen met runMin/walkMin/reps — dat is precies de regel
+  // die eerder is ingevoerd toen Vandaag en Progressie twee verschillende
+  // sessies toonden. Versnellingen zijn een aanhangsel aan de sessie, geen
+  // andere sessie, en staan dus in een eigen veld dat elk scherm los toont.
+  run.strides = stridesFor({ purpose: chosen, mayBuild, amber: !!fysiekAmber,
+    gate: runGate });
+  if (run.strides) levers.push('versnellingen erachter');
+
+  // Pasfrequentie: de goedkoopste winst die er voor haar ligt. Zie
+  // cadenceTarget() voor waarom dit een getal met bewijs is en geen regel.
+  run.cadence = cadenceTarget({ logs, currentDate });
 
   return {
     purpose: chosen, race, timeline, run,
