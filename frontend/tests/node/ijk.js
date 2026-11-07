@@ -22,7 +22,7 @@
 // in plaats van economie.
 import './_storage-stub.js';
 import { ijksessie, ijkDuur, ijkUitslag, geschiktOp, ijkTegenDoel,
-  saveIjk, clearIjk, IJK_MIN_MIN, IJK_MAX_MIN, IJK_MAX_RHR_BOVEN }
+  saveIjk, clearIjk, IJK_MIN_MIN, IJK_MAX_MIN, IJK_MAX_RHR_BOVEN, IJK_PIEK_MARGE }
   from '../../src/ijksessie.js';
 
 let pass = 0, fail = 0;
@@ -34,7 +34,8 @@ const S = (t) => console.log(`\n── ${t} ${'─'.repeat(Math.max(0, 48 - t.le
 
 const TODAY = '2026-11-07';
 const w = (date, laps) => ({ id: date, date, activityType: 'run',
-  laps: laps.map(([movingTime, distance, avgHr]) => ({ movingTime, distance, avgHr })) });
+  laps: laps.map(([movingTime, distance, avgHr, maxHr]) =>
+    ({ movingTime, distance, avgHr, ...(maxHr ? { maxHr } : {}) })) });
 const DRIFT = { lowest: { median: 62 } };
 
 S('1 · De duur past bij wat ze aankan');
@@ -131,7 +132,42 @@ S('4 · De uitslag lezen — en weigeren als het geen meting was');
     /minder nauwkeurig/.test(u3.why), u3.why);
 }
 
-S('5 · Wat de uitslag betekent voor het doel');
+S('5 · Een polsmeting die niet deugde, wordt herkend');
+{
+  // Zij meet alles met de Garmin en blijft dat doen — terecht, want dit
+  // model rekent met verandering over de tijd en dan telt dezelfde
+  // meetmethode zwaarder dan absolute nauwkeurigheid. De zwakke plek van
+  // een optische meter blijft wel bestaan, dus die wordt achteraf
+  // getoetst met wat de Garmin per lap meelevert: naast de gemiddelde
+  // ook de maximale hartslag. Bij een vlak blok horen die dicht bij
+  // elkaar te liggen.
+  const schoon = [w('2026-11-08', [[660, 145 * 0.94 * 11, 145, 150]])];
+  const u1 = ijkUitslag({ datum: '2026-11-08', hr: 145, minuten: 12, workouts: schoon });
+  console.log(`      piek 5 boven gemiddelde → betrouwbaar: ${u1.betrouwbaar}`);
+  ok('een vlak blok heet betrouwbaar', u1.betrouwbaar === true, JSON.stringify(u1.spread));
+  ok('en krijgt geen waarschuwing', u1.meetWaarschuwing === null, String(u1.meetWaarschuwing));
+
+  const pieken = [w('2026-11-08', [[660, 145 * 0.94 * 11, 145, 178]])];
+  const u2 = ijkUitslag({ datum: '2026-11-08', hr: 145, minuten: 12, workouts: pieken });
+  console.log(`      piek 33 boven gemiddelde → betrouwbaar: ${u2.betrouwbaar}`);
+  ok('pieken boven de marge worden herkend', u2.betrouwbaar === false, String(u2.spread));
+  ok('de waarschuwing noemt de optische meter',
+    /optische meter/.test(u2.meetWaarschuwing || ''), u2.meetWaarschuwing);
+  ok('het getal blijft wel staan — niet stilzwijgend weggegooid',
+    Math.abs(u2.ef - 0.94) < 0.01, String(u2.ef));
+  ok('en er staat wat ze eraan kan doen',
+    /band los|pols koud/.test(u2.meetWaarschuwing || ''), u2.meetWaarschuwing);
+
+  // Levert de Garmin geen maximale hartslag, dan is er niets te toetsen —
+  // en dan hoort er geen oordeel te staan in plaats van een gunstig oordeel.
+  const zonder = [w('2026-11-08', [[660, 145 * 0.94 * 11, 145]])];
+  const u3 = ijkUitslag({ datum: '2026-11-08', hr: 145, minuten: 12, workouts: zonder });
+  ok('zonder maximale hartslag geen oordeel over de spreiding',
+    u3.spread === null, String(u3.spread));
+  ok('de grens staat op vijftien slagen', IJK_PIEK_MARGE === 15, String(IJK_PIEK_MARGE));
+}
+
+S('6 · Wat de uitslag betekent voor het doel');
 {
   const t = ijkTegenDoel({ ef: 0.94, hrCap: 145, benodigdeEf: 0.985 });
   console.log(`      ${t.line}`);
@@ -141,7 +177,7 @@ S('5 · Wat de uitslag betekent voor het doel');
     ijkTegenDoel({ ef: 0.94, hrCap: 145 }).gapPct === null, '');
 }
 
-S('6 · De hele keten: voorstel, gepland, gedaan');
+S('7 · De hele keten: voorstel, gepland, gedaan');
 {
   clearIjk();
   const haar = [w('2026-11-06', [[624, 1000, 142.6]])];

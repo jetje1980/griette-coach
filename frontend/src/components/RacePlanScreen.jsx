@@ -554,6 +554,12 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                     </div>
                   ))}
                 </div>
+                {plan.calibration.uitslag.meetWaarschuwing && (
+                  <div style={{ fontSize: 11, color: 'var(--gold)', lineHeight: 1.5,
+                    marginTop: 6, fontWeight: 600 }} data-ijk-meetfout>
+                    {plan.calibration.uitslag.meetWaarschuwing}
+                  </div>
+                )}
                 {plan.calibration.tegenDoel && (
                   <div style={{ fontSize: 11.5, color: 'var(--sage)', lineHeight: 1.55,
                     marginTop: 7, paddingTop: 6, borderTop: '1px solid var(--border)',

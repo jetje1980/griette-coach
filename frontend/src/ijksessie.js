@@ -23,8 +23,23 @@
 //     tempo doen wat het doet; andersom meet je iets anders.
 //   · Vlak en verhard. Duinen en zand maken de meting onvergelijkbaar
 //     met de vorige.
-//   · Borstband. De polsmeting is precies wat 4 oktober onbruikbaar
-//     maakte: twintig slagen "zakken" terwijl het tempo gelijk bleef.
+//   · Dezelfde meter als altijd — bij haar de Garmin om de pols.
+//
+//     Hier stond eerst "borstband, want nauwkeuriger". Dat advies was
+//     verkeerd om, en zij zag het meteen: zij meet alles met de Garmin.
+//     Haar hele reeks is polsmeting. Dit model rekent niet met absolute
+//     waarden maar met de verándering van efficiëntie over de tijd, en
+//     dan is consistentie van meetmethode belangrijker dan absolute
+//     nauwkeurigheid. Midden in een reeks van meter wisselen zet een
+//     sprong in de getallen die geen fysiologie is.
+//
+//     De zwakke plek van een optische meter blijft wel bestaan — 4
+//     oktober was er een — maar die los je niet op met een ander apparaat
+//     dat zij toch niet draagt. Je lost hem op met twee dingen: een
+//     protocol dat de bekende faalgevallen vermijdt (koude pols, losse
+//     band, intervallen) en controles achteraf die een onbetrouwbare
+//     meting herkennen in plaats van hem door te laten. Zie
+//     IJK_PIEK_MARGE en de hartslagdalingstoets in gemetenTempo.js.
 //   · En de duur past bij wat ze aankan. Twintig minuten doorlopend is
 //     bij haar langste blok van tien een stap die de meting zelf tot
 //     training maakt — dan meet je vermoeidheid, niet economie.
@@ -59,6 +74,19 @@ export const IJK_MAX_MIN = 20;
 // bruikbaar heten? Vier slagen erboven is precies de toestand waarin zij
 // nu zit, en dan meet je herstelschuld in plaats van vorm.
 export const IJK_MAX_RHR_BOVEN = 2;
+
+// ── Hoe zie je achteraf of de polsmeting deugde? ────────────────
+//
+// Zij meet met de Garmin, en dat blijft zo. Een optische meter faalt niet
+// willekeurig maar herkenbaar: hij verliest het signaal en pakt het weer
+// op, en dan staan er pieken in een verder vlak blok. Haar Garmin levert
+// per lap zowel de gemiddelde als de maximale hartslag, en dat is precies
+// genoeg om dat te zien.
+//
+// Bij twaalf minuten doorlopend op gelijk tempo hoort de maximale
+// hartslag dicht bij het gemiddelde te liggen. Zit er meer dan dit
+// verschil tussen, dan is er iets gebeurd wat geen inspanning was.
+export const IJK_PIEK_MARGE = 15;
 
 export function loadIjk() {
   try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; }
@@ -148,7 +176,13 @@ export function ijkVoorschrift({ hr = 145, minuten = 12 } = {}) {
     ],
     eisen: [
       'Vlakke verharde weg. Geen duin, geen zand, geen trap.',
-      'Borstband, geen polsmeting. Dat is wat 4 oktober onbruikbaar maakte.',
+      'Je Garmin om de pols, zoals altijd — niet opeens een andere meter. Dit model '
+        + 'rekent met verandering over de tijd, en dan telt dezelfde meetmethode zwaarder '
+        + 'dan absolute nauwkeurigheid.',
+      'Band strak genoeg: een vingerbreedte boven het polsbotje, niet eroverheen, en niet '
+        + 'zo los dat hij schuift. Een losse band is de hoofdoorzaak van onzin-hartslagen.',
+      'De tien minuten inlopen zijn hier geen opwarming maar onderdeel van de meting: een '
+        + 'koude pols geeft een optische meter geen goed signaal. Mouw niet over het horloge.',
       'Niet in je laatluteale week en niet op een dag dat je rusthartslag verhoogd is.',
       'Geen zware krachtsessie in de 24 uur ervoor.',
     ],
@@ -174,6 +208,7 @@ export function ijkUitslag({ datum, hr = 145, minuten = 12, workouts = null } = 
     sec: Number(l.movingTime ?? l.moving_time ?? 0),
     meter: Number(l.distance ?? 0),
     hr: Number(l.avgHr ?? l.average_heartrate ?? 0),
+    maxHr: Number(l.maxHr ?? l.max_heartrate ?? 0) || null,
   })).filter(l => l.sec > 0 && l.meter > 0 && l.hr > 0);
 
   const nodig = Math.max(IJK_MIN_MIN, minuten - 2) * 60;
@@ -191,14 +226,31 @@ export function ijkUitslag({ datum, hr = 145, minuten = 12, workouts = null } = 
   const ef = +(mpm / blok.hr).toFixed(3);
   const opDoelHr = +(ef * hr).toFixed(1);
 
+  // Deugde de polsmeting? Bij een vlak blok hoort de piek dicht bij het
+  // gemiddelde te liggen. Doet hij dat niet, dan heeft de optische meter
+  // het signaal verloren en weer opgepakt — en dan is dit geen ijkpunt
+  // maar een schatting. Dat moet zij weten vóór ze er conclusies aan
+  // verbindt, niet nadat het getal ergens in een curve verdwenen is.
+  const piek = blok.maxHr ? Math.round(blok.maxHr - blok.hr) : null;
+  const pieken = piek != null && piek > IJK_PIEK_MARGE;
+
   return {
     gedaan: true,
     binnenBand: afwijking <= IJK_HR_MARGE,
     ef,
     hr: Math.round(blok.hr),
+    maxHr: blok.maxHr ? Math.round(blok.maxHr) : null,
+    spread: piek,
+    betrouwbaar: !pieken,
     minuten: +(blok.sec / 60).toFixed(1),
     pace: +(1000 / mpm).toFixed(2),
     paceOpDoelHr: +(1000 / opDoelHr).toFixed(2),
+    meetWaarschuwing: pieken
+      ? `Je hartslag piekte in dit blok ${piek} slagen boven het gemiddelde, terwijl je `
+        + 'tempo gelijk bleef. Dat is het patroon van een optische meter die even geen '
+        + 'signaal had. Het getal blijft staan, maar reken er niet te hard op: zat de '
+        + 'band los of was je pols koud, loop de ijksessie dan nog een keer.'
+      : null,
     why: afwijking <= IJK_HR_MARGE
       ? `${Math.round(blok.sec / 60)} minuten doorlopend op hartslag ${Math.round(blok.hr)}.`
       : `Gelopen op hartslag ${Math.round(blok.hr)} in plaats van ${hr}. Het getal telt `
