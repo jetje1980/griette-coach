@@ -442,11 +442,39 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
       // fout, en juist die naam maakte het verwarrend op de eerste dag van
       // haar nieuwe week.
       blockers.push(`${load.runMin7} min gelopen in de laatste zeven dagen tegen een basis van ${load.baselineRunMinPerWeek} min per week — meer dan 10% groei`);
-      pasVrij(addDays(currentDate, 2),
+      // ── Wanneer is deze blokkade werkelijk voorbij? ───────────
+      //
+      // Hier stond "over twee dagen". Dat was geen berekening maar een
+      // gok, en hij kostte haar precies de dag waar ze om vroeg: na haar
+      // loop van vrijdag zei de app "weer vrij vanaf maandag", terwijl de
+      // telling op zondag al onder het plafond stond — de zware dag van 1
+      // november valt dan uit het venster van zeven dagen. Een vooruitblik
+      // die te láát belooft kost een loopdag, en dat is bij vijf weken tot
+      // de race geen detail.
+      //
+      // Het venster rolt, dus de datum is uit te rekenen: loop de komende
+      // dagen langs en kijk wanneer het zeven-daagse totaal onder het
+      // plafond van díé dag zakt. Zonder nieuwe runs is dat exact; loopt ze
+      // tussendoor, dan rekent de poort morgen gewoon opnieuw.
+      const alleRuns = loadWorkouts().filter(isRun)
+        .filter(w => w.date && w.date <= currentDate);
+      const totaalTussen = (van, tot) => alleRuns
+        .filter(w => w.date >= van && w.date <= tot)
+        .reduce((s, w) => s + num(w.duration), 0);
+      let volumeVrij = null;
+      for (let i = 1; i <= 28 && !volumeVrij; i++) {
+        const d = addDays(currentDate, i);
+        const inVenster = totaalTussen(addDays(d, -6), d);
+        const eerder = totaalTussen(addDays(d, -34), addDays(d, -7));
+        const basis = eerder ? eerder / 4 : null;
+        if (!basis || inVenster < basis * (1 + MAX_WEEKLY_VOLUME_GROWTH)
+          || inVenster - basis < MIN_MEANINGFUL_GROWTH_MIN) volumeVrij = d;
+      }
+      pasVrij(volumeVrij || addDays(currentDate, 2),
         `${load.runMin7} min gelopen in de laatste zeven dagen tegen een basis van `
         + `${load.baselineRunMinPerWeek} min per week — meer dan 10% groei`,
-        'Deze datum schuift mee: zodra de zware dagen uit het venster van zeven dagen '
-        + 'vallen, zakt de telling vanzelf.');
+        'Deze datum is uitgerekend, niet geschat: dan valt de zware dag uit het '
+        + 'venster van zeven dagen en zakt de telling onder het plafond.');
     }
   }
 

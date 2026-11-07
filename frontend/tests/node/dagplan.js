@@ -111,13 +111,31 @@ S('2 · Het schema plant precies zoveel loopdagen als de poort toelaat');
 
   // En als het plafond omhoog gaat, gaat het schema mee — in dezelfde
   // handeling, zonder dat zij ergens anders iets hoeft na te lopen.
+  //
+  // Vanaf vier loopdagen laat het schema de vaste weekdagen los. Dat moet
+  // ook wel: in een week van zeven dagen passen hooguit drie loopdagen
+  // zonder dat er twee aan elkaar grenzen, en zo'n paar blokkeert de
+  // poort met "minstens één volle rustdag tussen twee runs". Vier vaste
+  // weekdagen betekent dus elke week één geplande loop die niet doorgaat.
+  // Daarom is de toets hier niet "vier per week" maar: nooit meer dan het
+  // plafond, en nooit twee loopdagen op rij.
   saveGoal({ domain: 'RUN', metric: 'run_days_week', target_value: '4',
     direction: 'at_most' });
   const p4 = racePlan({ currentDate: TODAY, logs, raceDate: RACE });
   const vol4 = p4.weeks.filter(w => w.index > 0 && w.to < p4.taperFrom);
-  console.log(`      na verhogen: ${vol4.map(w => w.runs).join(', ')}× lopen`);
-  ok('een plafond van vier geeft vier loopdagen', vol4.every(w => w.runs === 4),
+  const loop4 = p4.days.filter(d => d.kind === DAG.RUN || d.kind === DAG.RUN_KRACHT);
+  const gaten = loop4.slice(1).map((d, i) =>
+    Math.round((new Date(d.date) - new Date(loop4[i].date)) / 86400000));
+  console.log(`      na verhogen: ${vol4.map(w => w.runs).join(', ')}× lopen · `
+    + `tussenruimtes ${[...new Set(gaten)].join('/')} dagen`);
+  ok('nooit meer loopdagen dan het plafond', vol4.every(w => w.runs <= 4),
     JSON.stringify(vol4.map(w => w.runs)));
+  ok('en het worden er ook werkelijk meer dan bij plafond drie',
+    vol4.some(w => w.runs === 4), JSON.stringify(vol4.map(w => w.runs)));
+  ok('om de dag: precies één dag tussen twee loopdagen',
+    gaten.every(g => g === 2), JSON.stringify([...new Set(gaten)]));
+  ok('dus nooit twee loopdagen op rij die de poort zou blokkeren',
+    gaten.every(g => g >= 2), JSON.stringify([...new Set(gaten)]));
   ok('en de knop staat dan op goed',
     p4.levers.find(k => k.id === 'loopdagen')?.status === 'goed',
     JSON.stringify(p4.levers.find(k => k.id === 'loopdagen')));

@@ -242,19 +242,28 @@ S('7 · De reden hoort bij de datum die hij zet');
   console.log(`      ${g.action} · vrij vanaf ${g.earliestRunDate}`);
   console.log(`      bindend: ${g.binding?.reason}`);
   ok('lopen staat op slot', g.action !== 'RUN_TODAY', g.action);
-  ok('en de datum is maandag, niet zondag', g.earliestRunDate === '2026-11-09',
-    g.earliestRunDate);
-  ok('de bindende blokkade is het weekvolume, niet de rustdag',
-    /zeven dagen/.test(g.binding?.reason || ''), String(g.binding?.reason));
-  ok('en dat is ook wat de samenvatting zegt',
-    g.summary === g.binding.reason, g.summary);
-  ok('er staat bij wat de blokkade opheft',
-    !!g.binding?.unlock, String(g.binding?.unlock));
-  // De regel die hier fout ging: elke blokkade die de datum opschuift moet
-  // zichzelf benoemen. Anders leest ze straks weer een andere mismatch.
   ok('de genoemde reden staat ook in de lijst met blokkades',
     g.blockers.some(b => b.includes(g.binding.reason)),
     g.blockers.join(' | '));
+  ok('en dat is ook wat de samenvatting zegt',
+    g.summary === g.binding.reason, g.summary);
+
+  // ── En hoe laat is "weer vrij" nu werkelijk? ──────────────────
+  //
+  // Hier stond eerst dat het maandag moest zijn, omdat de volumeblokkade
+  // "over twee dagen" rekende. Dat was geen berekening maar een gok, en
+  // hij kostte haar een loopdag: zij vroeg om de dag te lopen, en op
+  // zondag staat de poort allang open — dan valt de zware dag van 1
+  // november uit het rollende venster van zeven dagen. Een vooruitblik
+  // die te laat belooft is net zo fout als een die te vroeg belooft.
+  ok('weer vrij op zondag, de dag die om-de-dag oplevert',
+    g.earliestRunDate === '2026-11-08', g.earliestRunDate);
+  ok('en op die dag staat lopen er ook echt op',
+    restDayDecision({ log: {}, logs, currentDate: '2026-11-08' }).action === 'RUN_TODAY',
+    restDayDecision({ log: {}, logs, currentDate: '2026-11-08' }).action);
+  // De bindende reden hoort nu bij die zondag: dat is de rustdagregel.
+  ok('en de reden die erbij staat hoort bij die datum',
+    /rustdag/.test(g.binding?.reason || ''), String(g.binding?.reason));
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

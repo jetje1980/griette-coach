@@ -215,6 +215,71 @@ function weekPatroonVoor(plafond) {
   return p;
 }
 
+// ── Om de dag, los van de weekdagen ─────────────────────────────
+//
+// "Absoluut om de dag" kan niet op vaste weekdagen. In een week van zeven
+// dagen passen hooguit drie loopdagen zonder dat er twee aan elkaar
+// grenzen; bij vier zit er altijd een paar tegen elkaar aan — bij het
+// oude patroon zaterdag en zondag. En precies dat paar blokkeert de poort
+// daarna met "minstens één volle rustdag tussen twee runs". Vier vaste
+// loopdagen per week betekent dus: elke week één geplande loop die niet
+// doorgaat. Dat is geen schema maar een wekelijkse teleurstelling.
+//
+// De oplossing is de kalender loslaten. Lopen op een cyclus van twee
+// dagen, verankerd op haar laatste echte loop, geeft precies wat ze
+// vraagt: nooit twee dagen op rij, nooit meer dan één dag ertussen. Over
+// een kalenderweek komt dat neer op afwisselend vier en drie loopdagen,
+// gemiddeld 3,5 — en de trainingsdagen schuiven door de week.
+//
+// De lange loop blijft zo veel mogelijk in het weekend; de overige rollen
+// wisselen elkaar af. Kracht komt op de tussenliggende dagen, om en om,
+// zodat er ook echte lege dagen overblijven.
+const CADANS_ROLLEN = ['easy', 'sleutel', 'kort'];
+function omDeDagPatroon({ vanaf, tot, anker, plafond }) {
+  const map = new Map();
+  const loopdagen = [];
+  for (let d = addDays(anker, 2); d <= tot; d = addDays(d, 2)) {
+    if (d >= vanaf) loopdagen.push(d);
+  }
+
+  let laatsteLang = null;
+  let i = 0;
+  for (const dag of loopdagen) {
+    const wd = dayOfWeek(dag);
+    const weekend = wd === 0 || wd === 6;
+    if (weekend && (!laatsteLang || daysBetween(laatsteLang, dag) >= 6)) {
+      laatsteLang = dag;
+      map.set(dag, { kind: DAG.RUN, rol: 'lang',
+        note: 'De langste loop van deze ronde — in het weekend, waar de tijd is.' });
+    } else {
+      const rol = CADANS_ROLLEN[i++ % CADANS_ROLLEN.length];
+      map.set(dag, { kind: DAG.RUN, rol,
+        note: rol === 'sleutel'
+          ? 'De sessie die deze ronde iets moet bewijzen.'
+          : rol === 'kort'
+            ? 'Kort en rustig; dit houdt de cadans erin en kost geen herstel.'
+            : 'Rustige loop met versnellingen erachter.' });
+    }
+  }
+
+  // De tussenliggende dagen: om en om kracht en echte rust. Kracht valt
+  // zo altijd op de dag ná een loop en nooit op de dag ervóór.
+  let tussen = 0;
+  for (let d = vanaf; d <= tot; d = addDays(d, 1)) {
+    if (map.has(d)) continue;
+    const krachtdag = tussen++ % 2 === 0;
+    map.set(d, krachtdag
+      ? { kind: DAG.KRACHT, rol: null,
+        note: 'Krachttraining. Zwaar en kort — op de dag ná een loop.' }
+      : { kind: DAG.RUST, rol: null,
+        note: 'Echte rustdag. Alleen het circuit van acht minuten.' });
+  }
+
+  map.cadans = true;
+  map.plafond = plafond;
+  return map;
+}
+
 // ── Wanneer valt haar laatluteale week? ─────────────────────────
 //
 // Berekend uit haar eigen cyclushistorie: de mediane lengte van de
@@ -547,8 +612,27 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   const taperVanaf = addDays(race, -taperDays);
 
   // Het weekpatroon volgt het plafond van de poort — één getal, één bron.
+  //
+  // Vanaf vier loopdagen kan dat niet meer op vaste weekdagen zonder dat
+  // er twee runs tegen elkaar aan komen te liggen, en die blokkeert de
+  // poort. Dan loopt het schema op een cyclus van twee dagen, verankerd
+  // op haar laatste echte loop. Zie omDeDagPatroon().
   const plafond = runDayCeiling();
+  const laatsteLoop = workouts
+    .filter(w => w?.date && w.date <= currentDate
+      && (w.activityType === 'run' || w.activityType == null))
+    .map(w => w.date).sort().slice(-1)[0] || addDays(currentDate, -2);
+  const omDeDag = plafond >= 4;
+  const cadans = omDeDag
+    ? omDeDagPatroon({ vanaf: currentDate, tot: race, anker: laatsteLoop, plafond })
+    : null;
   const patroon7 = weekPatroonVoor(plafond);
+  // Eén lezer voor het patroon: op datum als de cadans loopt, anders op
+  // weekdag. Drie plekken lazen dit los van elkaar; dat is precies hoe
+  // twee schema's naast elkaar ontstaan.
+  const patroonVoor = (datum) => (cadans
+    ? (cadans.get(datum) || { kind: DAG.RUST, rol: null, note: 'Rustdag.' })
+    : patroon7[dayOfWeek(datum)]);
 
   const dagen = [];
   const totaal = daysBetween(currentDate, race);
@@ -583,7 +667,7 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
         : inLuteaal ? FASE.LUTEAAL.id
           : i <= 10 ? FASE.RITME.id : FASE.OPBOUW.id;
 
-    const patroon = patroon7[bronWd];
+    const patroon = patroonVoor(bronDatum);
     let kind = isRace ? DAG.RACE : patroon.kind;
     let rol = isRace ? 'race' : patroon.rol;
     let note = isRace ? 'Ameland. Eerste kilometer onder 140, duinen stevig wandelen.' : patroon.note;
@@ -671,12 +755,12 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
 
     const volgende = addDays(datum, 1);
     const volgendeBron = ruilen.get(volgende) || volgende;
-    const volgendeIsSleutel = patroon7[dayOfWeek(volgendeBron)]?.rol === 'sleutel'
+    const volgendeIsSleutel = patroonVoor(volgendeBron)?.rol === 'sleutel'
       && fase === FASE.OPBOUW.id;
     const gisteren = addDays(datum, -1);
     const gisterenBron = ruilen.get(gisteren) || gisteren;
     const dagNaLoop = gelopenOp.has(gisteren)
-      || (patroon7[dayOfWeek(gisterenBron)]?.kind === DAG.RUN && datum > currentDate);
+      || (patroonVoor(gisterenBron)?.kind === DAG.RUN && datum > currentDate);
 
     const gelopen = gelopenOp.has(datum);
     const log = logs[datum] || null;
