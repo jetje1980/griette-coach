@@ -59,6 +59,13 @@ const FACTOREN = [
     uit: (p) => p.energy },
   { id: 'cycleDay', label: 'cyclusdag', eenheid: '', omlaagIsBeter: null,
     uit: (p) => p.cycleDay },
+  // De twee velden die zij er zelf bij vroeg. Ze stonden wel in het
+  // dagplan om in te vullen, maar werden door geen enkele analyse gelezen —
+  // dan is invullen werk zonder opbrengst.
+  { id: 'stress_load', label: 'spanning', eenheid: '(0–2)', omlaagIsBeter: true,
+    uit: (p) => p.stress_load },
+  { id: 'fuel_quality', label: 'genoeg gegeten', eenheid: '(0–2)', omlaagIsBeter: false,
+    uit: (p) => p.fuel_quality },
 ];
 
 function num(v) {
@@ -90,6 +97,8 @@ function contextVan(datum, logs, asOf) {
     sleep_hours: num(log?.sleep_hours),
     sleep_quality: num(log?.sleep_quality),
     energy: num(log?.energy),
+    stress_load: num(log?.stress_load),
+    fuel_quality: num(log?.fuel_quality),
     cycleDay: dag,
     phase: dag ? phaseOfDay(dag, AANNAME_CYCLUSLENGTE) : PHASE.UNKNOWN,
   };
@@ -187,6 +196,20 @@ function duiding(f, best, worst) {
       ? 'Beter geslapen hoort bij je betere sessies. Van alle factoren is dit degene '
         + 'waar je het meest aan kunt doen.'
       : 'Dat is de omgekeerde richting van wat je zou verwachten; waarschijnlijk toeval bij dit aantal sessies.';
+  }
+  if (f.id === 'stress_load') {
+    return best < worst
+      ? 'Minder spanning hoort bij je betere sessies. Werkdruk telt mee als belasting; '
+        + 'je lichaam kent het verschil met trainingsbelasting niet.'
+      : 'Dat is de omgekeerde richting van wat je zou verwachten; kijk er pas naar als '
+        + 'het over meer sessies standhoudt.';
+  }
+  if (f.id === 'fuel_quality') {
+    return best > worst
+      ? 'Genoeg gegeten hoort bij je betere sessies. Dat is de knop waar je het meest '
+        + 'aan kunt doen en die op Mounjaro het makkelijkst ongemerkt misgaat.'
+      : 'Dat is de omgekeerde richting van wat je zou verwachten; waarschijnlijk toeval '
+        + 'bij dit aantal sessies.';
   }
   if (f.id === 'cycleDay') {
     return best < worst

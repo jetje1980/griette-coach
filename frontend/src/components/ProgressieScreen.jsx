@@ -769,6 +769,26 @@ function TabHardlopen({ logs }) {
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55,
                   marginTop: 3 }}>{drift.verdict}</div>
+                {/* Rusthartslag per cyclusfase — kon pas toen de historie
+                    gevuld was. Alleen fasen die over twee cycli dezelfde
+                    kant op wijzen; de rest is variatie. */}
+                {drift.byPhase?.known && (
+                  <div style={{ marginTop: 6 }} data-rust-per-fase={drift.byPhase.phases.length}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ghost)',
+                      letterSpacing: '0.4px', marginBottom: 3 }}>
+                      PER CYCLUSFASE
+                    </div>
+                    {drift.byPhase.phases.map(f => (
+                      <div key={f.phase} data-fase={f.phase}
+                        style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5 }}>
+                        <strong style={{ color: 'var(--text)' }}>{f.phase}:</strong>{' '}
+                        {f.delta > 0 ? '+' : ''}{f.delta} bpm ten opzichte van de rest van
+                        je cyclus, over {f.cycles} cycli ({f.confidence}).
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {drift.causes.length > 0 && (
                   <div style={{ marginTop: 6 }}>
                     <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ghost)',

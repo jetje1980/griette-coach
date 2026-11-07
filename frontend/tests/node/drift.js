@@ -15,7 +15,8 @@
 // dagen, geen trend. Daarom blokken van twee weken met een mediaan per
 // blok — en geen uitspraak zolang een blok te weinig metingen heeft.
 import './_storage-stub.js';
-import { restingDrift, DRIFT_SIGNAAL, DRIFT_STERK } from '../../src/restingDrift.js';
+import { restingDrift, restingByPhase, DRIFT_SIGNAAL, DRIFT_STERK }
+  from '../../src/restingDrift.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -161,6 +162,72 @@ S('5 · De grenzen zijn wat ze zeggen te zijn');
   ok('en dat staat ook in de tekst',
     /te groot om aan meetruis/.test(met(DRIFT_STERK).verdict),
     met(DRIFT_STERK).verdict.slice(0, 100));
+}
+
+S('6 · Een dip en een opleving zijn geen "stabiel"');
+{
+  // Toen zij haar rusthartslag met terugwerkende kracht invulde, bleek de
+  // vorm van de lijn anders dan uit de losse metingen: 63 in augustus, 58
+  // in september, 62 nu. Eerste tegen laatste zegt "stabiel"; wat er
+  // werkelijk staat is dat ze vijf slagen won en weer inleverde.
+  const logs = {};
+  const zet = (dag, hr) => { logs[addDays(TODAY, dag)] = { hr_rest: hr }; };
+  // drie blokken van twee weken: hoog, laag, weer hoog
+  [-80, -78, -76, -74].forEach(d => zet(d, 63));
+  [-52, -50, -48, -46].forEach(d => zet(d, 58));
+  [-10, -8, -6, -4, 0].forEach(d => zet(d, 62));
+  globalThis.__testStorage.reset();
+  for (const [d, l] of Object.entries(logs)) {
+    localStorage.setItem(`gc_log_${d}`, JSON.stringify({ date: d, ...l }));
+  }
+  const r = restingDrift({ currentDate: TODAY, window: 84 });
+  console.log(`      ${r.line}`);
+  ok('het laagste blok wordt genoemd', r.lowest?.median === 58,
+    JSON.stringify(r.lowest));
+  ok('met hoeveel het sindsdien opliep', r.sinceLowest === 4, String(r.sinceLowest));
+  ok('en dat heet een opleving, geen stabiel', r.reboundFromLow === true,
+    `${r.direction} / ${r.reboundFromLow}`);
+  ok('de regel toont alle drie de punten', /63 → 58 → 62/.test(r.line), r.line);
+  ok('en de uitleg vraagt wat er tóen anders was',
+    /Wat was er toen anders/.test(r.verdict), r.verdict);
+  ok('het wordt uitdrukkelijk geen alarm genoemd',
+    /geen alarm/.test(r.verdict), r.verdict);
+}
+
+S('7 · Rusthartslag per cyclusfase');
+{
+  globalThis.__testStorage.reset();
+  // Drie starts, zodat er twee AFGESLOTEN cycli zijn: een lopende cyclus
+  // telt niet mee, want zijn lengte staat nog niet vast.
+  const start0 = addDays(TODAY, -84);
+  const start1 = addDays(TODAY, -56), start2 = addDays(TODAY, -28);
+  const zet = (d, hr, extra = {}) => localStorage.setItem(`gc_log_${d}`,
+    JSON.stringify({ date: d, hr_rest: hr, ...extra }));
+  for (const start of [start0, start1, start2]) {
+    zet(start, 56, { cycle_day_one: true });
+    for (let i = 1; i < 28; i++) {
+      // dag 1–5 lager, de rest hoger
+      zet(addDays(start, i), i < 5 ? 56 : 62);
+    }
+  }
+  localStorage.setItem('gc_cycle_history', JSON.stringify([start0, start1, start2]));
+  const r = restingByPhase({ currentDate: TODAY });
+  console.log(`      ${r.phases.map(f => `${f.phase} ${f.delta}`).join(' · ') || r.why}`);
+  ok('er komt een fase uit', r.known === true, JSON.stringify(r).slice(0, 150));
+  const m = r.phases.find(f => f.phase === 'menstruatie');
+  ok('menstruatie ligt lager', m && m.delta < 0, JSON.stringify(m));
+  ok('met het aantal cycli erbij', m.cycles >= 2, String(m.cycles));
+  ok('en de uitleg draagt de onzekerheid mee', /aanwijzing|patroon/.test(m.note), m.note);
+
+  // Eén afgesloten cyclus is geen patroon.
+  globalThis.__testStorage.reset();
+  zet(start1, 56, { cycle_day_one: true });
+  for (let i = 1; i < 28; i++) zet(addDays(start1, i), i < 5 ? 56 : 62);
+  zet(start2, 56, { cycle_day_one: true });
+  localStorage.setItem('gc_cycle_history', JSON.stringify([start1, start2]));
+  const een = restingByPhase({ currentDate: TODAY });
+  ok('met één cyclus komt er geen uitspraak', een.known === false, JSON.stringify(een).slice(0, 120));
+  ok('met uitleg waarom', /twee cycli|te weinig cycli/.test(een.why), een.why);
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

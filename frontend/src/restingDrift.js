@@ -35,12 +35,16 @@
 // ─────────────────────────────────────────────────────────────────
 
 import { series } from './timeline';
+import { phasePattern, PHASE, PHASE_ORDER } from './cyclePatterns';
 import { todayLocal, addDays, daysBetween } from './datetime';
 
 // Blokken van twee weken: kort genoeg om een verandering te zien, lang
 // genoeg om niet op één slechte nacht te leunen.
 export const BLOK_DAGEN = 14;
-export const VENSTER_DAGEN = 70;     // vijf blokken
+// Twaalf weken: zes blokken. Tien weken was te kort toen haar historie nog
+// uit een handvol metingen bestond; met tweeënzeventig dagen ingevuld laat
+// twaalf weken het verloop zien in plaats van een momentopname.
+export const VENSTER_DAGEN = 84;
 
 // Minder dan drie metingen in een blok en het is geen mediaan maar een gok.
 const MIN_PER_BLOK = 3;
@@ -59,6 +63,39 @@ const mediaan = (xs) => {
 };
 
 const rond = (x, n = 1) => (x == null ? null : +x.toFixed(n));
+
+// ── Rusthartslag per cyclusfase ─────────────────────────────────
+//
+// Dit kon pas toen zij haar rusthartslag met terugwerkende kracht invulde:
+// met drieënzeventig metingen over drie cycli valt te zien of een fase bij
+// háár structureel hoger of lager ligt. Eén cyclus is geen patroon, dus
+// phasePattern geeft pas een uitspraak vanaf twee cycli die dezelfde kant
+// op wijzen; wat daaronder valt wordt hier niet getoond in plaats van met
+// een slag om de arm gebracht.
+export function restingByPhase({ currentDate = todayLocal() } = {}) {
+  const uit = [];
+  for (const fase of PHASE_ORDER) {
+    let p;
+    try { p = phasePattern('hr_rest', fase, { asOf: currentDate }); }
+    catch { continue; }
+    if (!p?.known) continue;
+    uit.push({
+      phase: fase,
+      delta: p.meanDelta,
+      cycles: p.cycles,
+      confidence: p.confidence,
+      note: p.note,
+    });
+  }
+  return {
+    known: uit.length > 0,
+    phases: uit,
+    why: uit.length ? null
+      : 'Nog geen cyclusfase waarin je rusthartslag over twee cycli dezelfde kant op '
+        + 'wijst. Dat kan twee dingen betekenen: er is geen patroon, of er zijn nog te '
+        + 'weinig cycli met metingen.',
+  };
+}
 
 export function restingDrift({ currentDate = todayLocal(), window = VENSTER_DAGEN } = {}) {
   const vanaf = addDays(currentDate, -window);
@@ -95,6 +132,22 @@ export function restingDrift({ currentDate = todayLocal(), window = VENSTER_DAGE
   const delta = laatste.median - eerste.median;
   const weken = Math.max(1, Math.round(daysBetween(eerste.tot, laatste.tot) / 7));
 
+  // ── Het laagste punt telt mee ─────────────────────────────
+  //
+  // Alleen het eerste blok met het laatste vergelijken verbergt de vorm van
+  // de lijn. Bij haar is dat precies wat er gebeurde: 63 in augustus, 58 in
+  // september, 62 nu. Eerste tegen laatste zegt "stabiel"; wat er werkelijk
+  // staat is dat ze vijf slagen won en ze weer heeft ingeleverd. Dat is een
+  // ander verhaal, en het is het verhaal dat ertoe doet.
+  const laagste = bruikbaar.reduce((m, b) => (b.median < m.median ? b : m), bruikbaar[0]);
+  const sindsLaagste = laatste.median - laagste.median;
+  const wekenSindsLaagste = Math.max(0,
+    Math.round(daysBetween(laagste.tot, laatste.tot) / 7));
+  // Een opleving telt alleen als hij én groot genoeg is én niet het laatste
+  // blok zelf betreft.
+  const opleving = laagste !== eerste && laagste !== laatste
+    && sindsLaagste >= DRIFT_SIGNAAL;
+
   // Wat stond er in dezelfde periode nog meer?
   const gewicht = series('weight', { asOf: currentDate, since: vanaf })
     .filter(o => typeof o.value === 'number');
@@ -118,15 +171,29 @@ export function restingDrift({ currentDate = todayLocal(), window = VENSTER_DAGE
     delta: rond(delta),
     weeks: weken,
     direction: richting,
+    lowest: { median: rond(laagste.median), until: laagste.tot, n: laagste.n },
+    sinceLowest: rond(sindsLaagste),
+    weeksSinceLowest: wekenSindsLaagste,
+    reboundFromLow: opleving,
     weightDelta: gewichtDelta,
     sleepMedian: slaapMediaan,
-    line: richting === 'stabiel'
-      ? `Rusthartslag stabiel rond ${rond(laatste.median)} over ${weken} weken.`
-      : `Rusthartslag ${delta > 0 ? '+' : ''}${rond(delta)} over ${weken} weken `
-        + `(${rond(eerste.median)} → ${rond(laatste.median)}).`,
-    verdict: verdictVoor(richting, rond(delta), weken),
-    causes: richting === 'omhoog' || richting === 'sterk_omhoog'
+    line: opleving
+      ? `Rusthartslag ${rond(eerste.median)} → ${rond(laagste.median)} → ${rond(laatste.median)} `
+        + `over ${weken} weken.`
+      : richting === 'stabiel'
+        ? `Rusthartslag stabiel rond ${rond(laatste.median)} over ${weken} weken.`
+        : `Rusthartslag ${delta > 0 ? '+' : ''}${rond(delta)} over ${weken} weken `
+          + `(${rond(eerste.median)} → ${rond(laatste.median)}).`,
+    verdict: opleving
+      ? `Je laagste periode was rond ${laagste.tot}: mediaan ${rond(laagste.median)}. `
+        + `Sindsdien ${rond(sindsLaagste)} slagen hoger, en de laatste weken vlak rond `
+        + `${rond(laatste.median)}. Dat is geen alarm — je zit weer op je niveau van het `
+        + 'begin — maar die lagere periode laat zien wat er voor jou in zit. Wat was er '
+        + 'toen anders in training, slaap en eten?'
+      : verdictVoor(richting, rond(delta), weken),
+    causes: (richting === 'omhoog' || richting === 'sterk_omhoog' || opleving)
       ? oorzaken({ gewichtDelta, slaapMediaan }) : [],
+    byPhase: restingByPhase({ currentDate }),
   };
 }
 
