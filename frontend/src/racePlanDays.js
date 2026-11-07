@@ -78,6 +78,7 @@ import { raceExpectation } from './progressExpectation';
 import { runDayCeiling, trainingLoad, frequencyVerdict } from './restday';
 import { remmen } from './remmen';
 import { doelPad } from './doelPad';
+import { ijksessie } from './ijksessie';
 import { loadHrSettings } from './goals';
 
 // ── Dagen ruilen ────────────────────────────────────────────────
@@ -901,6 +902,13 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     expectation: verwachting,
     // Het pad naar haar wenstijd: wat hij vraagt en wanneer hij er is.
     goalPath: pad,
+    // De ijksessie: één schone meting in plaats van zes weken schatten.
+    // Hij staat op de eerste dag die aan alle voorwaarden voldoet, niet
+    // op de eerstvolgende loopdag — een ijkpunt dat op een slechte dag
+    // gemeten wordt, ijkt niets.
+    calibration: ijksessie({ currentDate, dagen, logs, drift,
+      hrCap: loadHrSettings().easyHigh ?? 145, workouts,
+      benodigdeEf: pad?.known ? pad.required : null }),
     // Wat haar vooruitgang nu werkelijk remt, gemeten en op volgorde van
     // grootte. Dit stond nergens, en het was het antwoord op haar vraag
     // hoe ze méér progressie maakt: niet harder lopen, maar de knoppen

@@ -521,6 +521,80 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
         </>
       )}
 
+      {/* ── De ijksessie ───────────────────────────────────
+          Eén schone meting in plaats van zes weken schatten. Staat
+          boven de doelkaart, want de uitslag hiervan verandert die
+          kaart. */}
+      {plan.calibration && plan.calibration.status !== 'geen' && (
+        <>
+          <div className="os-section-label">IJksessie</div>
+          <div className="os-card" style={{ marginBottom: 12,
+            borderLeft: '3px solid var(--sage)' }}
+            data-ijk={plan.calibration.status}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, lineHeight: 1.4 }}>
+              {plan.calibration.status === 'gedaan'
+                ? `Gemeten op ${formatNLLong(plan.calibration.date)}`
+                : `${plan.calibration.voorschrift.titel}`}
+            </div>
+
+            {plan.calibration.status === 'gedaan' ? (
+              <>
+                <div style={{ fontSize: 11.5, lineHeight: 1.55, marginTop: 4 }}>
+                  {plan.calibration.uitslag.why}
+                </div>
+                <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
+                  {[['efficiëntie', plan.calibration.uitslag.ef],
+                    ['hartslag', plan.calibration.uitslag.hr],
+                    ['minuten', plan.calibration.uitslag.minuten]].map(([l, v]) => (
+                    <div key={l}>
+                      <div style={{ fontSize: 9.5, color: 'var(--ghost)', fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.4px' }}>{l}</div>
+                      <div style={{ fontSize: 15, fontWeight: 800,
+                        fontFamily: 'var(--font-serif)' }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                {plan.calibration.tegenDoel && (
+                  <div style={{ fontSize: 11.5, color: 'var(--sage)', lineHeight: 1.55,
+                    marginTop: 7, paddingTop: 6, borderTop: '1px solid var(--border)',
+                    fontWeight: 600 }}>
+                    {plan.calibration.tegenDoel.line}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 11.5, lineHeight: 1.55, marginTop: 4 }}>
+                  <strong>{formatNLLong(plan.calibration.date)}</strong> — {plan.calibration.why}
+                </div>
+                <ol style={{ margin: '7px 0 0', paddingLeft: 16, fontSize: 11.5,
+                  lineHeight: 1.55 }}>
+                  {plan.calibration.voorschrift.stappen.map((s, i) => (
+                    <li key={i} style={{ marginBottom: 2 }}>{s}</li>
+                  ))}
+                </ol>
+                <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5,
+                  marginTop: 7, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+                  {plan.calibration.voorschrift.eisen.map((e, i) => (
+                    <div key={i}>· {e}</div>
+                  ))}
+                </div>
+                {plan.calibration.conditional && (
+                  <div style={{ fontSize: 11, color: 'var(--gold)', lineHeight: 1.5,
+                    marginTop: 6, fontWeight: 600 }} data-ijk-voorwaarde>
+                    {plan.calibration.condition}
+                  </div>
+                )}
+                <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5,
+                  marginTop: 5 }}>
+                  {plan.calibration.voorschrift.waarom}
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ── Je wenstijd: wat hij vraagt en wanneer hij er is ──
           Zij vroeg het schema zo aan te passen dat 35:00 haalbaar wordt.
           Dat kan niet, en doen alsof zou erger zijn. Dus staat hier het
