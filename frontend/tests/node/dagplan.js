@@ -21,6 +21,8 @@ import { racePlan, luteaalVenster, swapDays, clearSwaps, loadSwaps, swapMap,
 import { weightPlan, saveWeightPhase, fuelLine, FASE as GEWICHT, MAX_KG_PER_WEEK }
   from '../../src/weightPhase.js';
 import { nextSession as liveSessie } from '../../src/coachPlan.js';
+import { runDayCeiling } from '../../src/restday.js';
+import { saveGoal } from '../../src/goals.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -91,16 +93,40 @@ S('1 · Er staat een dag voor elke dag tot de race');
     JSON.stringify([...new Set(p.days.flatMap(d => d.inputs))]));
 }
 
-S('2 · Vier loopdagen en twee krachtdagen per week');
+S('2 · Het schema plant precies zoveel loopdagen als de poort toelaat');
 {
+  // Hier stond "vier loopdagen in een volle week", terwijl het weekplafond
+  // van de poort standaard op drie staat. Dan plant het schema een vierde
+  // loopdag die de poort daarna zelf blokkeert met "al 3 loopdagen deze
+  // week" — elke week opnieuw. Zij zag het meteen: "alleen zit je nu niet
+  // op 4x per week?" Twee getallen voor één vraag, en dus hoort hier niet
+  // het getal vier maar de gelijkheid met het plafond.
   const logs = haarData();
   const p = racePlan({ currentDate: TODAY, logs, raceDate: RACE });
-  // Volle weken, dus niet de eerste (die begint op vrijdag) en niet de
-  // raceweek.
+  const plafond = runDayCeiling();
   const vol = p.weeks.filter(w => w.index > 0 && w.to < p.taperFrom);
-  console.log(`      ${vol.map(w => `${w.from.slice(5)}: ${w.runs}× lopen, ${w.strength}× kracht`).join(' | ')}`);
-  ok('vier loopdagen in een volle week', vol.every(w => w.runs === 4),
-    JSON.stringify(vol.map(w => w.runs)));
+  console.log(`      plafond ${plafond} · ${vol.map(w => `${w.from.slice(5)}: ${w.runs}× lopen, ${w.strength}× kracht`).join(' | ')}`);
+  ok('evenveel loopdagen als het weekplafond', vol.every(w => w.runs === plafond),
+    `plafond ${plafond}, gepland ${JSON.stringify(vol.map(w => w.runs))}`);
+
+  // En als het plafond omhoog gaat, gaat het schema mee — in dezelfde
+  // handeling, zonder dat zij ergens anders iets hoeft na te lopen.
+  saveGoal({ domain: 'RUN', metric: 'run_days_week', target_value: '4',
+    direction: 'at_most' });
+  const p4 = racePlan({ currentDate: TODAY, logs, raceDate: RACE });
+  const vol4 = p4.weeks.filter(w => w.index > 0 && w.to < p4.taperFrom);
+  console.log(`      na verhogen: ${vol4.map(w => w.runs).join(', ')}× lopen`);
+  ok('een plafond van vier geeft vier loopdagen', vol4.every(w => w.runs === 4),
+    JSON.stringify(vol4.map(w => w.runs)));
+  ok('en de knop staat dan op goed',
+    p4.levers.find(k => k.id === 'loopdagen')?.status === 'goed',
+    JSON.stringify(p4.levers.find(k => k.id === 'loopdagen')));
+  ok('bij een lager plafond blijven de lange loop en de sleutelsessie staan',
+    vol.every(w => w.runs === plafond)
+    && p.days.some(d => d.role === 'lang') && p.days.some(d => d.role === 'sleutel'),
+    p.days.filter(d => d.run).map(d => d.role).join(','));
+  saveGoal({ domain: 'RUN', metric: 'run_days_week', target_value: String(plafond),
+    direction: 'at_most' });
   ok('twee krachtdagen', vol.every(w => w.strength === 2),
     JSON.stringify(vol.map(w => w.strength)));
   ok('er is minstens één echte rustdag per week',

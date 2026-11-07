@@ -74,6 +74,8 @@ import { nextSession as liveSessie } from './coachPlan';
 import { hrPrescription } from './hrModel';
 import { sessionTarget, hrUitVoorschrift } from './sessionTarget';
 import { raceExpectation } from './progressExpectation';
+// Het weekplafond komt uit de poort, niet uit een tweede getal hier.
+import { runDayCeiling, trainingLoad, frequencyVerdict } from './restday';
 
 // ── Dagen ruilen ────────────────────────────────────────────────
 //
@@ -177,6 +179,41 @@ const WEEKPATROON = {
   5: { kind: DAG.KRACHT, rol: null, note: 'Krachttraining plus een rustige wandeling.' },
   6: { kind: DAG.RUN, rol: 'kort', note: 'Korte rustige loop; houdt het ritme erin.' },
 };
+
+// ── Het patroon telt nooit meer loopdagen dan de poort toelaat ───
+//
+// Zij zag het meteen: dit overzicht zette vier loopdagen per week neer
+// terwijl het weekplafond van de poort op drie stond. Dan plant de app
+// een vierde loopdag die hij daarna zelf blokkeert met "al 3 loopdagen
+// deze week" — elke week opnieuw, en elke week met een andere verklaring
+// dan de dag ervoor.
+//
+// Twee getallen voor één vraag is altijd hetzelfde soort fout. Het
+// plafond is hier het antwoord, want dát is wat de poort afdwingt. Wil
+// zij vier loopdagen — en dat wil ze — dan gaat het plafond omhoog en
+// volgt dit patroon vanzelf; niet andersom.
+//
+// Welke dag eraf gaat bij een lager plafond is geen willekeur: eerst de
+// korte onderhoudsloop, daarna de easy-loop. De lange loop en de
+// sleutelsessie zijn de twee die de race dragen.
+const AFPELVOLGORDE = [6, 2];   // weekdag van de loop die als eerste wijkt
+function weekPatroonVoor(plafond) {
+  const p = { ...WEEKPATROON };
+  const loopdagen = Object.values(p).filter(d => d.kind === DAG.RUN).length;
+  let weg = Math.max(0, loopdagen - Math.max(1, plafond));
+  for (const wd of AFPELVOLGORDE) {
+    if (weg <= 0) break;
+    p[wd] = { kind: DAG.RUST, rol: null,
+      note: `Rust. Je weekplafond staat op ${plafond} loopdagen; deze dag valt daarbuiten.` };
+    weg--;
+  }
+  // Boven de vier: de vrijdag wordt een korte loop naast de kracht.
+  if (plafond >= 5) {
+    p[5] = { kind: DAG.RUN_KRACHT, rol: 'kort',
+      note: 'Korte loop plus kracht — vijfde loopdag, kort houden.' };
+  }
+  return p;
+}
 
 // ── Wanneer valt haar laatluteale week? ─────────────────────────
 //
@@ -509,6 +546,10 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   const gewicht = weightPlan({ currentDate, raceDate: race, easyPaceMin: tempoMin });
   const taperVanaf = addDays(race, -taperDays);
 
+  // Het weekpatroon volgt het plafond van de poort — één getal, één bron.
+  const plafond = runDayCeiling();
+  const patroon7 = weekPatroonVoor(plafond);
+
   const dagen = [];
   const totaal = daysBetween(currentDate, race);
   let weekIndex = 0;
@@ -542,7 +583,7 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
         : inLuteaal ? FASE.LUTEAAL.id
           : i <= 10 ? FASE.RITME.id : FASE.OPBOUW.id;
 
-    const patroon = WEEKPATROON[bronWd];
+    const patroon = patroon7[bronWd];
     let kind = isRace ? DAG.RACE : patroon.kind;
     let rol = isRace ? 'race' : patroon.rol;
     let note = isRace ? 'Ameland. Eerste kilometer onder 140, duinen stevig wandelen.' : patroon.note;
@@ -630,12 +671,12 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
 
     const volgende = addDays(datum, 1);
     const volgendeBron = ruilen.get(volgende) || volgende;
-    const volgendeIsSleutel = WEEKPATROON[dayOfWeek(volgendeBron)]?.rol === 'sleutel'
+    const volgendeIsSleutel = patroon7[dayOfWeek(volgendeBron)]?.rol === 'sleutel'
       && fase === FASE.OPBOUW.id;
     const gisteren = addDays(datum, -1);
     const gisterenBron = ruilen.get(gisteren) || gisteren;
     const dagNaLoop = gelopenOp.has(gisteren)
-      || (WEEKPATROON[dayOfWeek(gisterenBron)]?.kind === DAG.RUN && datum > currentDate);
+      || (patroon7[dayOfWeek(gisterenBron)]?.kind === DAG.RUN && datum > currentDate);
 
     const gelopen = gelopenOp.has(datum);
     const log = logs[datum] || null;
@@ -938,6 +979,38 @@ function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht
       + 'in de weken met gaten. Dit is de knop met de grootste opbrengst en hij kost niets.',
     status: perWeek >= 3.5 && (grootsteGat == null || grootsteGat <= 3) ? 'goed' : 'open',
   });
+
+  // 1a. Het weekplafond zelf — het getal dat het patroon bepaalt.
+  //
+  // Zolang dit op drie staat plant het schema drie loopdagen, hoe vaak de
+  // knop hierboven ook "vier per week" zegt. Daarom staat het plafond hier
+  // als eigen knop, met het oordeel van de poort erbij: mag het omhoog, en
+  // zo nee, wat houdt het tegen. Dat oordeel komt uit frequencyVerdict —
+  // twee weken schone tolerantie, geen PEM, genoeg verdragen sessies.
+  {
+    const plafond = runDayCeiling();
+    const freq = poort?.frequency
+      || frequencyVerdict(trainingLoad({}, currentDate), {}, currentDate);
+    const mag = plafond < 4 && freq.canRaise;
+    uit.push({
+      id: 'loopdagen', label: 'Loopdagen per week',
+      stand: `Weekplafond staat op ${plafond}; het schema plant er daarom ${plafond}`,
+      doel: '4 loopdagen per week',
+      waarom: plafond >= 4
+        ? 'Het plafond en het schema zeggen hetzelfde aantal. Zo hoort het: een vierde '
+          + 'loopdag plannen die de poort daarna blokkeert, levert alleen verwarring op.'
+        : mag
+          ? 'Je mag omhoog: twee weken schone tolerantie, geen PEM-signaal. Zet het '
+            + 'plafond op 4, dan plant het schema vier loopdagen én laat de poort ze toe. '
+            + 'Frequentie is bij jou de knop met de grootste opbrengst.'
+          : `Het plafond kan nu niet omhoog: ${freq.blockers[0] || freq.why}`,
+      // De knop die het getal werkelijk verzet — zodat schema en poort
+      // in één handeling meebewegen in plaats van elkaar tegenspreken.
+      actie: mag ? { id: 'plafond4', label: 'Zet het plafond op 4 loopdagen',
+        metric: 'run_days_week', value: 4 } : null,
+      status: plafond >= 4 ? 'goed' : 'open',
+    });
+  }
 
   // 1b. Verdeling over de week — de knop die haar vandaag een loopdag kost.
   //

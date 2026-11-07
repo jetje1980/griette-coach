@@ -4,6 +4,7 @@ import { loadRaceGoals } from '../raceGoalModel';
 import { loadWeightPhase, saveWeightPhase, FASE as GEWICHTSFASE } from '../weightPhase';
 import BackfillPanel from './BackfillPanel';
 import { todayLocal, formatNLLong } from '../datetime';
+import { saveGoal } from '../goals';
 
 // Het dagplan naar Ameland.
 //
@@ -362,6 +363,15 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
     setTick(t => t + 1);
   }
 
+  // Een knop die een doel verzet. Het weekplafond zit in de doelenlaag, en
+  // daar leest de poort hem ook — dus hoeft het schema hier niets te weten
+  // van wat het plafond doet; het volgt het getal.
+  function zetDoel({ metric, value }) {
+    saveGoal({ domain: 'RUN', metric, target_value: String(value),
+      direction: 'at_most' });
+    setTick(t => t + 1);
+  }
+
   if (!plan.known) {
     return (
       <div className="os-screen">
@@ -611,6 +621,18 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
             <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45 }}>
               {k.waarom}
             </div>
+            {/* Een knop waaraan je werkelijk kunt draaien, in plaats van
+                een advies dat je elders moet gaan uitvoeren. */}
+            {k.actie && (
+              <button type="button" data-knop-actie={k.actie.id}
+                onClick={() => zetDoel(k.actie)}
+                style={{ marginTop: 5, padding: '5px 10px', borderRadius: 6,
+                  border: '1px solid var(--sage)', background: 'transparent',
+                  color: 'var(--sage)', fontSize: 11, fontWeight: 800,
+                  cursor: 'pointer' }}>
+                {k.actie.label}
+              </button>
+            )}
           </div>
         ))}
       </div>
