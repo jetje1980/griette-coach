@@ -19,6 +19,7 @@ import './_storage-stub.js';
 import { racePlan, luteaalVenster, DAG, FASE, INVOER } from '../../src/racePlanDays.js';
 import { weightPlan, saveWeightPhase, fuelLine, FASE as GEWICHT, MAX_KG_PER_WEEK }
   from '../../src/weightPhase.js';
+import { nextSession as liveSessie } from '../../src/coachPlan.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -321,6 +322,58 @@ S('11 · Te snel afvallen wordt benoemd');
   console.log(`      ${snel.rateNote} → ${snel.rateVerdict}`);
   ok('te snel wordt herkend', snel.tooFast === true, snel.rateNote);
   ok('met de reden erbij', /spier/.test(snel.rateVerdict), snel.rateVerdict);
+}
+
+S('12 · Tempo en hartslag staan erbij');
+{
+  const logs = haarData();
+  const p = racePlan({ currentDate: TODAY, logs, raceDate: RACE,
+    raceKm: 5, raceSec: 2100 });
+  const loopdagen = p.days.filter(d => d.run);
+  const metTempo = loopdagen.filter(d => d.run.pace);
+  const metHr = loopdagen.filter(d => d.run.hr);
+  console.log(`      ${metTempo.length}/${loopdagen.length} met tempo, ${metHr.length} met hartslag`);
+  console.log(`      voorbeeld: ${loopdagen[1]?.run.description} · ${loopdagen[1]?.run.pace} · ${loopdagen[1]?.run.hr}`);
+  ok('elke loopdag heeft een tempo', metTempo.length === loopdagen.length,
+    `${metTempo.length} van ${loopdagen.length}`);
+  ok('en een hartslagvoorschrift', metHr.length === loopdagen.length,
+    `${metHr.length} van ${loopdagen.length}`);
+  ok('het tempo staat als min:sec per kilometer',
+    /^\d+:\d\d\/km$/.test(loopdagen[1].run.pace), loopdagen[1].run.pace);
+  ok('en is niet het onuitvoerbare doeltempo van 7:00',
+    loopdagen.every(d => d.run.paceMin > 7.5),
+    JSON.stringify([...new Set(loopdagen.map(d => d.run.pace))]));
+  ok('de hartslagregel noemt een bereik',
+    /\d+–\d+ bpm/.test(loopdagen[1].run.hr), loopdagen[1].run.hr);
+}
+
+S('13 · De dag van vandaag komt van de planner, niet van de sjabloon');
+{
+  // Dit was de tegenstrijdigheid die zij zag: Vandaag, Lichaam en
+  // Progressie tonen de beslissing van de planner, en dit overzicht zette
+  // er zijn eigen projectie naast.
+  const logs = haarData();
+  const p = racePlan({ currentDate: TODAY, logs, raceDate: RACE,
+    raceKm: 5, raceSec: 2100 });
+  const vandaag = p.days[0];
+  const echt = liveSessie({ log: logs[TODAY] || {}, logs, currentDate: TODAY });
+  if (echt?.run) {
+    ok('vandaag komt uit de planner', vandaag.run?.fromPlanner === true,
+      JSON.stringify(vandaag.run).slice(0, 140));
+    ok('met exact dezelfde beschrijving als de dagkaart',
+      vandaag.run.description === echt.run.description,
+      `${vandaag.run.description} ≠ ${echt.run.description}`);
+    ok('en hetzelfde hartslagvoorschrift', vandaag.run.hr === echt.hrZone,
+      `${vandaag.run.hr} ≠ ${echt.hrZone}`);
+  } else {
+    ok('zonder sessie van de planner blijft de sjabloon staan',
+      vandaag.run == null || vandaag.run.fromPlanner !== true, 'geen planner-sessie');
+  }
+  // Morgen is wél een voornemen uit het weekpatroon.
+  const morgen = p.days[1];
+  ok('morgen is een voornemen, geen plannerbeslissing',
+    !morgen.run || morgen.run.fromPlanner !== true,
+    JSON.stringify(morgen.run).slice(0, 100));
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

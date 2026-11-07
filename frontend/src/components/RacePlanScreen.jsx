@@ -171,6 +171,30 @@ function DagKaart({ dag, log, onSave, openDefault }) {
             <div style={{ fontSize: 11.5, lineHeight: 1.55, marginBottom: 6 }}>
               <strong>Loop:</strong> {dag.run.description} ({dag.run.minutes} min, niveau {dag.run.level})
               {dag.run.strides ? ' + 6 × 12 sec versnelling erachter' : ''}
+              {/* Hoe hard en op welke hartslag — hetzelfde voorschrift als
+                  op de dagkaart, niet een tweede berekening. */}
+              {(dag.run.pace || dag.run.hr) && (
+                <div style={{ marginTop: 3 }} data-tempo={dag.run.paceMin || ''}>
+                  {dag.run.pace && (
+                    <div><strong>Tempo:</strong> {dag.run.pace}
+                      <span style={{ color: 'var(--ghost)' }}> — het tempo is de uitkomst,
+                        je hartslag is de grens</span></div>
+                  )}
+                  {dag.run.hr && (
+                    <div data-hartslag><strong>Hartslag:</strong> {dag.run.hr}</div>
+                  )}
+                </div>
+              )}
+              {dag.run.fromPlanner && (
+                <div style={{ fontSize: 10.5, color: 'var(--sage)', marginTop: 2 }}
+                  data-uit-planner>
+                  Uit de dagkaart van vandaag.
+                  {dag.run.templateDescription
+                    && dag.run.templateDescription !== dag.run.description
+                    && ` Het weekpatroon wilde hier ${dag.run.templateDescription}; de coach
+                        weegt je herstelcheck en de poort van vandaag mee.`}
+                </div>
+              )}
               {dag.run.timeOnFeet && (
                 <div style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5 }}
                   data-tijd-op-benen={dag.run.timeOnFeet}>
@@ -238,6 +262,8 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
     currentDate, logs,
     raceDate: race?.date || null,
     raceName: race?.name || 'Je volgende race',
+    raceKm: race?.distanceKm ?? null,
+    raceSec: race?.targetTimeSec ?? null,
   }), [currentDate, logs, race, tick]);
 
   function bewaar(datum, veld, waarde) {

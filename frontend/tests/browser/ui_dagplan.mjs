@@ -157,15 +157,28 @@ ok('het invulpaneel gaat open',
 ok('met zestig dagen in beeld',
   Number(await page.getAttribute('[data-terugwerkend-rijen]', 'data-terugwerkend-rijen')) === 60,
   String(await page.getAttribute('[data-terugwerkend-rijen]', 'data-terugwerkend-rijen')));
+ok('en drie kolommen naast elkaar',
+  await page.locator('[data-kolom]').count() === 3,
+  String(await page.locator('[data-kolom]').count()));
+
+// Twee verschillende metingen op dezelfde dag: ze mogen elkaar niet
+// overschrijven of in elkaars kolom belanden — dat deed de vorige versie,
+// die één metriek tegelijk toonde en de invoervelden hergebruikte.
 const gisteren = addDays(TODAY, -1);
-await page.locator(`[data-dag-invoer="${gisteren}"]`).fill('58');
-await page.locator(`[data-dag-invoer="${gisteren}"]`).blur();
+await page.locator(`[data-dag-invoer="hr_rest_${gisteren}"]`).fill('58');
+await page.locator(`[data-dag-invoer="hr_rest_${gisteren}"]`).blur();
+await page.waitForTimeout(700);
+await page.locator(`[data-dag-invoer="weight_${gisteren}"]`).fill('61.2');
+await page.locator(`[data-dag-invoer="weight_${gisteren}"]`).blur();
 await page.waitForTimeout(900);
 const terug = await page.evaluate((d) => {
   try { return JSON.parse(localStorage.getItem(`gc_log_${d}`) || '{}'); } catch { return {}; }
 }, gisteren);
-ok('een rusthartslag van gisteren komt in dat dagboek', terug.hr_rest === 58,
-  JSON.stringify(terug));
+ok('de rusthartslag staat in het dagboek', terug.hr_rest === 58, JSON.stringify(terug));
+ok('en het gewicht ernaast, niet eroverheen', terug.weight === 61.2, JSON.stringify(terug));
+ok('de kolom gewicht toont geen hartslag',
+  await page.inputValue(`[data-dag-invoer="weight_${gisteren}"]`) === '61.2',
+  await page.inputValue(`[data-dag-invoer="weight_${gisteren}"]`));
 
 ok('geen JS-fout', errors.length === 0, errors.join(' | '));
 await b.close();

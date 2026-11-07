@@ -69,7 +69,9 @@ import { pemFreeWeeks } from './symptoms';
 import { dayNumber as challengeDayNumber } from './challenge75';
 import { loadStrengthSessions } from './data/strengthSchema';
 import { fuelLine, weightPlan, FASE as GEWICHT } from './weightPhase';
-import { easyRunPace } from './easyPace';
+import { easyRunPace, prescribedPace } from './easyPace';
+import { nextSession as liveSessie } from './coachPlan';
+import { hrPrescription } from './hrModel';
 
 // ── Fasen ───────────────────────────────────────────────────────
 export const FASE = {
@@ -183,6 +185,13 @@ function vormVoor({ niveau, rol, fase }) {
   if (eronder.length) return eronder[eronder.length - 1];
   const alles = sessionsUpTo(niveau);
   return alles.length ? alles[alles.length - 1] : null;
+}
+
+// Minuten per kilometer als 9:30.
+function fmtTempo(min) {
+  if (min == null || !Number.isFinite(min)) return null;
+  const t = Math.round(min * 60);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}/km`;
 }
 
 function omschrijf(vorm) {
@@ -344,7 +353,8 @@ function invoerVoor({ kind, gelopen, dagNaLoop }) {
 
 // ── Het plan ────────────────────────────────────────────────────
 export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = null,
-  raceName = 'Ameland Adventure Run', taperDays = 6 } = {}) {
+  raceName = 'Ameland Adventure Run', taperDays = 6,
+  raceKm = null, raceSec = null } = {}) {
   const race = raceDate || null;
   if (!race || race < currentDate) {
     return { known: false, why: 'Geen racedatum in de toekomst om naartoe te werken.' };
@@ -368,6 +378,21 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   const pem = pemFreeWeeks({ logs, currentDate });
   const luteaal = luteaalVenster({ currentDate, tot: race });
   const brandstof = fuelLine({ currentDate, raceDate: race });
+
+  // ── De sessie van vandaag komt niet uit dit bestand ─────────
+  //
+  // Dit was de echte tegenstrijdigheid: Vandaag, Lichaam en Progressie
+  // tonen alle drie de beslissing van de planner — met de herstelcheck,
+  // de poort en de dosering van vandaag erin — en dit overzicht zette er
+  // zijn eigen projectie naast. Vier schermen, twee antwoorden.
+  //
+  // Nu haalt het plan de dag van vandaag op bij diezelfde planner. Wat de
+  // sjabloon voor vandaag wilde blijft zichtbaar als `templateRun`, zodat
+  // te zien is waaróm er iets anders staat dan het weekpatroon.
+  const vandaagSessie = (() => {
+    try { return liveSessie({ log: logs[currentDate] || {}, logs, currentDate }); }
+    catch { return null; }
+  })();
   // Met haar gemeten rustige tempo erbij, anders kan het gewichtsvoordeel
   // niet in seconden per kilometer worden uitgedrukt en blijft er een
   // algemene zin staan waar een getal hoort.
@@ -376,6 +401,12 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   // een algemene zin staan waar een getal hoort. Daarom een terugval op
   // het gemeten tempo van haar loopblokken zelf.
   const easy = easyRunPace({ logs, currentDate });
+  // Het racedoel in de vorm die prescribedPace verwacht; daar komt het
+  // doeltempo uit, begrensd op wat uitvoerbaar is.
+  const raceDoel = raceSec
+    ? { distanceKm: raceKm, targetTimeSec: raceSec,
+      targetPaceSecPerKm: raceKm ? raceSec / raceKm : null }
+    : null;
   const tempoMin = (easy?.available ? easy.paceMin : null)
     ?? gemetenLooptempo({ workouts, currentDate });
   const gewicht = weightPlan({ currentDate, raceDate: race, easyPaceMin: tempoMin });
@@ -451,6 +482,36 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     const gelopen = gelopenOp.has(datum);
     const log = logs[datum] || null;
 
+    // ── Vandaag: de planner wint van de sjabloon ──────────────
+    const isVandaag = datum === currentDate;
+    const vanPlanner = isVandaag && vandaagSessie?.run ? vandaagSessie : null;
+    if (vanPlanner) {
+      kind = DAG.RUN;
+      note = 'Dit is de sessie van de dagkaart zelf, inclusief je herstelcheck '
+        + 'en de poort van vandaag.';
+    }
+
+    // ── Tempo en hartslag: waarmee loop je het ────────────────
+    //
+    // Dit ontbrak, en het is precies wat je nodig hebt als je de deur
+    // uitgaat: niet alleen de vorm maar ook hoe hard en op welke hartslag.
+    // Beide uit dezelfde bronnen als de dagkaart — prescribedPace voor het
+    // tempo (met de begrenzing op uitvoerbaar) en hrPrescription voor de
+    // hartslag (rustig onder VT1, kwaliteit erboven).
+    const loopDoel = vorm?.purpose === PURPOSE_ID.RACE_SPECIFIC ? 'FIVE_K_SPECIFIC'
+      : vorm?.purpose === PURPOSE_ID.DURABILITY ? 'DURABILITY'
+        : vorm?.purpose === PURPOSE_ID.QUALITY_LITE ? 'QUALITY_LITE'
+          : fase === FASE.TAPER.id ? 'TAPER' : 'EASY_ECONOMY';
+    const tempo = (kind === DAG.RUN || kind === DAG.RUN_KRACHT || isRace)
+      ? (vanPlanner?.targetPace
+        ?? prescribedPace({ purpose: loopDoel, goal: raceDoel, easy, logs, currentDate }).paceMin
+        ?? tempoMin)
+      : null;
+    const hartslag = (kind === DAG.RUN || kind === DAG.RUN_KRACHT || isRace)
+      ? (vanPlanner?.hrZone
+        ?? hrPrescription({ purpose: loopDoel, logs, currentDate }).line)
+      : null;
+
     dagen.push({
       date: datum,
       dayName: NL_DAYS[wd],
@@ -461,12 +522,18 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
       phaseLabel: (Object.values(FASE).find(f => f.id === fase) || FASE.RITME).label,
       kind, role: rol, note,
       level: vorm ? niveau : null,
-      run: vorm ? {
-        level: niveau,
-        description: omschrijf(vorm),
-        minutes: vorm.minutes,
-        purpose: vorm.purpose,
-        strides: rol === 'easy' || rol === 'kort',
+      run: (vanPlanner || vorm) ? {
+        level: vanPlanner ? (vanPlanner.chosenLevel ?? vanPlanner.level ?? niveau) : niveau,
+        description: vanPlanner ? vanPlanner.run.description : omschrijf(vorm),
+        minutes: vanPlanner ? vanPlanner.run.duration : vorm.minutes,
+        // Hoe hard, en op welke hartslag.
+        pace: tempo ? fmtTempo(tempo) : null,
+        paceMin: tempo,
+        hr: hartslag,
+        fromPlanner: !!vanPlanner,
+        templateDescription: vorm ? omschrijf(vorm) : null,
+        purpose: vanPlanner ? vanPlanner.purpose : vorm.purpose,
+        strides: vanPlanner ? !!vanPlanner.run.strides : (rol === 'easy' || rol === 'kort'),
         timeOnFeet: tijdOpBenen,
         timeOnFeetWhy: tijdOpBenen
           ? `Vul aan met wandelen tot ${tijdOpBenen} minuten op de benen. De race duurt `

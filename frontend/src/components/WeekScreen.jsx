@@ -504,7 +504,8 @@ export default function WeekScreen({ logs }) {
       .filter(g => g.enabled !== false && g.date >= tod)
       .sort((a, b) => a.date.localeCompare(b.date))[0] || null;
     const p = racePlan({ currentDate: tod, logs: logs || {},
-      raceDate: race?.date || null, raceName: race?.name });
+      raceDate: race?.date || null, raceName: race?.name,
+      raceKm: race?.distanceKm ?? null, raceSec: race?.targetTimeSec ?? null });
     const m = new Map();
     if (p.known) for (const d of p.days) m.set(d.date, d);
     return m;

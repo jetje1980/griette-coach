@@ -20,6 +20,8 @@ import { RUNS } from './data/runningSchema';
 import { loadWorkouts, toleranceFor, fmtPace, paceToMin } from './workouts';
 import { loadStrengthSessions } from './data/strengthSchema';
 import { todayLocal, isPast, isToday, isFuture, addDays, dayNameShort } from './datetime';
+import { racePlan } from './racePlanDays';
+import { loadRaceGoals } from './raceGoalModel';
 
 export const STATUS = {
   DONE: 'DONE',
@@ -41,9 +43,38 @@ export const STATUS_META = {
   EMPTY:          { label: '',              color: 'var(--ghost)', weight: 500 },
 };
 
-function readDayPlan(date) {
-  try { return JSON.parse(localStorage.getItem(`gc_day_plan_${date}`) || '{}'); }
-  catch { return {}; }
+// ── Wat stond er voor die dag gepland? ──────────────────────────
+//
+// Dit las het handmatige dagplan (gc_day_plan_*). Dat veld bestaat niet
+// meer sinds training op één plek wordt bepaald: in het dagplan naar de
+// race, en voor vandaag door de planner zelf. Bleef dit staan, dan had de
+// weekkalender in Lichaam nooit meer een geplande dag — en dus ook nooit
+// een gemiste.
+//
+// De oproeper kan het plan meegeven (ctx.plan); anders wordt het hier
+// opgehaald. Dat scheelt zevenendertig dagen herberekenen per dagrij.
+function readDayPlan(date, plan = null) {
+  const dag = plan?.get ? plan.get(date) : null;
+  if (!dag) return {};
+  if (dag.run) return { training: 'run', bron: 'dagplan' };
+  if (dag.strength) return { training: 'kracht', bron: 'dagplan' };
+  if (dag.kind === 'rust') return { training: 'rest', bron: 'dagplan' };
+  return {};
+}
+
+// Het dagplan één keer per scherm, als map datum → dag.
+export function planMap({ currentDate = todayLocal(), logs = {} } = {}) {
+  try {
+    const race = loadRaceGoals()
+      .filter(g => g.enabled !== false && g.date >= currentDate)
+      .sort((a, b) => a.date.localeCompare(b.date))[0] || null;
+    const p = racePlan({ currentDate, logs, raceDate: race?.date || null,
+      raceName: race?.name, raceKm: race?.distanceKm ?? null,
+      raceSec: race?.targetTimeSec ?? null });
+    const m = new Map();
+    if (p.known) for (const d of p.days) m.set(d.date, d);
+    return m;
+  } catch { return new Map(); }
 }
 
 const isRunWorkout = (w) => w.activityType === 'run' || w.activityType == null;
@@ -63,12 +94,11 @@ function counts(w) {
  *   workouts  vooraf geladen WorkoutResults (bespaart herhaald inlezen)
  *   gate      resultaat van restDayDecision voor vandaag, optioneel
  */
-export function resolveTrainingDayStatus(date, {
-  logs = {}, today = todayLocal(), workouts = null, gate = null,
-} = {}) {
+export function resolveTrainingDayStatus(date, ctx = {}) {
+  const { logs = {}, today = todayLocal(), workouts = null, gate = null } = ctx;
   const all = workouts || loadWorkouts();
   const log = logs?.[date] || null;
-  const plan = readDayPlan(date);
+  const plan = readDayPlan(date, ctx.plan || null);
 
   const dayWorkouts = all.filter(w => w.date === date && counts(w));
   const runs = dayWorkouts.filter(isRunWorkout);
@@ -165,9 +195,11 @@ function summarize(workout, run, kind) {
 export function resolveWeek(mondayDate, ctx = {}) {
   const workouts = ctx.workouts || loadWorkouts();
   const today = ctx.today || todayLocal();
+  // Eén keer het dagplan voor de hele week, niet zeven keer.
+  const plan = ctx.plan || planMap({ currentDate: today, logs: ctx.logs || {} });
   return Array.from({ length: 7 }, (_, i) => {
     const date = addDays(mondayDate, i);
-    const res = resolveTrainingDayStatus(date, { ...ctx, workouts, today });
+    const res = resolveTrainingDayStatus(date, { ...ctx, workouts, today, plan });
     return { ...res, dow: dayNameShort(date), isToday: date === today };
   });
 }
