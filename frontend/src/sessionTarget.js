@@ -38,6 +38,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 import { efficiencyTrend, paceAtHr } from './efficiency';
+import { expectedEfficiency, HERSTEL_WEKEN } from './progressExpectation';
 import { todayLocal, daysBetween } from './datetime';
 
 // Hoeveel efficiëntie kun je per week winnen als alles meezit? Eén procent
@@ -73,7 +74,12 @@ export function sessionTarget({ date, hr = 132, currentDate = todayLocal(),
   }
 
   const weken = Math.max(0, daysBetween(currentDate, date) / 7);
-  const doelEf = +(t.current * (1 + (WINST_PER_WEEK_PCT / 100) * weken)).toFixed(3);
+  // Niet één vast percentage per week: eerst terugpakken wat er al was,
+  // daarna nieuwe winst. Zie progressExpectation.js — dat onderscheid is
+  // het verschil tussen een verwachting en een rekensommetje.
+  const verwacht = expectedEfficiency({ currentDate, date, workouts });
+  const doelEf = verwacht.known ? verwacht.mid
+    : +(t.current * (1 + (WINST_PER_WEEK_PCT / 100) * weken)).toFixed(3);
   const nuTempo = paceAtHr(t.current, hr);
   const doelTempo = paceAtHr(doelEf, hr);
 
@@ -107,10 +113,14 @@ export function sessionTarget({ date, hr = 132, currentDate = todayLocal(),
       ? `Vorige vergelijkbare sessie (${vorige.date.slice(5)}): ${fmtPace(vorige.paceMin)}/km `
         + `bij hartslag ${vorige.avgHr}.`
       : null,
-    why: `Je gemeten efficiëntie is ${t.current} (meters per minuut per hartslag). Dit doel `
-      + `rekent met ${WINST_PER_WEEK_PCT}% winst per week — de bovenkant van wat haalbaar is `
-      + 'als frequentie, kracht, pasfrequentie en eten allemaal meedoen. Het komt dus uit '
-      + 'wat je nu kunt, niet uit je wenstijd.',
+    phase: verwacht.known ? verwacht.phase : null,
+    why: verwacht.known && verwacht.phase === 'terugpakken'
+      ? `Je staat op ${verwacht.current} en liep op ${verwacht.bestDate} al ${verwacht.best}. `
+        + `Dit doel is dat niveau terugpakken — in ${HERSTEL_WEKEN} weken bij vier loopdagen `
+        + 'per week. Dat gaat sneller dan nieuwe opbouw, want het is er al geweest.'
+      : `Je gemeten efficiëntie is ${t.current}. Tot ${verwacht.known ? verwacht.bestDate || 'je beste dag' : 'je beste dag'} `
+        + 'gaat dit doel over terugpakken wat je al liep; daarna over nieuwe winst van '
+        + 'ongeveer 1 tot 1,5% per week. Het komt uit wat je kunt, niet uit je wenstijd.',
     // Wat er gebeurt als dit tempo wordt aangehouden tot de race.
     purpose,
   };

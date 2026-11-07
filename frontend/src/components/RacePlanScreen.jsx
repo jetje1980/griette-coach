@@ -348,6 +348,7 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
     raceName: race?.name || 'Je volgende race',
     raceKm: race?.distanceKm ?? null,
     raceSec: race?.targetTimeSec ?? null,
+    raceTerrain: race?.terrain ?? null,
   }), [currentDate, logs, race, tick]);
 
   function bewaar(datum, veld, waarde) {
@@ -391,6 +392,54 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
           {plan.note}
         </div>
       </div>
+
+      {/* ── Wat een trainer verwacht ──────────────────────── */}
+      {plan.expectation?.known && (
+        <>
+          <div className="os-section-label">Wat is er haalbaar</div>
+          <div className="os-card" style={{ marginBottom: 12,
+            borderLeft: '3px solid var(--sage)' }} data-verwachting>
+            <div style={{ fontSize: 13.5, fontWeight: 800, lineHeight: 1.45 }}>
+              {plan.expectation.line}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55,
+              marginTop: 4 }}>
+              {plan.expectation.nowLine} {plan.expectation.gainLine}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 7, flexWrap: 'wrap' }}>
+              {[['voorzichtig', plan.expectation.low], ['verwacht', plan.expectation.mid],
+                ['als alles meezit', plan.expectation.high]].map(([label, s2]) => (
+                <div key={label} data-scenario={label}>
+                  <div style={{ fontSize: 9.5, color: 'var(--ghost)', fontWeight: 700,
+                    textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800,
+                    fontFamily: 'var(--font-serif)' }}>
+                    {plan.expectation.fmt.time(s2.time)}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--sub)' }}>
+                    {plan.expectation.fmt.pace(s2.pace)}/km
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 7,
+              paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+              <strong>Hoe gerekend:</strong> {plan.expectation.method}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 3 }}>
+              <strong>In twee fasen:</strong> {plan.expectation.phases}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--gold)', lineHeight: 1.5, marginTop: 3 }}>
+              {plan.expectation.conditions}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45, marginTop: 4 }}>
+              Op vlakke weg zou dit {plan.expectation.fmt.time(plan.expectation.mid.flatTime)}{' '}
+              zijn ({plan.expectation.fmt.pace(plan.expectation.mid.flatPace)}/km) — het
+              verschil is de ondergrond, niet je vorm.
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── De weken ───────────────────────────────────────── */}
       <div className="os-section-label">De weken</div>

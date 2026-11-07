@@ -20,7 +20,13 @@ import {
 } from './workouts';
 import { loadHrSettings } from './goals';
 import { longestToleratedRun, addDays } from './restday';
-import { pacePrediction } from './pace';
+import { pacePrediction, runEconomyTrend } from './pace';
+// todayLocal ontbrak: economyTrend kreeg een standaardwaarde met deze
+// functie erin, en zonder import gooide élke aanroep een ReferenceError.
+// Daarmee lag de hele racevoorspelling plat — raceForecast roept
+// economyTrend als eerste aan. Dat is precies het soort fout dat geen
+// foutmelding op het scherm geeft maar een leeg blok.
+import { todayLocal } from './datetime';
 
 // Wandeltempo uit het schema (6:30–7:00 /km). Wordt overschreven zodra er
 // echte wandelsessies geregistreerd zijn.

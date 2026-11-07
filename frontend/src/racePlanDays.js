@@ -73,6 +73,7 @@ import { easyRunPace, prescribedPace } from './easyPace';
 import { nextSession as liveSessie } from './coachPlan';
 import { hrPrescription } from './hrModel';
 import { sessionTarget, hrUitVoorschrift } from './sessionTarget';
+import { raceExpectation } from './progressExpectation';
 
 // ── Dagen ruilen ────────────────────────────────────────────────
 //
@@ -419,7 +420,7 @@ function invoerVoor({ kind, gelopen, dagNaLoop }) {
 // ── Het plan ────────────────────────────────────────────────────
 export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = null,
   raceName = 'Ameland Adventure Run', taperDays = 6,
-  raceKm = null, raceSec = null } = {}) {
+  raceKm = null, raceSec = null, raceTerrain = null } = {}) {
   const race = raceDate || null;
   if (!race || race < currentDate) {
     return { known: false, why: 'Geen racedatum in de toekomst om naartoe te werken.' };
@@ -443,6 +444,11 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   const pem = pemFreeWeeks({ logs, currentDate });
   const luteaal = luteaalVenster({ currentDate, tot: race });
   const brandstof = fuelLine({ currentDate, raceDate: race });
+  // Wat een trainer verwacht dat deze vijf weken opleveren, op racetempo
+  // en op dit terrein. Niet de doorgetrokken meetlijn — zie
+  // progressExpectation.js voor waarom dat iets anders is.
+  const verwachting = raceExpectation({ currentDate, raceDate: race,
+    distanceKm: raceKm || 5, terrain: raceTerrain || 'trail' });
 
   // ── De sessie van vandaag komt niet uit dit bestand ─────────
   //
@@ -671,6 +677,7 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     swaps: loadSwaps(),
     weight: gewicht,
     fuel: brandstof,
+    expectation: verwachting,
     levers: knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht }),
     note: 'Wat je vandaag loopt komt van de dagkaart zelf — die weegt je herstelcheck, '
       + 'de poort en de dosering van vandaag mee. Dit overzicht tekent de weken eromheen, '
