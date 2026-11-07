@@ -260,6 +260,17 @@ function fmtTempo(min) {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}/km`;
 }
 
+// Een datum zoals je hem tegen iemand zegt: "maandag 9 november". Een
+// ISO-datum in een zin die uitlegt waarom je vandaag niet loopt is de
+// lezer niet behulpzaam.
+const MAANDEN_NL = ['januari', 'februari', 'maart', 'april', 'mei', 'juni',
+  'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+function fmtDag(datum) {
+  if (!datum) return '—';
+  const [, m, d] = datum.split('-');
+  return `${NL_DAYS[dayOfWeek(datum)]} ${Number(d)} ${MAANDEN_NL[Number(m) - 1]}`;
+}
+
 function omschrijf(vorm) {
   if (!vorm) return null;
   if (vorm.continuous) return `${vorm.runMin} min doorlopend`;
@@ -464,6 +475,21 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     try { return liveSessie({ log: logs[currentDate] || {}, logs, currentDate }); }
     catch { return null; }
   })();
+
+  // ── De poort geldt ook hier ─────────────────────────────────
+  //
+  // Dit ging mis en zij zag het meteen: op Vandaag stond "hardlopen staat
+  // vandaag op slot, weer vrij vanaf maandag", en op dit tabblad stond
+  // doodleuk een loop voor vandaag. Ik nam `vandaagSessie.run` over zonder
+  // naar de poort te kijken — terwijl de planner die sessie als vooruitblik
+  // meegeeft, niet als opdracht voor nu.
+  //
+  // De poort is de beslissing. Staat lopen op slot, dan is vandaag hier
+  // geen loopdag, en verschijnt de sessie op de dag dat hij vrijkomt.
+  const poort = vandaagSessie?.gate || null;
+  const loopVrij = !poort || poort.action === 'RUN_TODAY';
+  const vrijVanaf = poort?.earliestRunDate && poort.earliestRunDate > currentDate
+    ? poort.earliestRunDate : null;
   // Met haar gemeten rustige tempo erbij, anders kan het gewichtsvoordeel
   // niet in seconden per kilometer worden uitgedrukt en blijft er een
   // algemene zin staan waar een getal hoort.
@@ -489,6 +515,8 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   let vorigeWeek = null;
 
   const ruilen = swapMap();
+  // De sessie die achter de poort klaarstaat wordt één keer geplaatst.
+  let wachtGeplaatst = false;
 
   for (let i = 0; i <= totaal; i++) {
     const datum = addDays(currentDate, i);
@@ -535,6 +563,55 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
       note = 'Rust. Morgen is het zover; vandaag valt er niets meer te winnen.';
     }
 
+    // ── Vandaag en de poort: de planner wint van de sjabloon ──
+    //
+    // Dit hoort hier te staan, vóór de vorm van de sessie bepaald wordt.
+    // Stond het eronder, dan bleef er op een dag die op slot gaat een
+    // sessie zonder tempo achter: de dag heette rust en had toch een
+    // loopblok. Dat is precies de soort tegenstrijdigheid die zij ziet.
+    const isVandaag = datum === currentDate;
+    const vanPlanner = isVandaag && loopVrij && vandaagSessie?.run ? vandaagSessie : null;
+    if (vanPlanner) {
+      kind = DAG.RUN;
+      note = 'Dit is de sessie van de dagkaart zelf, inclusief je herstelcheck '
+        + 'en de poort van vandaag.';
+    }
+
+    // Lopen op slot: vandaag geen loopdag, en de dagen tot de poort
+    // opengaat ook niet. Wat er dan wél staat is wat de dag wél toelaat —
+    // kracht of rust — en elke dag tot die datum zegt waarom, en wat de
+    // blokkade opheft. Ook een dag die toch al geen loopdag was: dan is er
+    // niets te schrappen, maar de vraag "mag ik vandaag lopen" verdient
+    // hier hetzelfde antwoord als op Vandaag.
+    const opSlot = !loopVrij && vrijVanaf && datum < vrijVanaf;
+    if (opSlot && (kind === DAG.RUN || kind === DAG.RUN_KRACHT)) {
+      kind = poort?.action === 'STRENGTH_TODAY' ? DAG.KRACHT : DAG.RUST;
+      rol = null;
+      note = poort?.action === 'STRENGTH_TODAY'
+        ? 'Kracht in plaats van lopen, en een rustige wandeling erbij.'
+        : 'Rust in plaats van de loopsessie die hier stond.';
+    }
+    if (opSlot) {
+      note = `${note ? `${note} ` : ''}Hardlopen staat op slot: `
+        + `${poort.binding?.reason || poort.blockers?.[0] || poort.headline}. `
+        + `Weer vrij vanaf ${fmtDag(vrijVanaf)}.`
+        + (poort.binding?.unlock ? ` ${poort.binding.unlock}` : '');
+    }
+    // En de sessie die klaarligt komt op de eerste loopdag die weer mag.
+    //
+    // Niet op de poortdatum zelf als dat een rustdag is: dan zou er een
+    // loopdag bíj komen die het weekpatroon niet heeft, precies wat het
+    // ruilen van dagen ook niet mag doen. De poort zegt wannéér het weer
+    // mag; het patroon zegt op welke dag er gelopen wordt.
+    const isVrijdag = !loopVrij && !wachtGeplaatst && !isRace
+      && !!vandaagSessie?.run && vrijVanaf && datum >= vrijVanaf
+      && (kind === DAG.RUN || kind === DAG.RUN_KRACHT);
+    if (isVrijdag) {
+      wachtGeplaatst = true;
+      note = 'De sessie die klaarstaat zodra de poort opengaat. Valt er tussendoor '
+        + 'een respons tegen, dan kiest de coach opnieuw.';
+    }
+
     const niveau = niveauVoorWeek({ basis: basisNiveau, weekIndex, fase });
     const vorm = (kind === DAG.RUN || kind === DAG.RUN_KRACHT)
       ? vormVoor({ niveau, rol, fase }) : null;
@@ -562,15 +639,6 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
 
     const gelopen = gelopenOp.has(datum);
     const log = logs[datum] || null;
-
-    // ── Vandaag: de planner wint van de sjabloon ──────────────
-    const isVandaag = datum === currentDate;
-    const vanPlanner = isVandaag && vandaagSessie?.run ? vandaagSessie : null;
-    if (vanPlanner) {
-      kind = DAG.RUN;
-      note = 'Dit is de sessie van de dagkaart zelf, inclusief je herstelcheck '
-        + 'en de poort van vandaag.';
-    }
 
     // ── Tempo en hartslag: waarmee loop je het ────────────────
     //
@@ -613,24 +681,36 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
       phase: fase,
       phaseLabel: (Object.values(FASE).find(f => f.id === fase) || FASE.RITME).label,
       kind, role: rol, note,
+      // Deze dag staat op slot door de poort, niet door het weekpatroon.
+      // Zonder dat onderscheid is op het scherm niet te zien of een
+      // rustdag een keuze is of een blokkade.
+      gated: !!opSlot,
+      gateReason: opSlot
+        ? (poort.binding?.reason || poort.blockers?.[0] || poort.headline) : null,
+      gateUntil: opSlot ? vrijVanaf : null,
       level: vorm ? niveau : null,
-      run: (vanPlanner || vorm) ? {
-        level: vanPlanner ? (vanPlanner.chosenLevel ?? vanPlanner.level ?? niveau) : niveau,
-        description: vanPlanner ? vanPlanner.run.description : omschrijf(vorm),
-        minutes: vanPlanner ? vanPlanner.run.duration : vorm.minutes,
+      run: vorm ? {
+        level: (vanPlanner || isVrijdag)
+          ? (vandaagSessie.chosenLevel ?? vandaagSessie.level ?? niveau) : niveau,
+        description: (vanPlanner || isVrijdag)
+          ? vandaagSessie.run.description : omschrijf(vorm),
+        minutes: (vanPlanner || isVrijdag)
+          ? vandaagSessie.run.duration : vorm.minutes,
         // Hoe hard, en op welke hartslag.
         pace: tempo ? fmtTempo(tempo) : null,
         paceMin: tempo,
         hr: hartslag,
-        fromPlanner: !!vanPlanner,
+        fromPlanner: !!vanPlanner || !!isVrijdag,
+        waitingForGate: !!isVrijdag,
         templateDescription: vorm ? omschrijf(vorm) : null,
         // De progressie die bij deze dag hoort: doeltempo bij de
         // voorgeschreven hartslag, en wat de vorige vergelijkbare sessie
         // werkelijk opleverde.
         target: doel?.known ? doel : null,
         targetWhy: doel?.known ? doel.why : (doel?.why || null),
-        purpose: vanPlanner ? vanPlanner.purpose : vorm.purpose,
-        strides: vanPlanner ? !!vanPlanner.run.strides : (rol === 'easy' || rol === 'kort'),
+        purpose: (vanPlanner || isVrijdag) ? vandaagSessie.purpose : vorm?.purpose,
+        strides: (vanPlanner || isVrijdag) ? !!vandaagSessie.run.strides
+          : (rol === 'easy' || rol === 'kort'),
         timeOnFeet: tijdOpBenen,
         timeOnFeetWhy: tijdOpBenen
           ? `Vul aan met wandelen tot ${tijdOpBenen} minuten op de benen. De race duurt `
@@ -678,7 +758,14 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     weight: gewicht,
     fuel: brandstof,
     expectation: verwachting,
-    levers: knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht }),
+    // `locksUntil` is de datum tot wanneer dit overzicht werkelijk dagen
+    // op slot zet — leeg als de poort vandaag openstaat. Zonder dat
+    // onderscheid zou de kaart "op slot" roepen op een dag dat er
+    // gewoon gelopen mag worden.
+    gate: poort ? { action: poort.action, headline: poort.headline, locksUntil: vrijVanaf,
+      earliestRunDate: poort.earliestRunDate, binding: poort.binding || null,
+      blockers: poort.blockers || [] } : null,
+    levers: knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht, poort }),
     note: 'Wat je vandaag loopt komt van de dagkaart zelf — die weegt je herstelcheck, '
       + 'de poort en de dosering van vandaag mee. Dit overzicht tekent de weken eromheen, '
       + 'en wordt elke keer opnieuw gerekend uit wat er werkelijk gebeurd is.',
@@ -831,7 +918,7 @@ function perWeek(dagen) {
 // Geen algemene tips: alleen knoppen waarvan in háár gegevens te zien is
 // hoe ze ervoor staan, met de huidige stand erbij. Een knop zonder meting
 // is een mening.
-function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht }) {
+function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht, poort }) {
   const uit = [];
 
   // 1. Frequentie — de grootste, en meetbaar.
@@ -851,6 +938,35 @@ function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht
       + 'in de weken met gaten. Dit is de knop met de grootste opbrengst en hij kost niets.',
     status: perWeek >= 3.5 && (grootsteGat == null || grootsteGat <= 3) ? 'goed' : 'open',
   });
+
+  // 1b. Verdeling over de week — de knop die haar vandaag een loopdag kost.
+  //
+  // Dit stond nergens, en het is wat de poort werkelijk dichthield: 134
+  // minuten in zeven dagen tegen een basis van 63, vrijwel allemaal op één
+  // dag. Een week met één grote dag en daarna niets levert minder op dan
+  // dezelfde minuten over vier dagen — en hij kost loopdagen, want het
+  // volumeplafond kijkt naar het rollende venster van zeven dagen.
+  if (poort?.load) {
+    const l = poort.load;
+    const basis = l.baselineRunMinPerWeek;
+    const teveel = basis != null && l.runMin7 > basis * 1.1;
+    uit.push({
+      id: 'verdeling', label: 'Verdeel je minuten over de week',
+      stand: basis != null
+        ? `${l.runMin7} min in de laatste zeven dagen tegen een basis van ${basis} min per week`
+          + ` · ${l.runDays7} ${l.runDays7 === 1 ? 'loopdag' : 'loopdagen'}`
+        : `${l.runMin7} min in de laatste zeven dagen over ${l.runDays7} `
+          + `${l.runDays7 === 1 ? 'loopdag' : 'loopdagen'}`,
+      doel: 'Vier kleinere loopdagen per week in plaats van één grote dag',
+      waarom: teveel
+        ? 'Eén grote dag telt zeven dagen lang mee in het volumeplafond, en dat plafond '
+          + 'houdt daarna je loopdagen dicht. Dezelfde minuten over vier dagen geven meer '
+          + 'prikkel, minder herstelschuld en geen enkele dag op slot.'
+        : 'Vier kortere dagen geven meer prikkels per week dan twee lange, bij hetzelfde '
+          + 'aantal minuten — en de herstelkosten per dag blijven klein.',
+      status: teveel ? 'open' : 'goed',
+    });
+  }
 
   // 2. Eten — nu de belangrijkste, want de rusthartslag loopt op.
   if (drift?.known) {

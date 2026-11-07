@@ -119,6 +119,7 @@ function DagKaart({ dag, log, onSave, openDefault, buren, onRuil }) {
 
   return (
     <div className="os-card" data-dag={dag.date} data-dag-soort={dag.kind}
+      data-dag-opslot={dag.gated ? '1' : undefined}
       style={{ marginBottom: 8, borderLeft: `3px solid ${kleur}`,
         opacity: dag.isPast && !gedaan?.logged ? 0.75 : 1 }}>
 
@@ -392,6 +393,33 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
           {plan.note}
         </div>
       </div>
+
+      {/* ── Staat hardlopen op slot? ──────────────────────────
+          Dit stond alleen op Vandaag, en dit overzicht tekende er zijn
+          eigen loopdag naast. Eén poort, twee lezers — en zij las ze
+          allebei. Nu staat hij hier, met dezelfde reden en dezelfde
+          datum, plus wat de blokkade opheft. */}
+      {plan.gate?.locksUntil && (
+        <div className="os-card" style={{ marginBottom: 12,
+          borderLeft: '3px solid var(--gold)' }} data-poort={plan.gate.action}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, lineHeight: 1.4 }}>
+            🔒 Hardlopen staat op slot tot {formatNLLong(plan.gate.locksUntil)}
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55, marginTop: 4 }}>
+            {plan.gate.binding?.reason || plan.gate.blockers?.[0] || plan.gate.headline}
+          </div>
+          {plan.gate.binding?.unlock && (
+            <div style={{ fontSize: 11.5, lineHeight: 1.55, marginTop: 5, fontWeight: 700 }}>
+              {plan.gate.binding.unlock}
+            </div>
+          )}
+          <div style={{ fontSize: 10.5, color: 'var(--ghost)', lineHeight: 1.5, marginTop: 6,
+            paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+            De dagen hieronder staan daarom op kracht of rust tot die datum. De sessie die
+            klaarligt staat op de eerste loopdag die weer mag.
+          </div>
+        </div>
+      )}
 
       {/* ── Wat een trainer verwacht ──────────────────────── */}
       {plan.expectation?.known && (

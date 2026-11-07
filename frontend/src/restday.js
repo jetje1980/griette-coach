@@ -282,8 +282,19 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
   //
   // Een vooruitblik die te vroeg belooft, is erger dan geen vooruitblik:
   // zij plant erop.
-  const pasVrij = (datum) => {
-    if (datum && datum > earliestRunDate) earliestRunDate = datum;
+  //
+  // En hij onthoudt WELKE blokkade de datum zette. Op haar scherm stond
+  // "Gisteren gelopen — minstens één volle rustdag" terwijl de datum twee
+  // dagen verderop lag: die kwam van een andere tak (zware sessie zonder
+  // herstelcheck). De reden die je leest hoorde niet bij de datum die je
+  // leest, en dus kon ze er niets mee. Nu staat erbij welke blokkade
+  // bindend is en wat hem opheft — dat is het enige waar ze iets aan heeft.
+  let bindend = null;
+  const pasVrij = (datum, reden = null, opheffen = null) => {
+    if (datum && datum > earliestRunDate) {
+      earliestRunDate = datum;
+      bindend = { date: datum, reason: reden, unlock: opheffen };
+    }
   };
 
   const decision = coach.decision;
@@ -320,21 +331,27 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
   if (alarmVandaag.length) {
     action = 'FULL_REST';
     blockers.push(`${alarmVandaag.map(s => s.label.toLowerCase()).join(', ')} vandaag — geen belasting tot dit weg is`);
-    pasVrij(addDays(currentDate, 2));
+    pasVrij(addDays(currentDate, 2),
+      `${alarmVandaag.map(s => s.label.toLowerCase()).join(', ')} vandaag`,
+      'Zodra dit weg is en je een dag schoon bent, schuift deze datum naar voren.');
   } else if (lastResponse?.status === 'red') {
     action = 'FULL_REST';
     blockers.push(`Abnormale respons na je sessie van ${lastRun.date.slice(5)}: ${lastResponse.reason.toLowerCase()}`);
-    pasVrij(addDays(currentDate, 3));
+    pasVrij(addDays(currentDate, 3),
+      `Abnormale respons na je sessie van ${lastRun.date.slice(5)}`, null);
   } else if (decision === 'RED' || log.symptom_pem || log.training_recovery === 2) {
     action = 'FULL_REST';
     blockers.push(log.symptom_pem || log.training_recovery === 2
       ? 'PEM-signaal vandaag — trainen verlengt de terugslag'
       : 'Coachbesluit staat op rood');
-    pasVrij(addDays(currentDate, 2));
+    pasVrij(addDays(currentDate, 2),
+      log.symptom_pem || log.training_recovery === 2
+        ? 'PEM-signaal vandaag' : 'Coachbesluit staat op rood', null);
   } else if (symptomCount >= 3) {
     action = 'FULL_REST';
     blockers.push(`${symptomCount} actieve symptomen — eerst omlaag, dan pas belasting`);
-    pasVrij(addDays(currentDate, 2));
+    pasVrij(addDays(currentDate, 2), `${symptomCount} actieve symptomen vandaag`,
+      'Minder dan drie symptomen op een ochtend en deze datum schuift naar voren.');
   }
 
   // ── 2. Vertraagde respons nog onbekend ────────────────────────
@@ -353,25 +370,33 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
     if (load.daysSinceLastRun === 0) {
       action = 'FULL_REST';
       blockers.push('Vandaag al gelopen — twee loopsessies op één dag doen we niet');
-      pasVrij(addDays(currentDate, MIN_REST_DAYS_BETWEEN_RUNS + 1));
+      pasVrij(addDays(currentDate, MIN_REST_DAYS_BETWEEN_RUNS + 1),
+        'Vandaag al gelopen', null);
     } else if (lastTol === 'poor') {
       action = 'ACTIVE_RECOVERY';
       blockers.push(lastResponse?.reason
         ? `De run van ${lastRun.date.slice(5)} werd slecht verdragen. ${lastResponse.reason}`
         : `De run van ${lastRun.date.slice(5)} werd slecht verdragen — die telt als te zwaar`);
-      pasVrij(addDays(currentDate, 2));
+      pasVrij(addDays(currentDate, 2),
+        `De run van ${lastRun.date.slice(5)} werd slecht verdragen`, null);
     } else if (load.daysSinceLastRun < 2 && !answered) {
       action = 'WAIT_FOR_RESPONSE';
       blockers.push(`Nog geen herstelcheck na de run van ${lastRun.date.slice(5)} — het 24–48u-venster is de meetlat, niet je ochtendgevoel`);
-      pasVrij(addDays(lastRun.date, MIN_REST_DAYS_BETWEEN_RUNS + 1));
+      pasVrij(addDays(lastRun.date, MIN_REST_DAYS_BETWEEN_RUNS + 1),
+        `Nog geen herstelcheck na de run van ${lastRun.date.slice(5)}`,
+        'Vul je herstelcheck in — dan telt de sessie en schuift deze datum naar voren.');
     } else if (load.daysSinceLastRun <= MIN_REST_DAYS_BETWEEN_RUNS) {
       action = lastHeavy ? 'ACTIVE_RECOVERY' : 'STRENGTH_TODAY';
       blockers.push(`Gisteren gelopen — minstens één volle rustdag tussen twee runs`);
-      pasVrij(addDays(lastRun.date, MIN_REST_DAYS_BETWEEN_RUNS + 1));
+      pasVrij(addDays(lastRun.date, MIN_REST_DAYS_BETWEEN_RUNS + 1),
+        'Gisteren gelopen — minstens één volle rustdag tussen twee runs', null);
     } else if (lastHeavy && load.daysSinceLastRun < 3 && !answered) {
       action = 'WAIT_FOR_RESPONSE';
       blockers.push('Vorige sessie was zwaar en de respons is nog niet ingevuld');
-      pasVrij(addDays(lastRun.date, 3));
+      pasVrij(addDays(lastRun.date, 3),
+        'Vorige sessie was zwaar en je herstelcheck staat nog open',
+        'Vul je herstelcheck in. Valt die schoon uit, dan mag je een dag eerder — '
+        + 'deze extra dag staat er alleen omdat de respons onbekend is.');
     }
   }
 
@@ -396,7 +421,9 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
     }
     blockers.push(`Al ${weekRunDays} loopdagen deze week (vanaf ${load.weekStartLabel || 'maandag'}) — dat is het plafond van ${freq.ceiling}`);
     // Vrij zodra de nieuwe week begint.
-    pasVrij(addDays(load.weekStart || currentDate, 7));
+    pasVrij(addDays(load.weekStart || currentDate, 7),
+      `Al ${weekRunDays} loopdagen deze week — dat is het plafond van ${freq.ceiling}`,
+      'De teller begint opnieuw zodra je nieuwe week ingaat.');
   }
 
   // ── 4. Weekvolume ─────────────────────────────────────────────
@@ -415,7 +442,11 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
       // fout, en juist die naam maakte het verwarrend op de eerste dag van
       // haar nieuwe week.
       blockers.push(`${load.runMin7} min gelopen in de laatste zeven dagen tegen een basis van ${load.baselineRunMinPerWeek} min per week — meer dan 10% groei`);
-      pasVrij(addDays(currentDate, 2));
+      pasVrij(addDays(currentDate, 2),
+        `${load.runMin7} min gelopen in de laatste zeven dagen tegen een basis van `
+        + `${load.baselineRunMinPerWeek} min per week — meer dan 10% groei`,
+        'Deze datum schuift mee: zodra de zware dagen uit het venster van zeven dagen '
+        + 'vallen, zakt de telling vanzelf.');
     }
   }
 
@@ -423,19 +454,23 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
   if (action === 'RUN_TODAY' && load.restDays7 === 0) {
     action = 'FULL_REST';
     blockers.push('Zeven dagen achter elkaar belast — een echte rustdag is nu de training');
-    pasVrij(addDays(currentDate, 1));
+    pasVrij(addDays(currentDate, 1),
+      'Zeven dagen achter elkaar belast — een echte rustdag is nu de training',
+      'Eén dag waarop je niets registreert heft dit op.');
   }
 
   // ── 6. Coachkleur dempt af ────────────────────────────────────
   if (action === 'RUN_TODAY' && decision === 'BLUE') {
     action = 'ACTIVE_RECOVERY';
     blockers.push('Herstelkleur blauw — vandaag geen trainingsprikkel');
-    pasVrij(addDays(currentDate, 1));
+    pasVrij(addDays(currentDate, 1), 'Herstelkleur blauw — vandaag geen trainingsprikkel',
+      'Een groene of oranje ochtend geeft lopen morgen weer vrij.');
   }
   if (action === 'RUN_TODAY' && log.day_capacity === 'herstel') {
     action = 'ACTIVE_RECOVERY';
     blockers.push('Je hebt vandaag zelf als hersteldag gemarkeerd — dat weegt zwaarder dan het schema');
-    pasVrij(addDays(currentDate, 1));
+    pasVrij(addDays(currentDate, 1),
+      'Je hebt vandaag zelf als hersteldag gemarkeerd', null);
   }
 
   // Kracht alleen aanbieden als dat ook echt kan
@@ -499,11 +534,14 @@ export function restDayDecision({ log = {}, logs = {}, currentDate, coach = {} }
     blockers, released,
     earliestRunDate: action === 'RUN_TODAY' ? currentDate : earliestRunDate,
     daysUntilRun,
+    // De blokkade die de datum werkelijk zet, en wat hem opheft.
+    binding: action === 'RUN_TODAY' ? null : bindend,
     load, frequency: freq, progression: levers,
     // Korte samenvatting voor de compacte kaart op Vandaag
     summary: action === 'RUN_TODAY'
       ? `${load.runDays7 + 1}e loopdag van maximaal ${freq.ceiling} deze week.`
-      : blockers[0] || META[action].headline,
+      // De bindende reden, niet de eerste die toevallig in de lijst stond.
+      : bindend?.reason || blockers[0] || META[action].headline,
   };
 }
 

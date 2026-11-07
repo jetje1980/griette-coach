@@ -181,15 +181,31 @@ ok('de kolom gewicht toont geen hartslag',
   await page.inputValue(`[data-dag-invoer="weight_${gisteren}"]`));
 
 // ── Dagen ruilen op het scherm ───────────────────────────────
-const morgen = addDays(TODAY, 1);
-const overmorgen = addDays(TODAY, 2);
+// Twee dagen die werkelijk van soort verschillen — niet "morgen en
+// overmorgen" op goed geluk. Staat hardlopen een paar dagen op slot
+// (bijvoorbeeld na een zware week), dan zijn de eerstvolgende dagen
+// allebei rust en test een vaste keuze niets. Welke twee dagen het zijn,
+// doet er voor het ruilen niet toe; dát ze verschillen wel.
+const dagSoorten = await page.evaluate(() => [...document.querySelectorAll('[data-dag]')]
+  .map(el => ({ date: el.getAttribute('data-dag'),
+    kind: el.getAttribute('data-dag-soort'),
+    opSlot: el.getAttribute('data-dag-opslot') === '1' })));
+// Dagen die door de poort op slot staan tellen niet mee: die tonen rust
+// omdat lopen geblokkeerd is, niet omdat het weekpatroon dat zegt. Ruil je
+// er een loopdag mee, dan blijven ze allebei staan waar ze stonden — en
+// dat is juist gedrag, geen fout in het ruilen.
+const toekomst = dagSoorten.filter(d => d.date > TODAY && !d.opSlot);
+const morgen = (toekomst.find(d => d.kind === 'run') || toekomst[0]).date;
+const voorKind = toekomst.find(d => d.date === morgen).kind;
+const ander = toekomst.find(d => d.kind !== voorKind && d.kind !== 'race');
+const overmorgen = ander?.date;
+const voorKind2 = ander?.kind;
+console.log(`      ruilen: ${morgen} (${voorKind}) ↔ ${overmorgen} (${voorKind2})`);
+ok('de twee dagen verschillen van soort', !!overmorgen && voorKind !== voorKind2,
+  `${morgen} ${voorKind} vs ${overmorgen} ${voorKind2}`);
+
 await page.locator(`[data-dag="${morgen}"]`).first().click();   // uitklappen
 await page.waitForTimeout(400);
-const voorKind = await page.getAttribute(`[data-dag="${morgen}"]`, 'data-dag-soort');
-const voorKind2 = await page.getAttribute(`[data-dag="${overmorgen}"]`, 'data-dag-soort');
-ok('de twee dagen verschillen van soort', voorKind !== voorKind2,
-  `${voorKind} vs ${voorKind2}`);
-
 await page.locator(`[data-ruil-knop="${morgen}"]`).click();
 await page.waitForTimeout(400);
 ok('er staan dagen om mee te ruilen',

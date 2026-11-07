@@ -358,7 +358,48 @@ S('13 · De dag van vandaag komt van de planner, niet van de sjabloon');
     raceKm: 5, raceSec: 2100 });
   const vandaag = p.days[0];
   const echt = liveSessie({ log: logs[TODAY] || {}, logs, currentDate: TODAY });
-  if (echt?.run) {
+  // De poort is de beslissing, niet de vorm. `planNextSession` levert met
+  // een forcePurpose óók een sessie als de poort dicht staat — dat is de
+  // vooruitblik "dit staat klaar zodra je weer mag". Wie alleen naar
+  // `run` kijkt en de poort overslaat, zet die vooruitblik op vandaag. Dat
+  // was precies wat zij zag: Vandaag zei "op slot", dit overzicht zei
+  // "lopen".
+  const poortDicht = echt?.gate && echt.gate.action !== 'RUN_TODAY'
+    && echt.gate.earliestRunDate > TODAY;
+  console.log(`      poort: ${echt?.gate?.action} · vrij vanaf ${echt?.gate?.earliestRunDate}`);
+  if (poortDicht) {
+    ok('staat lopen op slot, dan is vandaag hier geen loopdag',
+      vandaag.kind !== DAG.RUN && vandaag.kind !== DAG.RUN_KRACHT && !vandaag.run,
+      `${vandaag.kind} · ${JSON.stringify(vandaag.run).slice(0, 80)}`);
+    ok('en staat de reden erbij die de datum werkelijk bepaalt',
+      /op slot/.test(vandaag.note || '') && /vrij vanaf/.test(vandaag.note || ''),
+      vandaag.note);
+    ok('geen enkele dag vóór die datum is een loopdag',
+      p.days.filter(d => d.date < echt.gate.earliestRunDate)
+        .every(d => d.kind !== DAG.RUN && d.kind !== DAG.RUN_KRACHT && !d.run),
+      p.days.filter(d => d.date < echt.gate.earliestRunDate && d.run)
+        .map(d => d.date).join(', ') || 'geen');
+    const wacht = p.days.filter(d => d.run?.waitingForGate);
+    const vrijDag = wacht[0];
+    ok('de sessie die klaarstaat staat één keer, op de eerste loopdag die weer mag',
+      wacht.length === 1 && vrijDag.date >= echt.gate.earliestRunDate
+      && (vrijDag.kind === DAG.RUN || vrijDag.kind === DAG.RUN_KRACHT),
+      `${wacht.length}× · ${vrijDag?.date} ${vrijDag?.kind}`);
+    // De poort zegt wannéér er weer gelopen mag worden; het weekpatroon
+    // zegt op welke dag. De wachtende sessie mag dus geen loopdag
+    // toevoegen op een dag die het patroon als rust heeft.
+    ok('en er komt geen loopdag bij op een dag die het patroon rust noemt',
+      vrijDag.run.templateDescription != null,
+      `${vrijDag.date}: ${vrijDag.run.templateDescription}`);
+    ok('met dezelfde beschrijving als de dagkaart geeft',
+      vrijDag.run.description === echt.run.description,
+      `${vrijDag.run.description} ≠ ${echt.run.description}`);
+    ok('en met een tempo en een hartslag erbij',
+      !!vrijDag.run.pace && !!vrijDag.run.hr,
+      `${vrijDag.run.pace} · ${vrijDag.run.hr}`);
+    ok('de poort staat ook op het plan zelf', p.gate?.earliestRunDate === echt.gate.earliestRunDate,
+      JSON.stringify(p.gate).slice(0, 120));
+  } else if (echt?.run) {
     ok('vandaag komt uit de planner', vandaag.run?.fromPlanner === true,
       JSON.stringify(vandaag.run).slice(0, 140));
     ok('met exact dezelfde beschrijving als de dagkaart',

@@ -203,5 +203,59 @@ S('6 · Het plafond is instelbaar en wordt gerespecteerd');
     `${runDayCeiling()} — opgeslagen doelen: ${mem.gc_goals || '(niets)'}`);
 }
 
+S('7 · De reden hoort bij de datum die hij zet');
+{
+  // Op haar scherm stond: "Gisteren gelopen — minstens één volle rustdag
+  // tussen twee runs. Weer vrij vanaf maandag 9 november." Die twee horen
+  // niet bij elkaar: één volle rustdag na zaterdag is zondag. De maandag
+  // kwam van een heel andere blokkade — het weekvolume — en die stond
+  // nergens. Ze las dus een reden die de datum niet verklaarde, en kon er
+  // niets mee: op "gisteren gelopen" kun je wachten, op "134 minuten tegen
+  // een basis van 63" kun je je week anders inrichten.
+  //
+  // Haar eigen cijfers van 7 november staan hier als ijkpunt.
+  const VANDAAG = '2026-11-07';
+  const runs = [
+    { id: 'w1', date: '2026-11-06', duration: 34.1, distance: 3.31, activityType: 'run' },
+    { id: 'w2', date: '2026-11-01', duration: 33.4, distance: 3.01, activityType: 'run' },
+    { id: 'w3', date: '2026-11-01', duration: 66.3, distance: 6.27, activityType: 'run' },
+    { id: 'w4', date: '2026-10-28', duration: 22.4, distance: 2.0, activityType: 'run' },
+    { id: 'w5', date: '2026-10-24', duration: 45, distance: 4.48, activityType: 'run' },
+    { id: 'w6', date: '2026-10-22', duration: 33.1, distance: 3.41, activityType: 'run' },
+    { id: 'w7', date: '2026-10-18', duration: 36.6, distance: 3.88, activityType: 'run' },
+    { id: 'w8', date: '2026-10-11', duration: 37.2, distance: 3.88, activityType: 'run' },
+    { id: 'w9', date: '2026-10-07', duration: 38.3, distance: 3.73, activityType: 'run' },
+    { id: 'w10', date: '2026-10-04', duration: 40, distance: 4.45, activityType: 'run' },
+  ];
+  const logs = {
+    '2026-11-07': { date: VANDAAG, headache_severity: 0, recovery_check: 'good',
+      hr_rest: 66, sleep_quality: 1, energy: 2, sleep_hours: 6.5 },
+    '2026-11-06': { date: '2026-11-06', run_done: true, hr_rest: 66, energy: 2,
+      training_recovery: 0, sleep_hours: 6.5 },
+    '2026-11-01': { date: '2026-11-01', run_done: true, hr_rest: 61, sleep_hours: 8.5 },
+  };
+  const seed = { gc_workouts: JSON.stringify(runs) };
+  for (const [d, v] of Object.entries(logs)) seed[`gc_log_${d}`] = JSON.stringify(v);
+  store(seed);
+
+  const g = restDayDecision({ log: logs[VANDAAG], logs, currentDate: VANDAAG });
+  console.log(`      ${g.action} · vrij vanaf ${g.earliestRunDate}`);
+  console.log(`      bindend: ${g.binding?.reason}`);
+  ok('lopen staat op slot', g.action !== 'RUN_TODAY', g.action);
+  ok('en de datum is maandag, niet zondag', g.earliestRunDate === '2026-11-09',
+    g.earliestRunDate);
+  ok('de bindende blokkade is het weekvolume, niet de rustdag',
+    /zeven dagen/.test(g.binding?.reason || ''), String(g.binding?.reason));
+  ok('en dat is ook wat de samenvatting zegt',
+    g.summary === g.binding.reason, g.summary);
+  ok('er staat bij wat de blokkade opheft',
+    !!g.binding?.unlock, String(g.binding?.unlock));
+  // De regel die hier fout ging: elke blokkade die de datum opschuift moet
+  // zichzelf benoemen. Anders leest ze straks weer een andere mismatch.
+  ok('de genoemde reden staat ook in de lijst met blokkades',
+    g.blockers.some(b => b.includes(g.binding.reason)),
+    g.blockers.join(' | '));
+}
+
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
 process.exit(fail ? 1 : 0);
