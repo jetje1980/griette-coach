@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { racePlan, INVOER, DAG, FASE } from '../racePlanDays';
+import { racePlan, swapDays, INVOER, DAG, FASE } from '../racePlanDays';
 import { loadRaceGoals } from '../raceGoalModel';
 import { loadWeightPhase, saveWeightPhase, FASE as GEWICHTSFASE } from '../weightPhase';
 import BackfillPanel from './BackfillPanel';
@@ -111,8 +111,9 @@ function Veld({ id, waarde, onSave }) {
   );
 }
 
-function DagKaart({ dag, log, onSave, openDefault }) {
+function DagKaart({ dag, log, onSave, openDefault, buren, onRuil }) {
   const [open, setOpen] = useState(openDefault);
+  const [ruilOpen, setRuilOpen] = useState(false);
   const kleur = KLEUR[dag.kind] || 'var(--border)';
   const gedaan = dag.done;
 
@@ -153,6 +154,11 @@ function DagKaart({ dag, log, onSave, openDefault }) {
           )}
           {dag.lateLuteal && (
             <div style={{ fontSize: 9, color: 'var(--gold)' }}>luteaal</div>
+          )}
+          {dag.swappedWith && (
+            <div style={{ fontSize: 9, color: 'var(--gold)' }} data-geruild={dag.swappedWith}>
+              geruild
+            </div>
           )}
         </div>
       </div>
@@ -233,6 +239,55 @@ function DagKaart({ dag, log, onSave, openDefault }) {
             </div>
           ))}
 
+          {/* ── Ruilen met een andere dag ───────────────────────
+              Ruilen en niet verplaatsen: anders staat er op de ene dag
+              niets meer en op de andere twee dingen, of verliest de week
+              stilletjes een training. Bij een ruil wisselen twee dagen van
+              inhoud en blijft het weektotaal gelijk. */}
+          {!dag.isPast && (
+            <div style={{ marginTop: 8, paddingTop: 7,
+              borderTop: '1px solid var(--border)' }}>
+              <button type="button" data-ruil-knop={dag.date}
+                onClick={() => setRuilOpen(v => !v)}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  fontSize: 11, color: 'var(--sage)', fontWeight: 700 }}>
+                {dag.swappedWith
+                  ? `↔ geruild met ${dag.swappedWith.slice(8)}-${dag.swappedWith.slice(5, 7)} — terugdraaien of anders ruilen`
+                  : '↔ ruilen met een andere dag'}
+              </button>
+              {ruilOpen && (
+                <div style={{ marginTop: 5 }} data-ruil-keuzes={buren.length}>
+                  <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45,
+                    marginBottom: 4 }}>
+                    De twee dagen wisselen van inhoud. Wat aan de kalender hangt —
+                    je cyclus, de taper, het niveau van die week — blijft bij de datum.
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {buren.map(b => (
+                      <button key={b.date} type="button" data-ruil-met={b.date}
+                        className="os-toggle-chip"
+                        onClick={() => { onRuil(dag.date, b.date); setRuilOpen(false); }}
+                        style={{ fontSize: 11 }}>
+                        {b.dayShort} {b.date.slice(8)}-{b.date.slice(5, 7)}
+                        <span style={{ color: 'var(--ghost)' }}>
+                          {' '}· {b.run ? 'loop' : b.strength ? 'kracht' : 'rust'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {dag.swappedWith && (
+                    <button type="button" data-ruil-terug
+                      onClick={() => { onRuil(dag.date, dag.swappedWith); setRuilOpen(false); }}
+                      style={{ background: 'none', border: 'none', padding: '4px 0 0',
+                        cursor: 'pointer', fontSize: 10.5, color: 'var(--rust)' }}>
+                      ruil terugdraaien
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div style={{ marginTop: 8 }} data-invoer={dag.inputs.length}>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ghost)',
               letterSpacing: '0.4px', marginBottom: 2 }}>
@@ -268,6 +323,11 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
 
   function bewaar(datum, veld, waarde) {
     saveField?.(veld, waarde, datum);
+    setTick(t => t + 1);
+  }
+
+  function ruil(a, b) {
+    swapDays(a, b);
     setTick(t => t + 1);
   }
 
@@ -326,6 +386,30 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
             .map(f => `${f.label}: ${f.doel}`).join(' · ')}
         </div>
       </div>
+
+      {/* ── Wat er na een ruil niet meer klopt ─────────────── */}
+      {plan.warnings?.length > 0 && (
+        <div className="os-card" style={{ marginBottom: 12,
+          borderLeft: '3px solid var(--gold)' }} data-waarschuwingen={plan.warnings.length}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ghost)',
+            letterSpacing: '0.4px', marginBottom: 4 }}>
+            WAT OPVALT AAN DE INDELING
+          </div>
+          {plan.warnings.map(w => (
+            <div key={w.id} data-waarschuwing={w.id}
+              style={{ fontSize: 11.5, lineHeight: 1.5, marginBottom: 4 }}>
+              <span style={{ fontWeight: 700,
+                color: w.level === 'let op' ? 'var(--rust)' : 'var(--sub)' }}>
+                {w.level}:
+              </span>{' '}{w.text}
+            </div>
+          ))}
+          <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45, marginTop: 4 }}>
+            Niets hiervan blokkeert iets — jij beslist. Dit staat er zodat je weet wat een
+            ruil met de rest van de week doet.
+          </div>
+        </div>
+      )}
 
       {/* ── Gewicht: het voordeel én de kosten ─────────────── */}
       {plan.weight?.known && (
@@ -437,7 +521,9 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
       </div>
       {zichtbaar.map(d => (
         <DagKaart key={d.date} dag={d} log={logs[d.date]} onSave={bewaar}
-          openDefault={d.isToday} />
+          openDefault={d.isToday} onRuil={ruil}
+          buren={plan.days.filter(x => !x.isPast && x.date !== d.date
+            && Math.abs(new Date(x.date) - new Date(d.date)) <= 4 * 86400000)} />
       ))}
     </div>
   );

@@ -73,6 +73,70 @@ import { easyRunPace, prescribedPace } from './easyPace';
 import { nextSession as liveSessie } from './coachPlan';
 import { hrPrescription } from './hrModel';
 
+// ── Dagen ruilen ────────────────────────────────────────────────
+//
+// WAAROM DIT ER MOET ZIJN
+//
+// Een plan dat niet kan schuiven, wordt een plan waar je naast gaat lopen.
+// Zij vroeg het precies goed: kan ik de zondag naar de maandag halen, en
+// klopt de rest dan nog?
+//
+// Het is bewust RUILEN en niet verplaatsen. Verplaats je de lange loop van
+// zondag naar maandag, dan staat er zondag niets meer en maandag twee
+// dingen — of de week verliest stilletjes een training. Bij een ruil
+// wisselen twee dagen van inhoud: de lange loop gaat naar maandag en de
+// rustdag naar zondag. Het weektotaal blijft gelijk, en dat is precies wat
+// bij haar telt.
+//
+// Wat NIET meeverhuist is alles wat aan de kalender hangt: de fase, de
+// laatluteale week, de taper, de cyclusdag en het niveau van die week.
+// Haal je een sleutelsessie je laatluteale week in, dan wordt het daar een
+// rustige sessie — niet omdat de app koppig is, maar omdat die week
+// hormonaal anders is. Dat staat er dan ook bij.
+//
+// En na elke ruil wordt de afstand tussen de zware dagen opnieuw bekeken.
+// Twee zware dagen op elkaar is het enige wat een ruil écht kan breken.
+const SWAP_KEY = 'gc_plan_swaps';
+
+export function loadSwaps() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SWAP_KEY) || '[]');
+    return Array.isArray(v) ? v.filter(x => x?.a && x?.b) : [];
+  } catch { return []; }
+}
+
+export function saveSwaps(lijst) {
+  try { localStorage.setItem(SWAP_KEY, JSON.stringify(lijst)); } catch { /* opslag vol */ }
+  return lijst;
+}
+
+// Eén aanroep ruilt twee dagen; dezelfde twee nog eens ruilt ze terug.
+export function swapDays(a, b) {
+  if (!a || !b || a === b) return loadSwaps();
+  const lijst = loadSwaps();
+  const paar = (x) => [x.a, x.b].sort().join('|');
+  const sleutel = [a, b].sort().join('|');
+  const bestaat = lijst.findIndex(x => paar(x) === sleutel);
+  if (bestaat >= 0) return saveSwaps(lijst.filter((_, i) => i !== bestaat));
+  return saveSwaps([...lijst, { a, b, at: new Date().toISOString() }]);
+}
+
+export function clearSwaps() { return saveSwaps([]); }
+
+// Welke sjabloondag levert de inhoud van deze datum? Ruilen stapelen: twee
+// opeenvolgende ruilen met dezelfde dag werken door, zoals je verwacht.
+export function swapMap(swaps = null) {
+  const lijst = swaps || loadSwaps();
+  const map = new Map();
+  const bron = (d) => (map.has(d) ? map.get(d) : d);
+  for (const { a, b } of lijst) {
+    const va = bron(a), vb = bron(b);
+    map.set(a, vb);
+    map.set(b, va);
+  }
+  return map;
+}
+
 // ── Fasen ───────────────────────────────────────────────────────
 export const FASE = {
   RITME: { id: 'RITME', label: 'Ritme terug',
@@ -417,9 +481,17 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   let weekIndex = 0;
   let vorigeWeek = null;
 
+  const ruilen = swapMap();
+
   for (let i = 0; i <= totaal; i++) {
     const datum = addDays(currentDate, i);
     const wd = dayOfWeek(datum);
+    // De inhoud kan van een andere dag komen; de kalender blijft de
+    // kalender. Fase, cyclusdag, taper en weekniveau horen bij de datum
+    // waarop je staat, niet bij de dag waar de training vandaan kwam.
+    const bronDatum = ruilen.get(datum) || datum;
+    const geruild = bronDatum !== datum;
+    const bronWd = dayOfWeek(bronDatum);
     // Weken lopen van zondag tot zaterdag; een nieuwe zondag is een nieuwe week.
     const weekStart = addDays(datum, -wd);
     if (vorigeWeek && weekStart !== vorigeWeek) weekIndex++;
@@ -435,7 +507,7 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
         : inLuteaal ? FASE.LUTEAAL.id
           : i <= 10 ? FASE.RITME.id : FASE.OPBOUW.id;
 
-    const patroon = WEEKPATROON[wd];
+    const patroon = WEEKPATROON[bronWd];
     let kind = isRace ? DAG.RACE : patroon.kind;
     let rol = isRace ? 'race' : patroon.rol;
     let note = isRace ? 'Ameland. Eerste kilometer onder 140, duinen stevig wandelen.' : patroon.note;
@@ -473,11 +545,13 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
       ? Math.min(60, 45 + weekIndex * 5) : null;
 
     const volgende = addDays(datum, 1);
-    const volgendeIsSleutel = WEEKPATROON[dayOfWeek(volgende)]?.rol === 'sleutel'
+    const volgendeBron = ruilen.get(volgende) || volgende;
+    const volgendeIsSleutel = WEEKPATROON[dayOfWeek(volgendeBron)]?.rol === 'sleutel'
       && fase === FASE.OPBOUW.id;
     const gisteren = addDays(datum, -1);
+    const gisterenBron = ruilen.get(gisteren) || gisteren;
     const dagNaLoop = gelopenOp.has(gisteren)
-      || (WEEKPATROON[dayOfWeek(gisteren)]?.kind === DAG.RUN && datum > currentDate);
+      || (WEEKPATROON[dayOfWeek(gisterenBron)]?.kind === DAG.RUN && datum > currentDate);
 
     const gelopen = gelopenOp.has(datum);
     const log = logs[datum] || null;
@@ -556,6 +630,9 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
         : null,
       isToday: datum === currentDate,
       isPast: datum < currentDate,
+      // Geruild met welke dag, zodat het terug te draaien is en zichtbaar
+      // blijft dat dit niet het oorspronkelijke patroon is.
+      swappedWith: geruild ? bronDatum : null,
     });
   }
 
@@ -573,6 +650,8 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     pemFreeWeeks: pem.weeks,
     days: dagen,
     weeks: perWeek(dagen),
+    warnings: planWaarschuwingen(dagen, { currentDate }),
+    swaps: loadSwaps(),
     weight: gewicht,
     fuel: brandstof,
     levers: knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht }),
@@ -620,6 +699,78 @@ function gemetenLooptempo({ workouts, currentDate, dagen = 42 }) {
   const s = tempos.sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
   return +(s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2).toFixed(2);
+}
+
+// ── Klopt het nog na een ruil? ──────────────────────────────────
+//
+// Een ruil verplaatst inhoud over de kalender, en de kalender heeft regels
+// die niet meeschuiven. Dit zijn de vier die er bij haar toe doen; ze
+// worden altijd gecontroleerd, ook zonder ruil, want een weekpatroon dat
+// op een feestdag of een racedatum botst heeft hetzelfde probleem.
+//
+// Geen van deze meldingen blokkeert iets. Ze zeggen wat er gebeurt, en zij
+// beslist — dat is de hele reden dat ruilen mogelijk is.
+const ZWAAR = ['lang', 'sleutel'];
+
+export function planWaarschuwingen(dagen, { currentDate = todayLocal() } = {}) {
+  const uit = [];
+  const toekomst = dagen.filter(d => d.date >= currentDate);
+
+  // 1. Twee zware dagen op elkaar.
+  for (let i = 1; i < toekomst.length; i++) {
+    const a = toekomst[i - 1], b = toekomst[i];
+    if (ZWAAR.includes(a.role) && ZWAAR.includes(b.role)) {
+      uit.push({ id: `zwaar_${b.date}`, date: b.date, level: 'let op',
+        text: `${a.dayShort} en ${b.dayShort} staan allebei als zware dag, op elkaar. `
+          + 'Eén van de twee hoort minstens een dag later; twee prikkels zonder '
+          + 'herstel ertussen is precies wat een terugslag geeft.' });
+    }
+  }
+
+  // 2. Een gat van meer dan drie dagen zonder lopen.
+  const loopdagen = toekomst.filter(d => d.run).map(d => d.date);
+  for (let i = 1; i < loopdagen.length; i++) {
+    const gat = daysBetween(loopdagen[i - 1], loopdagen[i]);
+    if (gat > 3) {
+      uit.push({ id: `gat_${loopdagen[i]}`, date: loopdagen[i], level: 'let op',
+        text: `${gat} dagen tussen ${loopdagen[i - 1].slice(8)}-${loopdagen[i - 1].slice(5, 7)} `
+          + `en ${loopdagen[i].slice(8)}-${loopdagen[i].slice(5, 7)} zonder lopen. `
+          + 'Je economie zakte eerder juist in de weken met zulke gaten.' });
+    }
+  }
+
+  // 3. Een week zonder echte rustdag.
+  const perWeekIndex = new Map();
+  for (const d of toekomst) {
+    if (!perWeekIndex.has(d.weekIndex)) perWeekIndex.set(d.weekIndex, []);
+    perWeekIndex.get(d.weekIndex).push(d);
+  }
+  for (const [, week] of perWeekIndex) {
+    if (week.length < 6) continue;              // halve week aan het begin of eind
+    if (!week.some(d => d.kind === DAG.RUST)) {
+      uit.push({ id: `rust_${week[0].date}`, date: week[0].date, level: 'let op',
+        text: `De week van ${week[0].date.slice(8)}-${week[0].date.slice(5, 7)} heeft geen `
+          + 'echte rustdag meer. Een rustdag is geen lege dag in het schema; het is de '
+          + 'dag waarop de training van gisteren pas effect krijgt.' });
+    }
+  }
+
+  // 4. Een zware dag in de laatluteale week of vlak voor de race.
+  for (const d of toekomst) {
+    if (ZWAAR.includes(d.role) && d.lateLuteal) {
+      uit.push({ id: `luteaal_${d.date}`, date: d.date, level: 'weet dit',
+        text: `${d.dayShort} ${d.date.slice(8)}-${d.date.slice(5, 7)} valt in je laatluteale `
+          + 'week. De sessie is hier al rustiger gemaakt; je hartslag ligt deze week '
+          + 'drie tot acht slagen hoger bij hetzelfde tempo.' });
+    }
+    if (d.run && d.daysToRace > 0 && d.daysToRace <= 2) {
+      uit.push({ id: `race_${d.date}`, date: d.date, level: 'weet dit',
+        text: `Nog ${d.daysToRace} dag(en) tot de race. Wat je nu nog loopt is om los te `
+          + 'blijven, niet om iets te winnen.' });
+    }
+  }
+
+  return uit;
 }
 
 function perWeek(dagen) {

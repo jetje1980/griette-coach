@@ -180,6 +180,46 @@ ok('de kolom gewicht toont geen hartslag',
   await page.inputValue(`[data-dag-invoer="weight_${gisteren}"]`) === '61.2',
   await page.inputValue(`[data-dag-invoer="weight_${gisteren}"]`));
 
+// ── Dagen ruilen op het scherm ───────────────────────────────
+const morgen = addDays(TODAY, 1);
+const overmorgen = addDays(TODAY, 2);
+await page.locator(`[data-dag="${morgen}"]`).first().click();   // uitklappen
+await page.waitForTimeout(400);
+const voorKind = await page.getAttribute(`[data-dag="${morgen}"]`, 'data-dag-soort');
+const voorKind2 = await page.getAttribute(`[data-dag="${overmorgen}"]`, 'data-dag-soort');
+ok('de twee dagen verschillen van soort', voorKind !== voorKind2,
+  `${voorKind} vs ${voorKind2}`);
+
+await page.locator(`[data-ruil-knop="${morgen}"]`).click();
+await page.waitForTimeout(400);
+ok('er staan dagen om mee te ruilen',
+  await page.locator('[data-ruil-keuzes]').count() === 1);
+await page.locator(`[data-ruil-met="${overmorgen}"]`).first().click();
+await page.waitForTimeout(800);
+
+ok('de twee dagen hebben van soort gewisseld',
+  await page.getAttribute(`[data-dag="${morgen}"]`, 'data-dag-soort') === voorKind2
+  && await page.getAttribute(`[data-dag="${overmorgen}"]`, 'data-dag-soort') === voorKind,
+  `${await page.getAttribute(`[data-dag="${morgen}"]`, 'data-dag-soort')} / `
+  + `${await page.getAttribute(`[data-dag="${overmorgen}"]`, 'data-dag-soort')}`);
+ok('en zijn gemarkeerd als geruild',
+  await page.locator(`[data-geruild="${overmorgen}"]`).count() >= 1);
+const bewaardeRuil = await page.evaluate(() => {
+  try { return JSON.parse(localStorage.getItem('gc_plan_swaps') || '[]'); } catch { return []; }
+});
+ok('de ruil staat in de opslag', bewaardeRuil.length === 1, JSON.stringify(bewaardeRuil));
+
+// Terugdraaien
+await page.locator(`[data-dag="${morgen}"]`).first().click();
+await page.waitForTimeout(300);
+await page.locator(`[data-ruil-knop="${morgen}"]`).click();
+await page.waitForTimeout(300);
+await page.locator('[data-ruil-terug]').first().click();
+await page.waitForTimeout(700);
+ok('terugdraaien herstelt de oorspronkelijke dag',
+  await page.getAttribute(`[data-dag="${morgen}"]`, 'data-dag-soort') === voorKind,
+  String(await page.getAttribute(`[data-dag="${morgen}"]`, 'data-dag-soort')));
+
 ok('geen JS-fout', errors.length === 0, errors.join(' | '));
 await b.close();
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

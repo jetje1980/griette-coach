@@ -16,7 +16,8 @@
 //   · het niveau stijgt één stap per opbouwweek en niet in de luteale week;
 //   · wat er al gelopen is, staat als gelopen en niet als schuld.
 import './_storage-stub.js';
-import { racePlan, luteaalVenster, DAG, FASE, INVOER } from '../../src/racePlanDays.js';
+import { racePlan, luteaalVenster, swapDays, clearSwaps, loadSwaps, swapMap,
+  planWaarschuwingen, DAG, FASE, INVOER } from '../../src/racePlanDays.js';
 import { weightPlan, saveWeightPhase, fuelLine, FASE as GEWICHT, MAX_KG_PER_WEEK }
   from '../../src/weightPhase.js';
 import { nextSession as liveSessie } from '../../src/coachPlan.js';
@@ -374,6 +375,111 @@ S('13 · De dag van vandaag komt van de planner, niet van de sjabloon');
   ok('morgen is een voornemen, geen plannerbeslissing',
     !morgen.run || morgen.run.fromPlanner !== true,
     JSON.stringify(morgen.run).slice(0, 100));
+}
+
+S('14 · Dagen ruilen');
+{
+  const logs = haarData();
+  const basis = racePlan({ currentDate: TODAY, logs, raceDate: RACE, raceKm: 5, raceSec: 2100 });
+  // Zondag 8 november is de lange loop, maandag 9 november de rustdag.
+  const zo = basis.days.find(d => d.date === '2026-11-08');
+  const ma = basis.days.find(d => d.date === '2026-11-09');
+  console.log(`      vóór: zo ${zo.kind}/${zo.role}, ma ${ma.kind}/${ma.role}`);
+  ok('zondag is de lange loop', zo.role === 'lang', `${zo.kind} ${zo.role}`);
+  ok('maandag is rust', ma.kind === DAG.RUST, ma.kind);
+
+  swapDays('2026-11-08', '2026-11-09');
+  const na = racePlan({ currentDate: TODAY, logs, raceDate: RACE, raceKm: 5, raceSec: 2100 });
+  const zo2 = na.days.find(d => d.date === '2026-11-08');
+  const ma2 = na.days.find(d => d.date === '2026-11-09');
+  console.log(`      na:   zo ${zo2.kind}/${zo2.role}, ma ${ma2.kind}/${ma2.role}`);
+  ok('de lange loop staat nu op maandag', ma2.role === 'lang', `${ma2.kind} ${ma2.role}`);
+  ok('en de rustdag op zondag', zo2.kind === DAG.RUST, zo2.kind);
+  ok('allebei de dagen zijn als geruild gemarkeerd',
+    zo2.swappedWith === '2026-11-09' && ma2.swappedWith === '2026-11-08',
+    `${zo2.swappedWith} / ${ma2.swappedWith}`);
+  ok('het weektotaal blijft gelijk',
+    na.weeks[1].runs === basis.weeks[1].runs && na.weeks[1].strength === basis.weeks[1].strength,
+    `${na.weeks[1].runs}×lopen vs ${basis.weeks[1].runs}`);
+  ok('de verplaatste loop houdt zijn tijd op de benen',
+    ma2.run?.timeOnFeet === zo.run?.timeOnFeet,
+    `${ma2.run?.timeOnFeet} vs ${zo.run?.timeOnFeet}`);
+
+  // Dezelfde ruil nog eens draait hem terug.
+  swapDays('2026-11-08', '2026-11-09');
+  const terug = racePlan({ currentDate: TODAY, logs, raceDate: RACE });
+  ok('nog een keer ruilen draait het terug',
+    terug.days.find(d => d.date === '2026-11-08').role === 'lang',
+    terug.days.find(d => d.date === '2026-11-08').role);
+  ok('en de markering is weg',
+    terug.days.find(d => d.date === '2026-11-08').swappedWith === null);
+}
+
+S('15 · Wat aan de kalender hangt, verhuist niet mee');
+{
+  const logs = haarData();
+  clearSwaps();
+  const v = luteaalVenster({ currentDate: TODAY, tot: RACE });
+  const luteaalDag = v.windows[0].van;          // eerste dag van haar laatluteale week
+  // Zoek een sleutelsessie buiten dat venster en haal hem erin.
+  const basis = racePlan({ currentDate: TODAY, logs, raceDate: RACE });
+  const sleutel = basis.days.find(d => d.role === 'sleutel' && !d.lateLuteal);
+  ok('er is een sleutelsessie om te verplaatsen', !!sleutel, 'geen gevonden');
+
+  swapDays(sleutel.date, luteaalDag);
+  const na = racePlan({ currentDate: TODAY, logs, raceDate: RACE });
+  const verplaatst = na.days.find(d => d.date === luteaalDag);
+  console.log(`      sleutel van ${sleutel.date} naar ${luteaalDag}: rol ${verplaatst.role}`);
+  ok('de sleutelsessie wordt in de luteale week een rustige',
+    verplaatst.role !== 'sleutel', verplaatst.role);
+  ok('en de dag houdt zijn eigen cyclusstand', verplaatst.lateLuteal === true);
+  ok('met uitleg erbij',
+    verplaatst.targets.some(t => t.id === 'cyclus'),
+    JSON.stringify(verplaatst.targets.map(t => t.id)));
+  clearSwaps();
+}
+
+S('16 · Na een ruil wordt de indeling nagekeken');
+{
+  const logs = haarData();
+  clearSwaps();
+  // Twee zware dagen op elkaar maken: de lange loop naar de dag vóór de
+  // sleutelsessie halen.
+  const basis = racePlan({ currentDate: TODAY, logs, raceDate: RACE });
+  const sleutel = basis.days.find(d => d.role === 'sleutel' && d.date > addDays(TODAY, 7));
+  const dagErvoor = addDays(sleutel.date, -1);
+  const lange = basis.days.find(d => d.role === 'lang' && d.date > addDays(TODAY, 7));
+  swapDays(lange.date, dagErvoor);
+
+  const na = racePlan({ currentDate: TODAY, logs, raceDate: RACE });
+  const zwaar = na.warnings.filter(w => w.id.startsWith('zwaar_'));
+  console.log(`      ${zwaar.length} waarschuwing(en): ${zwaar[0]?.text.slice(0, 90)}`);
+  ok('twee zware dagen op elkaar wordt gemeld', zwaar.length >= 1,
+    JSON.stringify(na.warnings.map(w => w.id)));
+  ok('met beide dagen erin', /staan allebei als zware dag/.test(zwaar[0].text), zwaar[0].text);
+  ok('maar het blokkeert niets — de ruil staat er gewoon',
+    na.days.find(d => d.date === dagErvoor).role === 'lang',
+    na.days.find(d => d.date === dagErvoor).role);
+  clearSwaps();
+
+  // Zonder ruil geen waarschuwing over zware dagen op elkaar.
+  const schoon = racePlan({ currentDate: TODAY, logs, raceDate: RACE });
+  ok('het standaardpatroon zet geen zware dagen op elkaar',
+    schoon.warnings.filter(w => w.id.startsWith('zwaar_')).length === 0,
+    JSON.stringify(schoon.warnings.map(w => w.id)));
+}
+
+S('17 · Ruilen stapelen en zijn terug te draaien');
+{
+  clearSwaps();
+  swapDays('2026-11-08', '2026-11-09');
+  swapDays('2026-11-09', '2026-11-10');
+  const m = swapMap();
+  console.log(`      map: ${[...m.entries()].map(([k, v]) => `${k.slice(8)}→${v.slice(8)}`).join(', ')}`);
+  ok('twee ruilen achter elkaar werken door', m.size >= 2, JSON.stringify([...m]));
+  ok('de opslag houdt ze allebei', loadSwaps().length === 2, String(loadSwaps().length));
+  clearSwaps();
+  ok('wissen maakt alles leeg', loadSwaps().length === 0 && swapMap().size === 0);
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
