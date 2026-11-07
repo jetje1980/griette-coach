@@ -55,6 +55,7 @@
 
 import { efficiencyTrend, paceAtHr } from './efficiency';
 import { todayLocal, daysBetween } from './datetime';
+import { gemetenProgressie } from './gemetenTempo';
 
 // Hoe snel pak je een eerder bereikt niveau terug? Twee tot vier weken bij
 // vier sessies per week; hier de voorzichtige kant.
@@ -103,6 +104,20 @@ export function expectedEfficiency({ currentDate = todayLocal(), date = null,
   // Het beste gemeten punt in het venster: dat is het niveau dat terug te
   // pakken is, niet iets wat nog moet worden opgebouwd.
   const beste = Math.max(...(t.sessions || []).map(s => s.ef), nu);
+
+  // ── Haar eigen tempo wint van het boekgetal ─────────────────
+  //
+  // Zij vroeg of haar hartslag niet sneller zou zakken dan dit model
+  // aanneemt. Terechte vraag, en het antwoord staat in haar eigen reeks:
+  // over de weken dat ze consequent liep, 1,6% per week tegen de 1,25%
+  // die hier stond. Een gemeten helling over haar eigen sessies is
+  // altijd een beter antwoord dan een gemiddelde over andere mensen —
+  // zolang hij op genoeg punten rust en binnen het mogelijke valt. Zie
+  // gemetenTempo.js voor beide grenzen.
+  const gemeten = gemetenProgressie({ currentDate, workouts });
+  const perWeek = gemeten.known ? gemeten.usable : NIEUW_PER_WEEK_PCT;
+  const bovenPerWeek = gemeten.known
+    ? Math.max(gemeten.usable, NIEUW_BOVEN_PCT) : NIEUW_BOVEN_PCT;
   const weken = date ? Math.max(0, daysBetween(currentDate, date) / 7) : 0;
 
   // Fase 1: lineair terug naar het beste punt, in HERSTEL_WEKEN.
@@ -137,9 +152,14 @@ export function expectedEfficiency({ currentDate = todayLocal(), date = null,
     weeks: +weken.toFixed(1),
     recovered: +naHerstel.toFixed(3),
     low: +halfHersteld.toFixed(3),
-    mid: metPct(NIEUW_PER_WEEK_PCT),
-    high: +(naSnelHerstel * (1 + (NIEUW_BOVEN_PCT / 100) * snelleNieuweWeken)).toFixed(3),
+    mid: metPct(perWeek),
+    high: +(naSnelHerstel * (1 + (bovenPerWeek / 100) * snelleNieuweWeken)).toFixed(3),
     recoveryWeeks: HERSTEL_WEKEN,
+    // Welk tempo van vooruitgang hier gebruikt is, en waar het vandaan komt.
+    ratePerWeek: perWeek,
+    rateSource: gemeten.known ? 'gemeten' : 'literatuur',
+    rateWhy: gemeten.why,
+    rateIgnored: gemeten.ignored || [],
     phase: weken <= HERSTEL_WEKEN ? 'terugpakken' : 'opbouwen',
   };
 }
@@ -204,9 +224,15 @@ export function raceExpectation({ currentDate = todayLocal(), raceDate = null,
       + `${terreinInfo.label}.`,
     phases: `Eerste ${e.recoveryWeeks} weken: terugpakken wat je op ${fmtDatum(e.bestDate)} `
       + `al liep (efficiëntie ${e.best}, nu ${e.current}). Daarna `
-      + `${String(NIEUW_ONDER_PCT).replace('.', ',')}–${String(NIEUW_BOVEN_PCT).replace('.', ',')}% `
-      + 'nieuwe winst per week. De voorzichtige uitkomst hierboven is het scenario waarin '
-      + 'het ritme er maar half komt.',
+      + `${String(e.ratePerWeek).replace('.', ',')}% nieuwe winst per week — `
+      + (e.rateSource === 'gemeten'
+        ? 'jouw eigen gemeten tempo, niet een gemiddelde over andere mensen.'
+        : `het literatuurgetal, want ${String(NIEUW_ONDER_PCT).replace('.', ',')}–`
+          + `${String(NIEUW_BOVEN_PCT).replace('.', ',')}% is wat hier haalbaar heet. `
+          + 'Zodra er een aaneengesloten reeks staat, rekent dit met jouw eigen helling.')
+      + ' De voorzichtige uitkomst hierboven is het scenario waarin het ritme er maar '
+      + 'half komt.',
+    rate: { perWeek: e.ratePerWeek, source: e.rateSource, why: e.rateWhy },
     conditions: 'Dit geldt bij vier loopdagen per week zonder gaten groter dan twee dagen, '
       + 'twee krachttrainingen, geen terugslag, en genoeg eten. Valt een van die vier weg, '
       + 'dan is dit geen verwachting meer maar een wens.',
