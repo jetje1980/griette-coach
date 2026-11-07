@@ -77,6 +77,8 @@ import { raceExpectation } from './progressExpectation';
 // Het weekplafond komt uit de poort, niet uit een tweede getal hier.
 import { runDayCeiling, trainingLoad, frequencyVerdict } from './restday';
 import { remmen } from './remmen';
+import { doelPad } from './doelPad';
+import { loadHrSettings } from './goals';
 
 // ── Dagen ruilen ────────────────────────────────────────────────
 //
@@ -564,6 +566,7 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   const verwachting = raceExpectation({ currentDate, raceDate: race,
     distanceKm: raceKm || 5, terrain: raceTerrain || 'trail' });
 
+
   // ── De sessie van vandaag komt niet uit dit bestand ─────────
   //
   // Dit was de echte tegenstrijdigheid: Vandaag, Lichaam en Progressie
@@ -610,6 +613,18 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   const tempoMin = (easy?.available ? easy.paceMin : null)
     ?? gemetenLooptempo({ workouts, currentDate });
   const gewicht = weightPlan({ currentDate, raceDate: race, easyPaceMin: tempoMin });
+
+  // En het omgekeerde: wat vraagt haar wenstijd, en wanneer is dat er?
+  // Zij vroeg het schema zo aan te passen dat 35:00 haalbaar wordt. Dat
+  // kan niet — maar doen alsof zou erger zijn dan het niet kunnen. Hier
+  // staat daarom het rekenwerk: welke efficiëntie hoort bij dat getal, en
+  // op welke datum ligt die bij haar gemeten tempo van vooruitgang.
+  const pad = doelPad({ currentDate, raceDate: race,
+    targetSec: raceSec || 2100, distanceKm: raceKm || 5,
+    hrCap: loadHrSettings().easyHigh ?? 145,
+    terrain: raceTerrain || 'trail',
+    raceHr: verwachting?.known ? verwachting.raceHr : null,
+    weight: gewicht?.current ?? null, weightTarget: gewicht?.target ?? null });
   const taperVanaf = addDays(race, -taperDays);
 
   // Het weekpatroon volgt het plafond van de poort — één getal, één bron.
@@ -884,6 +899,8 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     weight: gewicht,
     fuel: brandstof,
     expectation: verwachting,
+    // Het pad naar haar wenstijd: wat hij vraagt en wanneer hij er is.
+    goalPath: pad,
     // Wat haar vooruitgang nu werkelijk remt, gemeten en op volgorde van
     // grootte. Dit stond nergens, en het was het antwoord op haar vraag
     // hoe ze méér progressie maakt: niet harder lopen, maar de knoppen

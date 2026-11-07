@@ -521,6 +521,59 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
         </>
       )}
 
+      {/* ── Je wenstijd: wat hij vraagt en wanneer hij er is ──
+          Zij vroeg het schema zo aan te passen dat 35:00 haalbaar wordt.
+          Dat kan niet, en doen alsof zou erger zijn. Dus staat hier het
+          rekenwerk, met de datum erbij — een doel met een datum is iets
+          om naartoe te werken, een doel zonder datum is een wens. */}
+      {plan.goalPath?.known && plan.goalPath.required && !plan.goalPath.race?.reachable && (
+        <>
+          <div className="os-section-label">Je doel van {plan.goalPath.target.tijd}</div>
+          <div className="os-card" style={{ marginBottom: 12,
+            borderLeft: '3px solid var(--sage)' }} data-doelpad={plan.goalPath.required}>
+            <div style={{ fontSize: 12, lineHeight: 1.55 }}>{plan.goalPath.line}</div>
+            <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
+              {[['je staat op', plan.goalPath.current],
+                ['je beste', plan.goalPath.best],
+                ['nodig', plan.goalPath.required]].map(([l, v]) => (
+                <div key={l}>
+                  <div style={{ fontSize: 9.5, color: 'var(--ghost)', fontWeight: 700,
+                    textTransform: 'uppercase', letterSpacing: '0.4px' }}>{l}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800,
+                    fontFamily: 'var(--font-serif)' }}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 7,
+              paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+              Op {formatNLLong(plan.goalPath.race?.date)} zit er{' '}
+              <strong>{plan.goalPath.fmt.time(plan.goalPath.race?.time)}</strong> in. Het doel
+              zelf is niet onmogelijk — de datum is te vroeg. Dit is geen reden om hem te
+              verlagen; het is een reden om hem een datum te geven.
+            </div>
+            {plan.goalPath.levers.length > 0 && (
+              <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10, color: 'var(--ghost)', fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>
+                  Wat de datum werkelijk verzet
+                </div>
+                {plan.goalPath.levers.map(k => (
+                  <div key={k.id} data-doelknop={k.id} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.4 }}>
+                      {k.label} — <span style={{ color: 'var(--sage)' }}>
+                        {plan.goalPath.fmt.maand(k.datum)}</span>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45 }}>
+                      {k.effect}. {k.waarom}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ── De weken ───────────────────────────────────────── */}
       <div className="os-section-label">De weken</div>
       <div className="os-card" style={{ marginBottom: 12 }} data-weken={plan.weeks.length}>
