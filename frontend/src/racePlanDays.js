@@ -72,6 +72,7 @@ import { fuelLine, weightPlan, FASE as GEWICHT } from './weightPhase';
 import { easyRunPace, prescribedPace } from './easyPace';
 import { nextSession as liveSessie } from './coachPlan';
 import { hrPrescription } from './hrModel';
+import { sessionTarget, hrUitVoorschrift } from './sessionTarget';
 
 // ── Dagen ruilen ────────────────────────────────────────────────
 //
@@ -586,6 +587,17 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
         ?? hrPrescription({ purpose: loopDoel, logs, currentDate }).line)
       : null;
 
+    // ── Wat zou deze sessie moeten opleveren? ─────────────────
+    //
+    // Niet teruggerekend vanaf haar wenstijd — dat getal komt uit de wens
+    // en niet uit haar lichaam — maar vooruit vanaf haar gemeten
+    // efficiëntie, met de bovenkant van wat per week haalbaar is. Naast
+    // het doel staat wat ze dezelfde soort sessie de vorige keer liep.
+    const doelHr = hartslag ? hrUitVoorschrift(hartslag) : null;
+    const doel = (hartslag && doelHr)
+      ? sessionTarget({ date: datum, hr: doelHr, currentDate, workouts })
+      : null;
+
     dagen.push({
       date: datum,
       dayName: NL_DAYS[wd],
@@ -606,6 +618,11 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
         hr: hartslag,
         fromPlanner: !!vanPlanner,
         templateDescription: vorm ? omschrijf(vorm) : null,
+        // De progressie die bij deze dag hoort: doeltempo bij de
+        // voorgeschreven hartslag, en wat de vorige vergelijkbare sessie
+        // werkelijk opleverde.
+        target: doel?.known ? doel : null,
+        targetWhy: doel?.known ? doel.why : (doel?.why || null),
         purpose: vanPlanner ? vanPlanner.purpose : vorm.purpose,
         strides: vanPlanner ? !!vanPlanner.run.strides : (rol === 'easy' || rol === 'kort'),
         timeOnFeet: tijdOpBenen,

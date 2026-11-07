@@ -21,6 +21,7 @@ import { hrPrescription } from '../../src/hrModel.js';
 import { stridesFor, STRIDES } from '../../src/raceplan.js';
 import { cadenceTarget, STAP_PCT, BOVENGRENS } from '../../src/cadence.js';
 import { prescribedPace } from '../../src/easyPace.js';
+import { efficiencyTrend, paceAtHr } from '../../src/efficiency.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -202,6 +203,52 @@ S('7 · Een doeltempo is geen trainingstempo');
   const r = prescribedPace({ purpose: 'FIVE_K_SPECIFIC', goal: doel,
     easy: { available: false } });
   ok('zonder meting blijft het doeltempo staan', r.paceMin === 7, String(r.paceMin));
+}
+
+S('8 · Het tempo spreekt de hartslag niet tegen');
+{
+  // WAT ER MIS WAS
+  //
+  // Het "gemeten easy tempo" is het tempo van haar loopblokken, en die
+  // liep ze op hartslag 141–152 — boven VT1. Voor een rustige sessie
+  // schrijft de app 106–132 voor. Er stond dus: "loop 8:55 per kilometer
+  // en houd je hartslag onder 132". Twee opdrachten die elkaar uitsluiten.
+  globalThis.__testStorage.reset();
+  localStorage.setItem('gc_hr_settings', JSON.stringify({ easyLow: 106, easyHigh: 145,
+    walkTrigger: 150, resumeBelow: 105, rpeEasy: 4, rpeThreshold: 6 }));
+  const loop = (datum, meters, sec, hr) => ({ id: datum, date: datum,
+    laps: [{ movingTime: sec, distance: meters, avgHr: hr }] });
+  localStorage.setItem('gc_workouts', JSON.stringify([
+    loop(addDays(TODAY, -20), 988, 480, 142), loop(addDays(TODAY, -16), 935, 480, 147),
+    loop(addDays(TODAY, -12), 1000, 548, 144), loop(addDays(TODAY, -8), 1000, 525, 137),
+    loop(addDays(TODAY, -4), 950, 500, 143), loop(addDays(TODAY, -2), 960, 505, 141),
+  ]));
+
+  const rustig = prescribedPace({ purpose: 'EASY_ECONOMY', currentDate: TODAY });
+  const band = hrPrescription({ purpose: 'EASY_ECONOMY', currentDate: TODAY });
+  const bijPlafond = paceAtHr(efficiencyTrend({ currentDate: TODAY }).current, band.easy.high);
+  console.log(`      rustig: ${rustig.paceMin} min/km bij ≤${band.easy.high} (bron ${rustig.source})`);
+  ok('het tempo hoort bij de voorgeschreven hartslag',
+    Math.abs(rustig.paceMin - bijPlafond) < 0.05,
+    `${rustig.paceMin} vs ${bijPlafond}`);
+  ok('en is herkenbaar aan de bron', rustig.source === 'bij_hartslag', rustig.source);
+  ok('de uitleg noemt de hartslag', new RegExp(`hartslag ${band.easy.high}`).test(rustig.why),
+    rustig.why.slice(0, 120));
+  // Trager dan wat ze werkelijk liep, want dat liep ze op een hogere
+  // hartslag. Vergelijken met haar gemeten sessies, niet met een vast
+  // getal — dat zou alleen over deze testgegevens iets zeggen.
+  const gemeten = efficiencyTrend({ currentDate: TODAY }).sessions;
+  const snelsteGemeten = Math.min(...gemeten.map(x => x.paceMin));
+  ok('het is trager dan wat ze werkelijk liep, want dat was op een hogere hartslag',
+    rustig.paceMin > snelsteGemeten,
+    `${rustig.paceMin} vs gemeten ${snelsteGemeten} bij HR ${gemeten.map(x => x.avgHr).join('/')}`);
+
+  // Een kwaliteitsblok houdt zijn eigen tempo: dat loopt juist hoger.
+  const kwaliteit = prescribedPace({ purpose: 'FIVE_K_SPECIFIC', currentDate: TODAY,
+    goal: { distanceKm: 5, targetTimeSec: 2100, targetPaceSecPerKm: 420 },
+    easy: { available: true, paceMin: 10.4, usable: 4 } });
+  ok('een tempoblok blijft sneller dan de rustige sessie',
+    kwaliteit.paceMin < rustig.paceMin, `${kwaliteit.paceMin} vs ${rustig.paceMin}`);
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

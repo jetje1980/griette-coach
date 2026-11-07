@@ -191,6 +191,35 @@ function DagKaart({ dag, log, onSave, openDefault, buren, onRuil }) {
                   )}
                 </div>
               )}
+              {/* ── Welke progressie hoort hier ─────────────────
+                  Het doeltempo komt uit haar gemeten efficiëntie plus wat
+                  per week haalbaar is, niet uit haar wenstijd. Daarnaast
+                  wat de vorige vergelijkbare sessie werkelijk opleverde:
+                  gemeten, en daarmee het eerlijke ijkpunt. */}
+              {dag.run.target && (
+                <div style={{ marginTop: 5, paddingTop: 5,
+                  borderTop: '1px dashed var(--border)' }}
+                  data-doel={dag.run.target.targetPace}>
+                  <div style={{ fontWeight: 700, color: 'var(--sage)' }}>
+                    Doel: {dag.run.target.line}
+                  </div>
+                  {dag.run.target.lastLine && (
+                    <div style={{ color: 'var(--sub)' }} data-vorige>
+                      {dag.run.target.lastLine}
+                      {dag.run.target.last && !dag.run.target.last.comparable
+                        && ' (andere hartslag — alleen als ruwe vergelijking)'}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45 }}>
+                    {dag.run.target.why}
+                  </div>
+                </div>
+              )}
+              {!dag.run.target && dag.run.targetWhy && (
+                <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginTop: 4 }}
+                  data-geen-doel>{dag.run.targetWhy}</div>
+              )}
+
               {dag.run.fromPlanner && (
                 <div style={{ fontSize: 10.5, color: 'var(--sage)', marginTop: 2 }}
                   data-uit-planner>

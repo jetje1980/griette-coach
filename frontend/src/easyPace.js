@@ -17,7 +17,8 @@
 import { todayLocal, addDays } from './datetime';
 import { allBreakdowns, runEconomyTrend } from './pace';
 import { exertionalResponse } from './symptoms';
-import { loadHrModel } from './hrModel';
+import { loadHrModel, hrPrescription } from './hrModel';
+import { efficiencyTrend, paceAtHr } from './efficiency';
 import { fmtPaceSec, paceToSec } from './sessionMath';
 
 export const CONFIDENCE = { HIGH: 'HIGH', MEDIUM: 'MEDIUM', LOW: 'LOW', NONE: 'NONE' };
@@ -241,10 +242,48 @@ export function prescribedPace({ purpose, goal = null, easy = null,
         why: 'Tussen je rustige tempo en je racetempo in — merkbaar sneller, zonder de herstelprijs.' };
     }
     case 'RECOVERY':
-      return { paceMin: easyMin != null ? +(easyMin + 0.5).toFixed(2) : null, source: 'easy',
-        why: 'Rustiger dan rustig.' };
-    default:
+    case 'TAPER':
+    case 'DURABILITY':
+    case 'EASY_ECONOMY':
+    default: {
+      // ── Het tempo moet bij de hartslag passen ─────────────────
+      //
+      // WAT ER MIS WAS
+      //
+      // Het "gemeten easy tempo" is het tempo van haar loopblokken, en die
+      // liep ze op hartslag 141 tot 152 — boven VT1. Voor een rustige
+      // sessie schrijft de app hartslag 106–132 voor. Dan stond er dus:
+      // "loop 8:55 per kilometer, en houd je hartslag onder 132". Dat zijn
+      // twee opdrachten die elkaar uitsluiten, en de één is onhaalbaar.
+      //
+      // Het juiste tempo voor een hartslagvoorschrift is het tempo dat bij
+      // díé hartslag hoort. Dat volgt uit haar gemeten efficiëntie: meters
+      // per minuut per hartslag, maal de bovenkant van het richtgebied.
+      // Bij haar komt daar ongeveer 10:25/km uit in plaats van 8:55 — en
+      // dát is het tempo waarop haar hartslag onder 132 blijft.
+      const hx = hrPrescription({ purpose, logs, currentDate });
+      const plafond = hx?.easy?.high ?? null;
+      const eff = efficiencyTrend({ currentDate });
+      const bijHartslag = (eff.known && plafond) ? paceAtHr(eff.current, plafond) : null;
+
+      if (purpose === 'RECOVERY') {
+        const basis = bijHartslag ?? easyMin;
+        return { paceMin: basis != null ? +(basis + 0.5).toFixed(2) : null,
+          source: bijHartslag ? 'bij_hartslag' : 'easy',
+          why: 'Rustiger dan rustig.' };
+      }
+      if (bijHartslag != null) {
+        return {
+          paceMin: +bijHartslag.toFixed(2),
+          source: 'bij_hartslag',
+          why: `Het tempo dat bij hartslag ${plafond} hoort, gerekend uit je gemeten `
+            + `efficiëntie (${eff.current} meter per minuut per hartslag). Je gemeten `
+            + 'looptempo is sneller, maar dat liep je op een hogere hartslag — en dan '
+            + 'zou het tempo de hartslaggrens tegenspreken.',
+        };
+      }
       return { paceMin: easyMin, source: 'easy',
         why: e.available ? e.note : 'nog geen gemeten easy tempo' };
+    }
   }
 }

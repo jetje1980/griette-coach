@@ -103,9 +103,15 @@ export function readSymptoms(log = {}) {
       present: headache != null && headache > 0,
     },
     migraine: {
-      type: log.migraine_type || (log.symptom_migraine ? 'without_aura' : 'none'),
+      type: log.migraine_type || ((log.symptom_migraine || log.migraine) ? 'without_aura' : 'none'),
       triggers: log.migraine_triggers || [],
-      present: !!(log.migraine_type && log.migraine_type !== 'none') || !!log.symptom_migraine,
+      // Ook het kale veld `migraine`. In haar dagboek staat op 19 september
+      // "migraine: true" met als notitie "alcohol gehad daardoor migraine",
+      // zónder migraine_type — en dan zag deze functie geen migraine, zodat
+      // de hoofdpijn van die dag alsnog als post-exertioneel signaal kon
+      // tellen. Precies wat niet de bedoeling is.
+      present: !!(log.migraine_type && log.migraine_type !== 'none')
+        || !!log.symptom_migraine || log.migraine === true,
     },
     muscle: {
       type: log.muscle_type || (log.symptom_pain ? 'doms' : 'none'),
@@ -166,10 +172,35 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
     };
   }
 
-  // ── Hoofdpijn: de persoonlijke hoofdmarker ────────────────────
+  // ── Hoofdpijn: de persoonlijke hoofdmarker, maar niet de migraine ──
+  //
+  // Zij zei het zo: migraine zegt niets over long COVID, een PEM-reactie
+  // wel. Dat is medisch ook het juiste onderscheid. Migraine heeft bij haar
+  // eigen triggers — hormonen, weer, alcohol, slaaptekort — en die staan
+  // los van inspanning. Toch woog de hoofdpijn van een migrainedag hier
+  // gewoon mee, en met ernst 2 of hoger was dat op zichzelf al genoeg voor
+  // "geen opbouw". Een migraineaanval in het weekend blokkeerde zo haar
+  // training van de week erna.
+  //
+  // Dus: op een dag met migraine telt de hoofdpijn niet mee in het
+  // PEM-oordeel — tenzij zij de migraine zélf als inspanningsgerelateerd
+  // heeft aangemerkt. De migraine verdwijnt niet uit beeld; hij wordt
+  // apart gemeld, en recoveryBudget rekent hem al als belasting.
+  const migraineDagen = new Set();
+  for (const w of window) {
+    const m = readSymptoms(w.log || {}).migraine;
+    if (m.present && !m.triggers?.includes('exertion')) migraineDagen.add(w.offset);
+  }
   let worstHeadache = null, headacheWhen = null, headacheDuration = null;
+  let migraineHoofdpijn = null;
   for (const w of window) {
     const s = readSymptoms(w.log || {});
+    if (migraineDagen.has(w.offset)) {
+      if (s.headache.severity != null) {
+        migraineHoofdpijn = Math.max(migraineHoofdpijn ?? 0, s.headache.severity);
+      }
+      continue;
+    }
     if (s.headache.severity != null && s.headache.severity > (worstHeadache ?? -1)) {
       worstHeadache = s.headache.severity;
       headacheWhen = s.headache.timing || (w.offset === 0 ? 'h0_6' : w.offset === 1 ? 'h6_24' : 'h24_48');
@@ -219,12 +250,22 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
   if (diffuse) parts.push('diffuse spierpijn');
   if (otherSigns.length) parts.push(otherSigns.map(s => s.label.toLowerCase()).join(', '));
 
+  // Wat er over de migraine te zeggen valt, los van het oordeel.
+  const migraineNoot = migraine && !migraineExertional
+    ? `Er was migraine in dit venster${migraineHoofdpijn ? ` (hoofdpijn ${migraineHoofdpijn})` : ''}`
+      + `${migraine.triggers?.length ? `, triggers: ${migraine.triggers.join(', ')}` : ''}. `
+      + 'Die telt niet mee als post-exertionele reactie — migraine heeft eigen '
+      + 'triggers en zegt niets over je belastbaarheid.'
+    : null;
+
   if (total >= 6 || headacheDecisive) {
     return {
       status: 'poor', level: 'AMBER',
       headache: worstHeadache, headacheTiming: headacheWhen, diffuse, otherSigns,
       migraine: migraine || null, migraineCountsAsPem: !!migraineExertional,
-      reason: `Duidelijke post-exertionele respons: ${parts.join(', ')}.`,
+      migraineNote: migraineNoot,
+      reason: `Duidelijke post-exertionele respons: ${parts.join(', ')}.`
+        + (migraineNoot ? ` ${migraineNoot}` : ''),
       countsAsVolume: false, allowsBuild: false,
       advice: worstHeadache >= 2
         ? 'Post-exertionele hoofdpijn is bij jou de belangrijkste waarschuwing. Geen opbouw; herhaal het niveau of schaal terug.'
@@ -375,8 +416,14 @@ export function pemFreeWeeks({ logs = {}, currentDate = todayLocal(), max = 12,
     // oordeel over de reactie zelf, niet over een losse klacht.
     if (l.symptom_pem) return true;
     if (RED_FLAG_IDS.some(id => l[`pe_${id}`])) return true;
+    // Migraine telt hier niet. Zij heeft gelijk: migraine zegt niets over
+    // long COVID, een PEM-reactie wel. Een migrainedag die toevallig na een
+    // training valt, zette de teller op nul en blokkeerde de opbouw.
+    const m = readSymptoms(l).migraine;
+    const migraineDag = m.present && !m.triggers?.includes('exertion');
+    const hoofdpijn = !migraineDag && Number(l.headache_severity) >= 2;
     const klacht = l.training_recovery === 2 || l.recovery_check === 'bad'
-      || Number(l.headache_severity) >= 2 || l.muscle_type === 'diffuse';
+      || hoofdpijn || l.muscle_type === 'diffuse';
     if (!klacht) return false;
     // Geen inspanning in de 72 uur ervoor: dan is dit geen post-exertionele
     // reactie. Het blijft een slechte dag, en die staat gewoon in het
