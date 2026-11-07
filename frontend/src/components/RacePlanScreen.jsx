@@ -431,6 +431,48 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
         </div>
       )}
 
+      {/* ── Wat je nu remt ─────────────────────────────────
+          Bovenaan, want dit is waar de winst ligt die geen extra
+          training kost. Op volgorde van grootte, met erbij wat het
+          kost en wat de eerste stap is. */}
+      {plan.brakes?.remmen?.length > 0 && (
+        <>
+          <div className="os-section-label">Wat je nu remt</div>
+          <div className="os-card" style={{ marginBottom: 12,
+            borderLeft: '3px solid var(--gold)' }}
+            data-remmen={plan.brakes.remmen.length}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, lineHeight: 1.4,
+              marginBottom: 6 }}>
+              {plan.brakes.kop}
+            </div>
+            {plan.brakes.remmen.map((r, i) => (
+              <div key={r.id} data-rem={r.id}
+                style={{ padding: '7px 0',
+                  borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 10, fontWeight: 900, color: 'var(--ghost)',
+                    fontFamily: 'var(--font-serif)' }}>{i + 1}</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, flex: 1 }}>{r.label}</span>
+                </div>
+                <div style={{ fontSize: 11, lineHeight: 1.5 }}>nu: {r.stand}</div>
+                {r.kost && (
+                  <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45,
+                    marginTop: 2 }}>{r.kost}</div>
+                )}
+                <div style={{ fontSize: 11, color: 'var(--sage)', lineHeight: 1.5,
+                  marginTop: 2, fontWeight: 600 }}>→ {r.wat}</div>
+              </div>
+            ))}
+            {plan.brakes.goed?.length > 0 && (
+              <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45,
+                marginTop: 7, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+                Staat wel goed: {plan.brakes.goed.map(g => g.label.toLowerCase()).join(', ')}.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ── Wat een trainer verwacht ──────────────────────── */}
       {plan.expectation?.known && (
         <>

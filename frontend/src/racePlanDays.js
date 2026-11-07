@@ -76,6 +76,7 @@ import { sessionTarget, hrUitVoorschrift } from './sessionTarget';
 import { raceExpectation } from './progressExpectation';
 // Het weekplafond komt uit de poort, niet uit een tweede getal hier.
 import { runDayCeiling, trainingLoad, frequencyVerdict } from './restday';
+import { remmen } from './remmen';
 
 // ── Dagen ruilen ────────────────────────────────────────────────
 //
@@ -883,6 +884,11 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     weight: gewicht,
     fuel: brandstof,
     expectation: verwachting,
+    // Wat haar vooruitgang nu werkelijk remt, gemeten en op volgorde van
+    // grootte. Dit stond nergens, en het was het antwoord op haar vraag
+    // hoe ze méér progressie maakt: niet harder lopen, maar de knoppen
+    // aanzetten die al in het plan staan en in het echt uitstaan.
+    brakes: remmen({ currentDate, logs }),
     // `locksUntil` is de datum tot wanneer dit overzicht werkelijk dagen
     // op slot zet — leeg als de poort vandaag openstaat. Zonder dat
     // onderscheid zou de kaart "op slot" roepen op een dag dat er
