@@ -171,8 +171,32 @@ export function distributionReading(d) {
   return {
     available: true, level: 'te_hard',
     label: 'Te veel van je lopen is te hard',
-    detail: `${basis} ${d.shares.tussen}% lag boven de band maar onder VT2, en ${d.shares.drempel + d.shares.boven}% op of boven VT2 (${d.vt2}).`,
+    // ── Zeg welke grens je werkelijk telt ───────────────────
+    //
+    // Hier stond "op of boven VT2 (156)" terwijl de emmer `drempel` bij
+    // VT2 min vier begint — dus vanaf 152. Een loopblok op 152,4 werd zo
+    // gemeld als "op of boven 156". Zij las dat en dacht dat de app haar
+    // gegevens niet goed las; het getal klopte, de zin eromheen niet. Een
+    // drempelzone van vier slagen breed is verdedigbaar — een hartslag is
+    // geen scherpe lijn — maar dan moet er staan waar hij begint.
+    detail: `${basis} ${d.shares.tussen}% lag boven de band maar onder de drempelzone, `
+      + `en ${d.shares.drempel + d.shares.boven}% in of boven de drempelzone rond je VT2 `
+      + `— dat is vanaf ${d.vt2 - 4} bpm, want een hartslaggrens is geen scherpe lijn. `
+      + `Echt boven VT2 (${d.vt2}) lag ${d.shares.boven}%.`,
     advice: [
+      // ── Waarom dit niet klopt met haar eigen gevoel ────────
+      //
+      // Zij las dit en zei: "ik hou me gewoon aan hartslag en loop alles
+      // onder 145 toch?" Dat voelt zo, en het is te verklaren: haar
+      // Garmin toont het gemiddelde van de hele sessie, en daar zitten de
+      // wandelpauzes in. Dat gemiddelde ligt rond 140. Haar loopblokken
+      // zelf liggen op 146 tot 164. Het is dus niet zo dat de app iets
+      // anders meet dan zij ziet — ze kijken naar twee verschillende
+      // getallen, en alleen het blokgemiddelde zegt iets over de prikkel.
+      // Zonder deze zin leest de kaart als een verwijt dat niet klopt.
+      `Dit gaat over je loopblokken, niet over je sessiegemiddelde. Je gemiddelde over `
+      + 'de hele sessie ligt lager doordat de wandelpauzes meetellen; tijdens het lopen '
+      + `zelf zit je hoger. Kijk op je horloge dus naar de hartslag tíjdens een blok.`,
       `Breng het grootste deel terug onder ${d.ceiling} bpm. Tempo is hier de uitkomst, niet het doel.`,
       'Wil je harder werken, doe dat dan in één aparte sessie per week, bewust en kort — niet verspreid over alles.',
     ],
@@ -186,7 +210,7 @@ export function distributionAsText(d, r) {
   L.push('INTENSITEITSVERDELING (vier weken, per loopblok gewogen op minuten):');
   L.push(`  grens waaraan getoetst: ${d.ceiling} bpm (${d.ceilingSource === 'afspraak' ? 'afgesproken werkplafond' : 'gemeten VT1'})` +
     (d.ceilingVsVt1 ? ` · gemeten VT1 ligt op ${d.vt1}, verschil ${d.ceilingVsVt1 > 0 ? '+' : ''}${d.ceilingVsVt1}` : ''));
-  L.push(`  binnen de band: ${d.shares.herstel + d.shares.rustig}% · erboven onder VT2: ${d.shares.tussen}% · rond VT2: ${d.shares.drempel}% · boven VT2: ${d.shares.boven}%`);
+  L.push(`  binnen de band: ${d.shares.herstel + d.shares.rustig}% · erboven, onder ${d.vt2 - 4}: ${d.shares.tussen}% · drempelzone ${d.vt2 - 4}–${d.vt2 + 4}: ${d.shares.drempel}% · boven ${d.vt2 + 4}: ${d.shares.boven}%`);
   L.push(`  (onder de gemeten VT1 van ${d.vt1}: ${d.underVt1Share}%)`);
   L.push(`  ${d.easyMinutes} van ${d.runMinutes} loopminuten rustig · richtlijn ${d.target}% · uitspraak: ${d.verdict}`);
   L.push(`  ${r.detail}`);
