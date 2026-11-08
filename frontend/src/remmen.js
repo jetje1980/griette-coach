@@ -94,9 +94,10 @@ function krachtRem({ currentDate, logs = {} }) {
       kost: 'Dit is in vijf weken de best onderbouwde route naar hetzelfde tempo bij '
         + 'een lagere hartslag: 2 tot 4% loopeconomie in acht tot twaalf weken zwaar '
         + 'krachtwerk. Zolang hij uitstaat, ligt die winst er onaangeroerd.',
-      wat: 'Twee keer per week, 20 tot 30 minuten. Zwaar en laag in herhalingen: '
-        + '3 × 5 goblet squat, 3 × 6 split squat per been, 3 × 15 kuitheffen langzaam '
-        + 'omlaag. De laatste herhaling moet moeilijk zijn.',
+      wat: 'Eén à twee keer per week, 20 tot 30 minuten, met gewichten: 3 × 5 goblet '
+        + 'squat, 3 × 6 split squat per been, 3 × 8 romanian deadlift, 3 × 15 kuitheffen '
+        + 'langzaam omlaag. De laatste herhaling moet moeilijk zijn — dat is wat het '
+        + 'verschil maakt met een band of hoge herhalingen.',
       status: 'uit',
     };
   }
@@ -109,9 +110,12 @@ function krachtRem({ currentDate, logs = {} }) {
         + 'economiewinst uit de literatuur van zware, lage herhalingen dicht bij wat je '
         + 'nog net kunt, niet uit korte circuits of lichte hoge herhalingen. Dus je '
         + 'betaalt de tijd wel en krijgt die specifieke opbrengst niet.',
-      wat: 'Je circuit mag blijven staan — dat is je dagelijkse ritme. Zet er twee keer '
-        + 'per week 20 minuten zwaar naast: 3 × 5 squat, 3 × 6 split squat per been, '
-        + '3 × 15 kuitheffen. Als je er nog drie bij had gekund, was hij te licht.',
+      wat: 'Je circuit mag blijven staan — dat is je dagelijkse ritme. Zet er één à twee '
+        + 'keer per week 20 minuten MET GEWICHTEN naast: 3 × 5 goblet squat, 3 × 6 split '
+        + 'squat per been, 3 × 8 romanian deadlift, 3 × 15 kuitheffen. Dumbbells of een '
+        + 'kettlebell, geen band — zware lage herhalingen maken je pezen stugger als '
+        + 'veer, en dát verlaagt je hartslag bij hetzelfde tempo. Kon je er nog drie bij, '
+        + 'dan was het te licht.',
       status: 'half',
     };
   }

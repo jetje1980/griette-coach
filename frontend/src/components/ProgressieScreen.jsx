@@ -22,6 +22,7 @@ import RunDashboard from './RunDashboard';
 import StrengthPanel from './StrengthPanel';
 import DailyFeed from './DailyFeed';
 import Challenge75 from './Challenge75';
+import FotoVergelijk from './FotoVergelijk';
 import MyChangePanel from './MyChangePanel';
 import BodyCheckIn from './BodyCheckIn';
 import WhyPanel from './WhyPanel';
@@ -1535,6 +1536,10 @@ export default function ProgressieScreen({ logs, streak }) {
       {activeTab === 4 && (
         <>
           <Challenge75 currentDate={todayStr()} onChanged={() => setFeedTik(t => t + 1)} />
+          {/* Twee foto's naast elkaar, met de gemeten verandering ertussen.
+              Zij vroeg hierom: eerste tegen laatste, of zelf twee kiezen. */}
+          <div className="os-section-label">Foto's vergelijken</div>
+          <FotoVergelijk />
           <DailyFeed currentDate={todayStr()} refreshKey={feedTik} />
         </>
       )}

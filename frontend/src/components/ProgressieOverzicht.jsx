@@ -213,6 +213,64 @@ export default function ProgressieOverzicht({ currentDate = todayLocal(), sessio
             </div>
           </div>
 
+          {/* ── Wat beweegt er mee? ────────────────────────
+              Een dimensie die stilstaat is pas bruikbaar als je weet
+              waar hij mee samenhangt. Dit legt haar betere helft naast
+              haar mindere en kijkt wat er verschilt — slaap, cyclus,
+              spanning, afstand, rust ervoor, kracht ervoor, gewicht. */}
+          {vg.patterns?.known && (
+            <div className="os-card" style={{ marginTop: 8 }}
+              data-patronen={vg.patterns.findings.length}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, lineHeight: 1.4 }}>
+                {vg.patterns.line}
+              </div>
+              {vg.patterns.findings.length === 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5,
+                  marginTop: 3 }}>
+                  Geen enkele factor verschilt duidelijk tussen je betere en mindere
+                  sessies. Dat is zelf ook een uitkomst: dan zit het verschil niet in
+                  de omstandigheden maar in de training.
+                </div>
+              )}
+              {vg.patterns.findings.map(f => (
+                <div key={f.id} data-patroon={f.id}
+                  style={{ padding: '6px 0', borderTop: '1px solid var(--border)',
+                    marginTop: 5, fontSize: 11.5, lineHeight: 1.5 }}>
+                  {f.note}
+                </div>
+              ))}
+              {vg.patterns.spread && (
+                <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5,
+                  marginTop: 6, paddingTop: 5, borderTop: '1px solid var(--border)' }}>
+                  {vg.patterns.spread}
+                </div>
+              )}
+              {vg.patterns.geen?.length > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45,
+                  marginTop: 4 }}>
+                  Maakt geen verschil: {vg.patterns.geen.join(', ')}.
+                </div>
+              )}
+              {vg.patterns.ontbreekt?.length > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--gold)', lineHeight: 1.45,
+                  marginTop: 2 }} data-patroon-ontbreekt={vg.patterns.ontbreekt.length}>
+                  Nog te weinig ingevuld om mee te wegen: {vg.patterns.ontbreekt.join(', ')}.
+                  Vul je die op loopdagen in, dan doen ze hier mee.
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45,
+                marginTop: 4 }}>
+                {vg.patterns.caveat}
+              </div>
+            </div>
+          )}
+          {vg.patterns && !vg.patterns.known && (
+            <div className="os-card" style={{ marginTop: 8, fontSize: 11,
+              color: 'var(--sub)', lineHeight: 1.5 }} data-patronen="0">
+              {vg.patterns.why}
+            </div>
+          )}
+
           {plan?.known && (
             <div className="os-card" style={{ marginTop: 8,
               borderLeft: '3px solid var(--sage)' }} data-driemaanden={plan.blokken.length}>

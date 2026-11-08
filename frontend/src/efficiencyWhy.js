@@ -35,6 +35,8 @@ import { efficiencyTrend } from './efficiency';
 import { cycleDayOf } from './bodyReview';
 import { phaseOfDay, PHASE } from './cyclePatterns';
 import { todayLocal, daysBetween } from './datetime';
+import { loadWorkouts } from './workouts';
+import { alleKracht } from './krachtBronnen';
 
 // Minder dan dit aan elke kant en er valt niets te vergelijken.
 const MIN_PER_KANT = 3;
@@ -66,6 +68,22 @@ const FACTOREN = [
     uit: (p) => p.stress_load },
   { id: 'fuel_quality', label: 'genoeg gegeten', eenheid: '(0–2)', omlaagIsBeter: false,
     uit: (p) => p.fuel_quality },
+  // ── De factoren die uit de training zelf komen ──────────────
+  //
+  // Zij vroeg hier expliciet om: "ik wil dat je elk onderdeel meeweegt —
+  // afstand, hartslag, snelheid, kracht, slaap, cyclus — om patronen te
+  // herkennen." De vier hierboven komen uit het dagboek; deze vier komen
+  // uit de training en stonden er nog niet in. Zonder die vier kon de
+  // analyse niet zien of haar betere sessies kort of lang waren, of ze
+  // uitgerust aan de start stonden, en of er kracht aan voorafging.
+  { id: 'afstand', label: 'afstand van de sessie', eenheid: 'km', omlaagIsBeter: null,
+    uit: (p) => p.distanceKm },
+  { id: 'rustdagen', label: 'dagen sinds je vorige loop', eenheid: '', omlaagIsBeter: null,
+    uit: (p) => p.daysSincePrevRun },
+  { id: 'kracht_voor', label: 'krachtdagen in de drie dagen ervoor', eenheid: '',
+    omlaagIsBeter: null, uit: (p) => p.strengthBefore },
+  { id: 'gewicht', label: 'gewicht', eenheid: 'kg', omlaagIsBeter: true,
+    uit: (p) => p.weight },
 ];
 
 function num(v) {
@@ -85,7 +103,12 @@ const fmtPace = (min) => {
 // De context van één dag. De rusthartslag van de dag zelf; staat die er
 // niet, dan die van de ochtend erna — want een rusthartslag wordt 's
 // ochtends gemeten en een avondloop valt daar tussenin.
-function contextVan(datum, logs, asOf) {
+// De context van één dag, nu ook met wat er uit de training zelf komt:
+// hoe lang de sessie was, hoeveel rust eraan voorafging en of er kracht
+// in de drie dagen ervoor zat. Dat laatste is geen bijzaak — het is de
+// enige manier om te zien of kracht haar lopen helpt of juist in de weg
+// zit, en dat is precies waar zij naar vroeg.
+function contextVan(datum, logs, asOf, extra = {}) {
   const log = logs[datum] || null;
   const volgende = logs[nextDay(datum)] || null;
   const dag = cycleDayOf(datum, { asOf });
@@ -101,7 +124,30 @@ function contextVan(datum, logs, asOf) {
     fuel_quality: num(log?.fuel_quality),
     cycleDay: dag,
     phase: dag ? phaseOfDay(dag, AANNAME_CYCLUSLENGTE) : PHASE.UNKNOWN,
+    weight: num(log?.weight),
+    ...extra,
   };
+}
+
+// Dagen tussen deze loop en de vorige, en hoeveel krachtdagen er in de
+// drie dagen ervoor zaten.
+function trainingContext(datums, krachtDagen) {
+  const set = new Set(krachtDagen || []);
+  const terug = (d, n) => {
+    const x = new Date(`${d}T12:00:00`); x.setDate(x.getDate() - n);
+    return x.toISOString().slice(0, 10);
+  };
+  const perDatum = new Map();
+  datums.forEach((d, i) => {
+    const vorige = i > 0 ? datums[i - 1] : null;
+    const dagen = vorige
+      ? Math.round((new Date(`${d}T12:00:00`) - new Date(`${vorige}T12:00:00`)) / 86400000)
+      : null;
+    let kracht = 0;
+    for (let k = 1; k <= 3; k++) if (set.has(terug(d, k))) kracht++;
+    perDatum.set(d, { daysSincePrevRun: dagen, strengthBefore: kracht });
+  });
+  return perDatum;
 }
 
 function nextDay(datum) {
@@ -115,8 +161,17 @@ export function efficiencyFactors({ currentDate = todayLocal(), logs = {},
   const trend = efficiencyTrend({ currentDate, workouts });
   if (!trend.known) return { known: false, why: trend.why };
 
+  const opDatum = [...trend.sessions].sort((a, b) => a.date.localeCompare(b.date));
+  const kracht = alleKracht({ currentDate, logs, venster: 365 }).dagen;
+  const tc = trainingContext(opDatum.map(s => s.date), kracht);
+  const afstanden = new Map((workouts || loadWorkouts())
+    .filter(w => w?.date).map(w => [w.date, Number(w.distance) || null]));
   const punten = trend.sessions
-    .map(s => ({ ...s, ...contextVan(s.date, logs, currentDate) }))
+    .map(s => ({ ...s,
+      ...contextVan(s.date, logs, currentDate, {
+        ...(tc.get(s.date) || {}),
+        distanceKm: afstanden.get(s.date) ?? null,
+      }) }))
     .sort((a, b) => b.ef - a.ef);
 
   if (punten.length < MIN_PER_KANT * 2) {
@@ -145,8 +200,11 @@ export function efficiencyFactors({ currentDate = todayLocal(), logs = {},
     const verschil = gb - gm;
     // Hoe groot moet een verschil zijn om het te noemen? Eén eenheid voor
     // de schalen van 0–2, twee slagen voor hartslag, een half uur slaap.
-    const drempel = f.id === 'hr_rest' ? 2 : f.id === 'sleep_hours' ? 0.5
-      : f.id === 'cycleDay' ? 5 : 0.4;
+    // Elke factor heeft zijn eigen maat. Een halve kilometer verschil in
+    // afstand zegt niets; een halve kilo gewicht wel.
+    const DREMPELS = { hr_rest: 2, sleep_hours: 0.5, cycleDay: 5,
+      afstand: 0.8, rustdagen: 1, kracht_voor: 0.5, gewicht: 0.5 };
+    const drempel = DREMPELS[f.id] ?? 0.4;
     bevindingen.push({
       id: f.id, label: f.label, enough: true,
       best: rond(gb), worst: rond(gm), delta: rond(verschil),

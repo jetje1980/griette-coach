@@ -39,6 +39,9 @@ import { steadyEfficiency } from './gemetenTempo';
 // 75-dagen-challenge en een vinkje in het dagboek. Eén bron lezen gaf
 // hier "gestopt met kracht" terwijl zij het dagelijks deed.
 import { alleKracht, SOORT } from './krachtBronnen';
+// Welke factoren meebewegen met haar betere sessies — slaap, cyclus,
+// spanning, afstand, rust, kracht, gewicht. Zij vroeg hier expliciet om.
+import { efficiencyFactors } from './efficiencyWhy';
 
 // Hoeveel verandering heet vooruitgang? Onder deze drempel is het ruis;
 // twee sessies verschillen onderling al meer.
@@ -321,6 +324,24 @@ export function voortgang({ currentDate = todayLocal(), logs = {}, workouts = nu
     gaps: gaten,
     split: grens,
     economyWindow: efVenster,
+    // Patronen: wat onderscheidt haar betere sessies van haar mindere?
+    // Niet als los lijstje maar naast het oordeel, want een dimensie die
+    // stilstaat is pas bruikbaar als je weet waar hij mee samenhangt.
+    patterns: (() => {
+      try {
+        const f = efficiencyFactors({ currentDate, logs, workouts });
+        if (!f.known) return { known: false, why: f.why };
+        return {
+          known: true,
+          line: f.line,
+          caveat: f.caveat,
+          spread: f.spread,
+          findings: f.findings.filter(x => x.enough && x.meaningful),
+          geen: f.findings.filter(x => x.enough && !x.meaningful).map(x => x.label),
+          ontbreekt: f.findings.filter(x => !x.enough).map(x => x.label),
+        };
+      } catch { return { known: false, why: 'Patronen zijn nu niet te berekenen.' }; }
+    })(),
     dimensions: dimensies,
     byId: per,
     forward: vooruit.map(d => d.id),
@@ -372,12 +393,19 @@ export function driemaandenplan({ voortgang: v, currentDate = todayLocal() } = {
           'Aantal weken op rij met vier loopdagen. Doel: vier van de vier.',
           'De lengte is nu niet het probleem; de herhaling is het. Kort houden is wat '
           + 'maakt dat de vierde dag er ook werkelijk komt.'),
-        blok(2, 'Kracht erbij, lengte erbij',
-          'Zelfde vier loopdagen, plus twee keer per week zwaar krachtwerk. De lange '
-          + 'loop mag naar 45 minuten.',
+        blok(2, 'Gewichten erbij, lengte erbij',
+          'Zelfde vier loopdagen, plus één à twee keer per week trainen MET GEWICHTEN — '
+          + 'geen band, geen eigen lichaamsgewicht. 3 × 5 goblet squat, 3 × 6 split '
+          + 'squat per been, 3 × 8 romanian deadlift, 3 × 15 kuitheffen. Zwaar genoeg '
+          + 'dat de laatste herhaling moeilijk is. De lange loop mag naar 45 minuten.',
           'Efficiëntie bij gelijke hartslag — hier hoort de eerste zichtbare winst.',
-          'Pas als het ritme staat heeft kracht zin: anders voeg je een prikkel toe aan '
-          + 'een systeem dat de vorige nog niet verwerkt heeft.'),
+          'Waarom gewichten en niet je circuit: de 2 tot 4% loopeconomie uit de '
+          + 'literatuur komt van zware, lage herhalingen. Die maken je pezen en spieren '
+          + 'stugger als veer, zodat je per pas minder energie in de grond verliest en '
+          + 'je hartslag bij hetzelfde tempo lager ligt. Hoge herhalingen met licht '
+          + 'gewicht doen dat niet — die trainen uithoudingsvermogen van de spier, en '
+          + 'dat is niet je beperking. Je circuit van acht minuten blijft gewoon staan: '
+          + 'dat is je dagelijkse ritme en je romp, en dit komt ernaast.'),
         blok(3, 'Kwaliteit',
           'Vier loopdagen, waarvan één met blokken op racetempo. Kracht blijft staan.',
           'Tempo bij hartslag 145 — vergelijk met je ijksessie van nu.',
@@ -394,16 +422,23 @@ export function driemaandenplan({ voortgang: v, currentDate = todayLocal() } = {
       known: true, diagnose: v.diagnosis,
       kop: 'Drie maanden: de ontbrekende prikkel',
       blokken: [
-        blok(1, 'Kracht opstarten',
-          'Twee keer per week zwaar en kort: 3 × 5 squat, 3 × 6 split squat per been, '
-          + '3 × 15 kuitheffen langzaam omlaag. Lopen blijft zoals het is.',
-          'Of de twee sessies er elke week zijn.',
-          'Eén nieuwe prikkel tegelijk. Lopen verandert deze vier weken niet.'),
+        blok(1, 'Met gewichten beginnen',
+          'Eén à twee keer per week trainen MET GEWICHTEN — dumbbells of kettlebell, '
+          + 'geen band. 3 × 5 goblet squat, 3 × 6 split squat per been, 3 × 8 romanian '
+          + 'deadlift, 3 × 15 kuitheffen langzaam omlaag. Lopen blijft zoals het is.',
+          'Of die sessies er elke week zijn, en of het gewicht omhoog kan.',
+          'Waarom met gewichten: de economiewinst komt van zware, lage herhalingen — '
+          + 'die maken je pezen stugger als veer, zodat je per pas minder energie '
+          + 'verliest. Een band of hoge herhalingen trainen iets anders. Eén nieuwe '
+          + 'prikkel tegelijk, dus lopen verandert deze vier weken niet.'),
         blok(2, 'Zwaarder worden',
-          'Zelfde oefeningen, meer weerstand. Erbij: vier versnellingen van 20 seconden '
-          + 'na twee easy-lopen per week.',
-          'Efficiëntie bij gelijke hartslag.',
-          'Economiewinst komt uit zwaarder, niet uit vaker of langer.'),
+          'Zelfde oefeningen, meer kilo\'s — als vijf herhalingen makkelijk gaan, is het '
+          + 'gewicht te licht. Erbij: vier versnellingen van 20 seconden na twee '
+          + 'easy-lopen per week.',
+          'Efficiëntie bij gelijke hartslag, en het gewicht op de stang.',
+          'Economiewinst komt uit zwaarder, niet uit vaker of langer. Progressie in '
+          + 'kracht is een getal in kilo\'s; blijft dat gelijk, dan traint je lichaam '
+          + 'niets nieuws.'),
         blok(3, 'Omzetten in tempo',
           'Kracht blijft, en één loopsessie per week krijgt blokken op racetempo.',
           'Tempo bij hartslag 145.',
@@ -422,7 +457,9 @@ export function driemaandenplan({ voortgang: v, currentDate = todayLocal() } = {
         blok(1, 'Vasthouden', 'Precies doen wat je nu doet.',
           'Efficiëntie — blijft de lijn stijgen?',
           'Wat werkt, verander je niet omdat het saai wordt.'),
-        blok(2, 'Eén knop erbij', 'Twee krachtsessies per week erbij, verder niets.',
+        blok(2, 'Eén knop erbij',
+          'Eén à twee keer per week met gewichten erbij (zwaar, lage herhalingen), '
+          + 'verder niets.',
           'Efficiëntie, en of je herstel schoon blijft.',
           'Eén verandering tegelijk, anders weet je straks niet waar de winst vandaan kwam.'),
         blok(3, 'Kwaliteit', 'Eén sessie per week met blokken op racetempo.',

@@ -172,8 +172,14 @@ S('4 · Het voorstel volgt uit de diagnose, niet uit een sjabloon');
   const pb = driemaandenplan({ voortgang: b, currentDate: TODAY });
   console.log(`      ${b.diagnosis.id} → ${pb.kop}`);
   ok('bij genoeg loopdagen zonder kracht gaat blok 1 over kracht',
-    b.diagnosis.id === 'kracht' && /[Kk]racht/.test(pb.blokken[0].titel),
+    b.diagnosis.id === 'kracht' && /[Kk]racht|[Gg]ewicht/.test(pb.blokken[0].titel),
     pb.blokken[0].titel);
+  // Zij vroeg: als je gewichten bedoelt, zeg dat dan — met de reden.
+  ok('het blok noemt gewichten, niet alleen "kracht"',
+    /GEWICHTEN|gewichten|dumbbell|kettlebell/i.test(pb.blokken[0].doel),
+    pb.blokken[0].doel);
+  ok('en zegt waarom gewichten en niet een band',
+    /veer|pezen/.test(pb.blokken[0].waarom), pb.blokken[0].waarom);
   ok('de twee voorstellen verschillen werkelijk van elkaar',
     pa.kop !== pb.kop && pa.blokken[0].doel !== pb.blokken[0].doel, `${pa.kop} / ${pb.kop}`);
 
