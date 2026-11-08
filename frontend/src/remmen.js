@@ -34,7 +34,8 @@
 
 import { todayLocal, daysBetween, addDays } from './datetime';
 import { loadWorkouts } from './workouts';
-import { loadStrengthSessions } from './data/strengthSchema';
+// Kracht komt uit meer dan één plek; zie krachtBronnen.js voor waarom.
+import { krachtBeeld } from './krachtBronnen';
 
 // Hoe zwaar weegt elke rem? Niet gevoel maar een schatting met een bron,
 // zodat de volgorde navolgbaar is en niet van mijn stemming afhangt.
@@ -68,17 +69,21 @@ const logsTussen = (logs, van, tot) => Object.entries(logs || {})
 // Twee vragen, niet één: is er kracht gedaan, en wás het kracht. Een
 // bandles op RPE 2 telt wel als beweging en niet als economieprikkel, en
 // het verschil tussen die twee is precies wat zij hier moet kunnen zien.
-function krachtRem({ currentDate }) {
-  const sessies = loadStrengthSessions()
-    .filter(s => s?.date && s.date <= currentDate);
-  const laatste = sessies.map(s => s.date).sort().slice(-1)[0] || null;
-  const dagenGeleden = laatste ? daysBetween(laatste, currentDate) : null;
-  const in28 = sessies.filter(s => daysBetween(s.date, currentDate) <= 28);
-
-  // Zwaar genoeg? RPE 4 of hoger, of expliciet "kon niet meer".
-  const zwaar = in28.filter(s => (Number(s.rpe) || 0) >= 4
-    || s.couldDoMore === 'nee' || s.couldDoMore === 'niet');
-  const licht = in28.length - zwaar.length;
+function krachtRem({ currentDate, logs = {} }) {
+  // ── Alle bronnen, niet één ───────────────────────────────────
+  //
+  // Hier stond alleen loadStrengthSessions(), en die kent het circuit van
+  // acht minuten uit de 75-dagen-challenge niet. Daardoor concludeerde
+  // deze rem dat zij zeven weken geleden met kracht gestopt was, terwijl
+  // ze het al die tijd dagelijks deed. Zij moest dat zelf melden. Een
+  // stellige verkeerde conclusie is erger dan "ik weet het niet", want
+  // daar handel je naar.
+  const beeld = krachtBeeld({ currentDate, logs, dagen: 28 });
+  const laatste = beeld.laatste;
+  const dagenGeleden = beeld.sinds;
+  const in28 = { length: beeld.dagenMetKracht };
+  const zwaar = { length: beeld.zwaar };
+  const licht = beeld.kort + beeld.matig;
 
   if (in28.length === 0) {
     return {
@@ -99,19 +104,20 @@ function krachtRem({ currentDate }) {
     return {
       id: 'kracht', label: 'Krachttraining — wel gedaan, niet zwaar',
       gewicht: REM_GEWICHT.kracht * 0.7,
-      stand: `${in28.length} sessie${in28.length > 1 ? 's' : ''} in vier weken, `
-        + 'allemaal op RPE 3 of lager',
-      kost: 'Lichte hoge herhalingen verbeteren de loopeconomie niet aantoonbaar; de '
-        + 'onderzochte winst komt uit zware, lage herhalingen dicht bij wat je nog net '
-        + 'kunt. Je doet het werk wel en krijgt de opbrengst niet.',
-      wat: 'Zelfde frequentie, andere dosering: minder herhalingen, meer weerstand. '
-        + 'Als je er nog drie bij had gekund, was hij te licht.',
+      stand: beeld.regel,
+      kost: 'Je doet het werk — en het telt, voor je ritme en je romp. Alleen komt de '
+        + 'economiewinst uit de literatuur van zware, lage herhalingen dicht bij wat je '
+        + 'nog net kunt, niet uit korte circuits of lichte hoge herhalingen. Dus je '
+        + 'betaalt de tijd wel en krijgt die specifieke opbrengst niet.',
+      wat: 'Je circuit mag blijven staan — dat is je dagelijkse ritme. Zet er twee keer '
+        + 'per week 20 minuten zwaar naast: 3 × 5 squat, 3 × 6 split squat per been, '
+        + '3 × 15 kuitheffen. Als je er nog drie bij had gekund, was hij te licht.',
       status: 'half',
     };
   }
   return {
     id: 'kracht', label: 'Krachttraining', gewicht: 0,
-    stand: `${zwaar.length} zware sessie${zwaar.length > 1 ? 's' : ''} in vier weken`,
+    stand: beeld.regel,
     kost: null,
     wat: 'Zo houden: twee per week, zwaar en kort.',
     status: 'aan',
@@ -237,7 +243,7 @@ function frequentieRem({ currentDate }) {
 // ── Alles bij elkaar, op volgorde van grootte ───────────────────
 export function remmen({ currentDate = todayLocal(), logs = {} } = {}) {
   const alle = [
-    krachtRem({ currentDate }),
+    krachtRem({ currentDate, logs }),
     herstelRem({ currentDate, logs }),
     tekortRem({ currentDate, logs }),
     frequentieRem({ currentDate }),

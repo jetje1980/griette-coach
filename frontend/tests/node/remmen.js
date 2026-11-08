@@ -119,7 +119,7 @@ S('2 · Kracht die wel gedaan is maar te licht');
   ok('maar wegen wel minder zwaar dan helemaal geen kracht',
     k.gewicht > 0 && k.gewicht < REM_GEWICHT.kracht, String(k.gewicht));
   ok('en de tekst zegt wat eraan moet veranderen, niet dat het fout was',
-    /minder herhalingen, meer weerstand/.test(k.wat), k.wat);
+    /zwaar naast/.test(k.wat) && /mag blijven staan/.test(k.wat), k.wat);
 }
 
 S('3 · Zware kracht telt wél, en dan is de rem weg');

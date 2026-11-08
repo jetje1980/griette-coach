@@ -35,7 +35,10 @@
 import { todayLocal, addDays, daysBetween } from './datetime';
 import { loadWorkouts } from './workouts';
 import { steadyEfficiency } from './gemetenTempo';
-import { loadStrengthSessions } from './data/strengthSchema';
+// Kracht komt uit meer dan één plek: de krachtmodule, het circuit van de
+// 75-dagen-challenge en een vinkje in het dagboek. Eén bron lezen gaf
+// hier "gestopt met kracht" terwijl zij het dagelijks deed.
+import { alleKracht, SOORT } from './krachtBronnen';
 
 // Hoeveel verandering heet vooruitgang? Onder deze drempel is het ruis;
 // twee sessies verschillen onderling al meer.
@@ -190,10 +193,17 @@ export function voortgang({ currentDate = todayLocal(), logs = {}, workouts = nu
     .map(x => x.v));
 
   // 6. Kracht, in sessies per week.
+  const krachtAlles = alleKracht({ currentDate, logs, venster });
   const krachtVan = (van, tot) => {
-    const s = loadStrengthSessions().filter(x => x?.date >= van && x.date <= tot);
+    const d = krachtAlles.dagen.filter(x => x >= van && x <= tot);
     const wkn = Math.max(1, daysBetween(van, tot) / 7);
-    return +(s.length / wkn).toFixed(2);
+    return +(d.length / wkn).toFixed(2);
+  };
+  const zwaarVan = (van, tot) => {
+    const d = [...new Set(krachtAlles.zwaar.filter(x => x.date >= van && x.date <= tot)
+      .map(x => x.date))];
+    const wkn = Math.max(1, daysBetween(van, tot) / 7);
+    return +(d.length / wkn).toFixed(2);
   };
   // Kracht en rusthartslag worden niet in twee helften van een half jaar
   // vergeleken maar in twee blokken van zes weken, direct achter elkaar.
@@ -227,8 +237,16 @@ export function voortgang({ currentDate = todayLocal(), logs = {}, workouts = nu
     oordeel({ id: 'kracht', label: 'Krachtsessies per week', eenheid: '',
       was: krachtVan(eerderVan, recentVan), nu: krachtVan(recentVan, currentDate),
       hoger: true,
-      toelichting: 'Zwaar krachtwerk geeft in acht tot twaalf weken 2 tot 4% betere '
-        + 'loopeconomie. Dit is de snelste route naar sneller bij dezelfde hartslag.' }),
+      toelichting: 'Alle kracht bij elkaar: de krachtmodule, het circuit van acht '
+        + 'minuten uit de challenge en een vinkje in je dagboek. Dat hij uit meer dan '
+        + 'één plek komt, is hier een eis en geen detail.' }),
+    oordeel({ id: 'kracht_zwaar', label: 'Waarvan zwaar', eenheid: '',
+      was: zwaarVan(eerderVan, recentVan), nu: zwaarVan(recentVan, currentDate),
+      hoger: true,
+      toelichting: 'Alleen zware, lage herhalingen geven in acht tot twaalf weken 2 tot '
+        + '4% betere loopeconomie. Een circuit van acht minuten telt voor je ritme en '
+        + 'je romp, maar niet voor deze winst — dat zijn twee verschillende dingen die '
+        + 'allebei kracht heten.' }),
     oordeel({ id: 'rusthartslag', label: 'Rusthartslag', eenheid: 'bpm',
       was: rhrVan(eerderVan, recentVan), nu: rhrVan(recentVan, currentDate), hoger: false,
       toelichting: 'Een dalende rusthartslag hoort bij een systeem dat herstelt van wat '
@@ -269,14 +287,14 @@ export function voortgang({ currentDate = todayLocal(), logs = {}, workouts = nu
         + 'binnen het venster waarin de vorige prikkel nog telt — ruwweg twee tot drie '
         + 'dagen. Dit is niet je lichaam; dit is de kalender.',
     };
-  } else if (per.kracht.nu != null && per.kracht.nu < 1) {
+  } else if (per.kracht_zwaar.nu != null && per.kracht_zwaar.nu < 1) {
     diagnose = {
       id: 'kracht',
       kop: 'Je loopt genoeg, maar de prikkel die economie geeft ontbreekt.',
-      tekst: 'De frequentie staat, en toch beweegt de economie niet. Dan is het volgende '
-        + 'wat erbij hoort zwaar krachtwerk — twee keer per week, lage herhalingen. Dat is '
-        + 'in dit tijdsbestek de best onderbouwde route naar hetzelfde tempo bij een '
-        + 'lagere hartslag.',
+      tekst: 'De frequentie staat en je dóét kracht — alleen niet de soort die '
+        + 'loopeconomie verbetert. Daarvoor is zwaar en laag in herhalingen nodig, twee '
+        + 'keer per week. Je korte circuit mag gewoon blijven staan; dit komt ernaast, '
+        + 'niet in plaats daarvan.',
     };
   } else if (per.duur.verdict === 'vooruit') {
     diagnose = {
