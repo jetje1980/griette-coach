@@ -19,6 +19,8 @@ import {
   loadWorkouts, toleranceFor, paceToMin, fmtPace, cardiacDrift,
 } from './workouts';
 import { loadHrSettings } from './goals';
+// Eén motor voor de verwachte racetijd; zie de toelichting bij de scenario's.
+import { raceExpectation } from './progressExpectation';
 import { longestToleratedRun, addDays } from './restday';
 import { pacePrediction, runEconomyTrend } from './pace';
 // todayLocal ontbrak: economyTrend kreeg een standaardwaarde met deze
@@ -364,20 +366,37 @@ export function upcomingRaces(currentDate) {
   // Afstand, datum en doeltijd van een wedstrijd komen uit het racedoel,
   // niet uit het trainingsschema. Het schema beschrijft de dag eromheen —
   // inlopen, strategie, uitlopen — maar bepaalt niet hoe lang de race is.
-  const goals = loadRaceGoals();
-  return RUNS
-    .filter(r => r.race && r.fixedDate)
-    .map(r => {
-      const goal = r.raceGoalId ? goals.find(g => g.id === r.raceGoalId) : null;
-      const date = goal?.date || r.fixedDate;
+  // ── De racedoelen bepalen wélke races er zijn ────────────────
+  //
+  // Hier werd van de andere kant begonnen: het oude trainingsschema
+  // leverde de lijst, en een racedoel mocht hem hooguit aanvullen. Dat
+  // schema kent precies twee wedstrijden met een vaste datum — 3 en 31
+  // oktober — en die zijn allebei voorbij. Ameland op 12 december staat
+  // er niet in en kon er ook niet in komen zonder de code te wijzigen.
+  // Gevolg: op Progressie stond geen enkele race meer, terwijl de
+  // Ameland-tab een volledige voorspelling toonde. Twee schermen, één
+  // vraag, twee antwoorden — alweer.
+  //
+  // Nu levert het racedoel de race en het schema alleen nog de
+  // loop/wandel-strategie, als er toevallig een schemadag op die datum
+  // valt. Een race zonder schemadag is gewoon een race.
+  const goals = loadRaceGoals({ includeDisabled: false });
+  const schemaRaces = RUNS.filter(r => r.race && r.fixedDate);
+  return goals
+    .filter(g => g.date)
+    .map(g => {
+      const r = schemaRaces.find(x => x.raceGoalId === g.id)
+        || schemaRaces.find(x => x.fixedDate === g.date) || null;
       return {
-        nr: r.nr, date,
-        name: goal?.name || r.description.replace(/^🏁\s*/, '').split('·')[0].trim(),
-        distanceKm: goal?.distanceKm ?? runDistanceKm(r),
-        targetTimeSec: goal?.targetTimeSec ?? null,
-        terrain: goal?.terrain || RACE_TERRAIN[r.nr] || 'road',
-        strategy: { runMin: r.runMin, walkMin: r.walkMin },
-        goal, run: r,
+        nr: r?.nr ?? null, date: g.date,
+        name: g.name
+          || r?.description.replace(/^🏁\s*/, '').split('·')[0].trim()
+          || 'Wedstrijd',
+        distanceKm: g.distanceKm ?? (r ? runDistanceKm(r) : null),
+        targetTimeSec: g.targetTimeSec ?? null,
+        terrain: g.terrain || (r ? RACE_TERRAIN[r.nr] : null) || 'road',
+        strategy: r ? { runMin: r.runMin, walkMin: r.walkMin } : {},
+        goal: g, run: r,
       };
     })
     .filter(r => r.date >= currentDate)
@@ -494,21 +513,67 @@ export function raceForecast(race, logs = {}, currentDate) {
     };
   }
 
-  const conservative = scenario('conservative', {
-    gainFactor: 0, terrainPenalty: terrain.max, extraWalk: 0.06, fadeFactor: 1,
-    label: 'Conservatief',
-    note: 'Geen verdere vooruitgang, terrein op zijn zwaarst, extra wandelpauzes, volledig wegzakken over de afstand. Dit is de uitkomst waar je op mag rekenen.',
+  // ── De tijden komen uit één motor ─────────────────────────────
+  //
+  // Hieronder stond een tweede racemodel: eigen anker, eigen winst per
+  // week, eigen terrein- en wegzak-opslagen. Daarnaast rekent
+  // progressExpectation.js dezelfde vraag uit voor de Ameland-tab, in
+  // twee fasen en op racehartslag. Twee modellen voor één vraag geven
+  // twee antwoorden, en zij leest ze allebei.
+  //
+  // Het verschil is niet dat het ene model beter rekent. Het is dat het
+  // andere gebouwd is op wat er sindsdien is bijgekomen: terugpakken
+  // versus nieuwe winst, haar eigen gemeten tempo zodra dat er is, en
+  // een racehartslag in plaats van de easy-band. Dus komen de tijden
+  // daarvandaan; wat dit bestand als enige heeft — de veiligheidsgrenzen,
+  // de wegzak-correctie als bewijs ontbreekt, de beperkingen — blijft.
+  const verwachting = raceExpectation({
+    currentDate, raceDate: race.date,
+    distanceKm: race.distanceKm || 5,
+    terrain: race.terrain || 'road',
   });
-  const likely = scenario('likely', {
-    gainFactor: 0.6, terrainPenalty: (terrain.min + terrain.max) / 2, extraWalk: 0.02, fadeFactor: 0.7,
-    label: 'Waarschijnlijk',
-    note: 'Zestig procent van je waargenomen trend doorgetrokken, terrein gemiddeld ingeschat.',
-  });
-  const stretch = cleanRecord ? scenario('stretch', {
-    gainFactor: 1, terrainPenalty: terrain.min, extraWalk: 0, fadeFactor: 0.4,
-    label: 'Stretch',
-    note: 'Volle trend, gunstige dag, terrein mee. Alleen als je herstel schoon blijft.',
-  }) : null;
+
+  const uitMotor = (key, label, s, note) => (s ? {
+    key, label, note,
+    paceMin: s.pace,
+    pace: fmtPace(s.pace),
+    finishMinutes: s.time,
+    finishTime: fmtTime(s.time),
+    terrainPenalty: Math.round((terrain.min + terrain.max) / 2 * 100),
+    extraWalkPenalty: 0,
+    fadePenalty: Math.round(fadePenalty * 100),
+    bron: 'verwachting',
+  } : null);
+
+  const conservative = verwachting.known
+    ? uitMotor('conservative', 'Conservatief', verwachting.low,
+      'Het ritme komt maar half terug en er komt geen nieuwe winst bij. Dit is de '
+      + 'uitkomst waar je op mag rekenen.')
+    : scenario('conservative', {
+      gainFactor: 0, terrainPenalty: terrain.max, extraWalk: 0.06, fadeFactor: 1,
+      label: 'Conservatief',
+      note: 'Geen verdere vooruitgang, terrein op zijn zwaarst, extra wandelpauzes, volledig wegzakken over de afstand. Dit is de uitkomst waar je op mag rekenen.',
+    });
+  const likely = verwachting.known
+    ? uitMotor('likely', 'Waarschijnlijk', verwachting.mid,
+      `Eerst terugpakken wat je al liep, daarna ${String(verwachting.rate?.perWeek)
+        .replace('.', ',')}% nieuwe winst per week — `
+      + (verwachting.rate?.source === 'gemeten'
+        ? 'jouw eigen gemeten tempo.' : 'het literatuurgetal, tot je eigen reeks lang genoeg is.'))
+    : scenario('likely', {
+      gainFactor: 0.6, terrainPenalty: (terrain.min + terrain.max) / 2, extraWalk: 0.02, fadeFactor: 0.7,
+      label: 'Waarschijnlijk',
+      note: 'Zestig procent van je waargenomen trend doorgetrokken, terrein gemiddeld ingeschat.',
+    });
+  const stretch = verwachting.known
+    ? (cleanRecord ? uitMotor('stretch', 'Stretch', verwachting.high,
+      'Het ritme komt een week eerder terug en alles zit mee. Alleen als je herstel '
+      + 'schoon blijft.') : null)
+    : (cleanRecord ? scenario('stretch', {
+      gainFactor: 1, terrainPenalty: terrain.min, extraWalk: 0, fadeFactor: 0.4,
+      label: 'Stretch',
+      note: 'Volle trend, gunstige dag, terrein mee. Alleen als je herstel schoon blijft.',
+    }) : null);
 
   // Vertrouwen: hoe ver weg, hoeveel data, en hoe verhoudt de afstand zich
   // tot wat je aantoonbaar verdraagt?

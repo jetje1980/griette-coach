@@ -13,6 +13,8 @@ import { loadWorkouts, fmtPace, paceToMin } from './workouts';
 import { allBreakdowns, runEconomyTrend, runWalkStructure } from './pace';
 import { exertionalResponse, headacheTrend, pemFreeWeeks } from './symptoms';
 import { calibrateHr, earlyWarnings } from './runningHistory';
+// De racedoelen zijn de bron voor welke wedstrijden er zijn.
+import { loadRaceGoals } from './raceGoalModel';
 
 export const RACES = [
   {
@@ -42,8 +44,40 @@ export const RACES = [
 ];
 
 export const findRace = (id) => RACES.find(r => r.id === id) || null;
+
+// ── Welke races er zijn, komt uit haar racedoelen ───────────────
+//
+// Hier stond `RACES.filter(...)`: de twee wedstrijden hierboven, met de
+// hand ingetypt. Allebei inmiddels voorbij. Daardoor stond er op
+// Progressie geen enkele race meer terwijl Ameland over vijf weken is —
+// en op de Ameland-tab een volledige voorspelling. Zij vroeg of
+// Progressie wel was meegegaan met de nieuwe uitgangspunten, en dit was
+// het antwoord: nee, het keek naar een lijst uit augustus.
+//
+// Een lijst wedstrijden die met de hand wordt bijgehouden naast een
+// scherm waarin zij haar racedoelen invult, loopt gegarandeerd uit
+// elkaar. De racedoelen zijn de bron; RACES levert alleen nog de
+// voorwaarden van een stretchdoel, op id.
 export const upcomingRaces = (currentDate = todayLocal()) =>
-  RACES.filter(r => r.date >= currentDate).sort((a, b) => a.date.localeCompare(b.date));
+  loadRaceGoals({ includeDisabled: false })
+    .filter(g => g.date && g.date >= currentDate)
+    .map(g => {
+      const oud = RACES.find(r => r.id === g.id) || null;
+      return {
+        id: g.id, date: g.date, name: g.name,
+        distanceKm: g.distanceKm ?? oud?.distanceKm ?? null,
+        targetMinutes: g.targetMinutes ?? oud?.targetMinutes ?? null,
+        targetPace: g.targetPace ?? oud?.targetPace ?? null,
+        kind: g.kind || oud?.kind || 'target',
+        terrain: g.terrain || oud?.terrain || 'road',
+        note: g.note || oud?.note || null,
+        // Harde voorwaarden horen bij een stretchdoel en staan als code in
+        // RACES; die kunnen niet uit een invoerveld komen.
+        conditions: oud?.conditions || [],
+        goal: g,
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
 
 // ── Mijlpalen onderweg ──────────────────────────────────────────
 // Concreet en oplopend, zodat er iets te halen valt tussen vandaag en
