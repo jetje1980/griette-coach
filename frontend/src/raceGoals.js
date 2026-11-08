@@ -13,6 +13,9 @@ import { loadWorkouts, fmtPace, paceToMin } from './workouts';
 import { allBreakdowns, runEconomyTrend, runWalkStructure } from './pace';
 import { exertionalResponse, headacheTrend, pemFreeWeeks } from './symptoms';
 import { calibrateHr, earlyWarnings } from './runningHistory';
+// Eén motor voor de verwachte racetijd — dezelfde die de Ameland-tab en
+// Progressie → Run gebruiken.
+import { raceExpectation } from './progressExpectation';
 // De racedoelen zijn de bron voor welke wedstrijden er zijn.
 import { loadRaceGoals } from './raceGoalModel';
 
@@ -199,13 +202,44 @@ export function raceReadiness(race, { logs = {}, currentDate = todayLocal(), sta
 
   // Waar staat ze nu ten opzichte van de raceafstand?
   const coverage = race.distanceKm ? s.longestTolerated / race.distanceKm : null;
-  const paceGap = s.runPace != null ? s.runPace - race.targetPace : null;
+  // Het tempoverschil hoort bij dezelfde voorspelling als de finishtijd.
+  // Stond hier het sessietempo tegenover het doeltempo, dan vergelijk je
+  // een tempo mét wandelpauzes met een racetempo — en dan leest +158
+  // sec/km als een afstand die het niet is. Zie de toelichting hieronder
+  // bij forecastMin. Wordt pas gezet zodra de verwachting bekend is.
+  let paceGap = s.runPace != null ? s.runPace - race.targetPace : null;
 
-  // De verwachte finishtijd op het huidige looptempo, met een terreinopslag.
+  // ── De verwachte finishtijd komt uit één motor ───────────────
+  //
+  // Hier stond: sessietempo × afstand × een terreinopslag van 12%. Dat
+  // gaf 53:54 voor Ameland terwijl de Ameland-tab en Progressie → Run
+  // 45:18 zeiden. Zij zag het meteen: "klopt dit wat hier staat?"
+  //
+  // Het verschil is geen afronding maar een ander soort getal. Twee
+  // fouten zaten erin. Het anker was haar sessietempo — en daar zitten
+  // de wandelpauzes in, dus het is geen looptempo. En er zat geen
+  // vooruitgang in: het rekende alsof de vijf weken tot de race niets
+  // opleveren. Beide maken de uitkomst somberder dan hij is, en een
+  // somber getal naast een realistisch getal op een ander tabblad is
+  // precies wat deze app niet moet doen.
+  //
+  // Nu komt de tijd uit raceExpectation: efficiëntie op racehartslag,
+  // met de terreintoeslag in minuten per kilometer in plaats van een
+  // percentage. De terugval op het oude sommetje blijft staan voor het
+  // geval er te weinig gemeten is om een verwachting te maken.
+  const verwachting = raceExpectation({
+    currentDate, raceDate: race.date,
+    distanceKm: race.distanceKm || 5, terrain: race.terrain || 'road',
+  });
   const terrainPenalty = race.terrain === 'trail' ? 0.12
     : race.terrain === 'beach' ? 0.09 : 0;
-  const forecastMin = s.runPace != null
-    ? s.runPace * race.distanceKm * (1 + terrainPenalty) : null;
+  const forecastMin = verwachting.known
+    ? verwachting.mid.time
+    : (s.runPace != null ? s.runPace * race.distanceKm * (1 + terrainPenalty) : null);
+  const forecastSource = verwachting.known ? 'verwachting' : 'sessietempo';
+  if (verwachting.known && race.targetPace != null) {
+    paceGap = verwachting.mid.pace - race.targetPace;
+  }
 
   // Het oordeel. Herstel weegt zwaarder dan tempo — dat is de hele les.
   let verdict;
@@ -246,6 +280,7 @@ export function raceReadiness(race, { logs = {}, currentDate = todayLocal(), sta
     verdict, ...READINESS[verdict],
     forecastMinutes: forecastMin ? Math.round(forecastMin) : null,
     forecastLabel: forecastMin ? formatTime(forecastMin) : null,
+    forecastSource,
     targetLabel: formatTime(race.targetMinutes),
     coverage: coverage != null ? Math.round(coverage * 100) : null,
     paceGapSec: paceGap != null ? Math.round(paceGap * 60) : null,

@@ -28,6 +28,7 @@ import { allRaceForecasts, upcomingRaces as forecastRaces } from '../../src/fore
 import { upcomingRaces as dashboardRaces } from '../../src/raceGoals.js';
 import { raceExpectation } from '../../src/progressExpectation.js';
 import { saveRaceGoal } from '../../src/raceGoalModel.js';
+import { raceReadiness } from '../../src/raceGoals.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -140,6 +141,32 @@ S('3 · Wat forecast.js als enige heeft, blijft staan');
   ok('de beperkingen van de voorspelling staan erbij', f.limits.length > 0,
     JSON.stringify(f.limits).slice(0, 200));
   ok('en een vertrouwensniveau', !!f.confidence, String(f.confidence));
+}
+
+S('4 · Ook de racekaart op Progressie zegt hetzelfde');
+{
+  // Dit was het vierde getal voor dezelfde vraag. De racekaart rekende
+  // sessietempo × afstand × 12% terrein en kwam op 53:54, terwijl de
+  // Ameland-tab en Progressie → Run allebei 45:18 zeiden. Twee fouten in
+  // één som: het anker was haar sessietempo — inclusief wandelpauzes, dus
+  // geen looptempo — en er zat geen enkele vooruitgang in, alsof de vijf
+  // weken tot de race niets opleveren.
+  const logs = wereld();
+  saveRaceGoal({ id: 'ameland', date: RACE, name: 'Ameland Adventure Run 5 km',
+    terrain: 'trail', distanceKm: 5, targetTime: '35:00', enabled: true });
+  const race = dashboardRaces(TODAY).find(r => r.date === RACE);
+  const r = raceReadiness(race, { logs, currentDate: TODAY });
+  const e = raceExpectation({ currentDate: TODAY, raceDate: RACE,
+    distanceKm: 5, terrain: 'trail' });
+  console.log(`      racekaart ${r.forecastLabel} · verwachting ${e.fmt.time(e.mid.time)}`);
+  ok('de racekaart gebruikt de verwachting als bron',
+    r.forecastSource === 'verwachting', String(r.forecastSource));
+  ok('en komt op dezelfde minuut uit als de Ameland-tab',
+    Math.abs(r.forecastMinutes - e.mid.time) < 1,
+    `${r.forecastMinutes} vs ${e.mid.time}`);
+  ok('het tempoverschil komt uit diezelfde voorspelling, niet uit het sessietempo',
+    Math.abs(r.paceGapSec - Math.round((e.mid.pace - 7.0) * 60)) <= 1,
+    `${r.paceGapSec} vs ${Math.round((e.mid.pace - 7.0) * 60)}`);
 }
 
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);
