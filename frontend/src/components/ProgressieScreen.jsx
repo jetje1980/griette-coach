@@ -1498,7 +1498,7 @@ export default function ProgressieScreen({ logs, streak }) {
         <>
           {/* §37: één scherm met vandaag, foto's, samenstelling en doel —
               en bij elk getal wat het met het besluit doet. */}
-          <ProgressieOverzicht currentDate={todayStr()} sessions={sessions} />
+          <ProgressieOverzicht currentDate={todayStr()} sessions={sessions} logs={logs} />
           <MyChangePanel sessions={sessions} measurements={measurements}
             logs={logs} currentDate={todayStr()}
             onReload={reloadPhotos} />

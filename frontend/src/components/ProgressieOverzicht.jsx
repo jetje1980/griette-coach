@@ -6,6 +6,8 @@ import { series, rollingMean, trend, latest } from '../timeline';
 import { comparisonTracks, TRACK } from '../photoAnalysis';
 import { activeMilestone, proposeMilestone, reviewDue, REVIEW_WEEKS } from '../bodyReview';
 import { LIMITER_NL } from '../limiter';
+// Het oordeel zelf: ga je vooruit, waarop wel en waarop niet.
+import { voortgang, driemaandenplan } from '../voortgang';
 
 // Eén scherm dat de vraag beantwoordt: waar sta ik, en wat volgt daaruit?
 //
@@ -117,7 +119,7 @@ function trendTekst(t, eenheid) {
   };
 }
 
-export default function ProgressieOverzicht({ currentDate = todayLocal(), sessions = [] }) {
+export default function ProgressieOverzicht({ currentDate = todayLocal(), sessions = [], logs = {} }) {
   const [versie, setVersie] = useState(0);
 
   const d = useMemo(() => {
@@ -152,10 +154,97 @@ export default function ProgressieOverzicht({ currentDate = todayLocal(), sessio
     [currentDate, versie]);
 
   if (!d) return null;
+  // Ga ik vooruit? Eén oordeel per dimensie, en het voorstel dat daaruit
+  // volgt. Niet nog een grafiek: de vraag die zij stelde.
+  const vg = useMemo(() => {
+    try { return voortgang({ currentDate, logs }); } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, versie, logs]);
+  const plan = useMemo(() => {
+    try { return vg?.known ? driemaandenplan({ voortgang: vg, currentDate }) : null; }
+    catch { return null; }
+  }, [vg, currentDate]);
+
   void setVersie;
 
   return (
     <div data-progressie-overzicht>
+      {/* ── GA IK VOORUIT? ──────────────────────────────────
+          Dit stond nergens. Progressie toonde grafieken, sessies en
+          scores, maar nergens het oordeel zelf. "Nauwelijks progressie"
+          is één gevoel over een stapel dingen die zich elk anders
+          gedragen — haar volume groeide wel degelijk terwijl haar
+          economie stilstond. Wie die twee op één hoop gooit, concludeert
+          dat het niet werkt terwijl de helft wel werkt. */}
+      {vg?.known && (
+        <Sectie titel="Ga ik vooruit?">
+          <div className="os-card" data-voortgang={vg.dimensions.length}>
+            <div style={{ fontSize: 12.5, lineHeight: 1.5, fontWeight: 700 }}>{vg.line}</div>
+            <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginTop: 2 }}>
+              {vg.sessions} sessies van {vg.from} tot {vg.to} · {vg.perWeek} per week
+            </div>
+            {vg.dimensions.map(dim => (
+              <div key={dim.id} data-dimensie={dim.id}
+                style={{ padding: '7px 0', borderTop: '1px solid var(--border)',
+                  marginTop: 6 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 11.5, flex: 1 }}>{dim.regel}</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.3px',
+                    textTransform: 'uppercase',
+                    color: dim.verdict === 'vooruit' ? 'var(--sage)'
+                      : dim.verdict === 'achteruit' ? 'var(--gold)' : 'var(--ghost)' }}>
+                    {dim.verdict}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--sub)', lineHeight: 1.45 }}>
+                  {dim.toelichting}
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 8, paddingTop: 7,
+              borderTop: '1px solid var(--border)' }} data-diagnose={vg.diagnosis.id}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, lineHeight: 1.4 }}>
+                {vg.diagnosis.kop}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.55,
+                marginTop: 3 }}>
+                {vg.diagnosis.tekst}
+              </div>
+            </div>
+          </div>
+
+          {plan?.known && (
+            <div className="os-card" style={{ marginTop: 8,
+              borderLeft: '3px solid var(--sage)' }} data-driemaanden={plan.blokken.length}>
+              <div style={{ fontSize: 12.5, fontWeight: 800 }}>{plan.kop}</div>
+              {plan.blokken.map(b => (
+                <div key={b.nr} data-blok={b.nr}
+                  style={{ padding: '7px 0', borderTop: '1px solid var(--border)',
+                    marginTop: 6 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 800 }}>
+                    Blok {b.nr} · {b.titel}
+                    <span style={{ color: 'var(--ghost)', fontWeight: 600 }}>
+                      {' '}({b.van.slice(5)} – {b.tot.slice(5)})
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>{b.doel}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--sage)', lineHeight: 1.45 }}>
+                    meet: {b.meet}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--sub)', lineHeight: 1.45 }}>
+                    {b.waarom}
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontSize: 10.5, color: 'var(--gold)', lineHeight: 1.5,
+                marginTop: 7, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+                {plan.let_op}
+              </div>
+            </div>
+          )}
+        </Sectie>
+      )}
+
       {/* ── VANDAAG ─────────────────────────────────────────── */}
       <Sectie titel="Vandaag">
         <div className="os-card">
