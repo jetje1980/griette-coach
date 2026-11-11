@@ -55,7 +55,7 @@ import { sessionTarget, hrUitVoorschrift } from './sessionTarget';
 import { hrPrescription } from './hrModel';
 import { benodigdeEfficientie } from './doelPad';
 import { TERREIN } from './progressExpectation';
-import { krachtBeeld } from './krachtBronnen';
+import { krachtBeeld, alleKracht, SOORT } from './krachtBronnen';
 
 const fmtTijd = (sec) => (sec == null || !Number.isFinite(sec) ? null
   : `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`);
@@ -239,11 +239,51 @@ export function volledigeTabel({ currentDate = todayLocal(), logs = {},
   workouts = null, dagen = [], aantal = TABEL_AANTAL } = {}) {
   const terug = sessieTabel({ currentDate, logs, workouts, aantal });
 
+  // Heb ik die dag ook kracht gedaan? Uit alleKracht, want dat is de
+  // bron die krachtmodule, het circuit van acht minuten en een vinkje in
+  // het dagboek bij elkaar leest. Eén van die drie los lezen is hier al
+  // twee keer misgegaan: de app meldde "nul krachtsessies" terwijl zij er
+  // veertien had gedaan.
+  const krachtOp = new Map();
+  try {
+    for (const sessie of alleKracht({ currentDate, logs, venster: 180 }).sessies) {
+      const al = krachtOp.get(sessie.date);
+      // Twee sessies op één dag: de zwaarste wint, want dat is wat de
+      // dag karakteriseert. Een zware les met daarnaast het circuit is
+      // een krachtdag, geen circuitdag.
+      const rang = { kort: 1, matig: 2, zwaar: 3 };
+      if (!al || (rang[sessie.soort] || 0) > (rang[al.soort] || 0)) {
+        krachtOp.set(sessie.date, sessie);
+      }
+    }
+  } catch { /* geen kracht te lezen: de kolom blijft dan gewoon leeg */ }
+
+  // Hoe de kolom leest. Een circuit van acht minuten is iets anders dan
+  // een zware sessie, en dat verschil is precies waar haar economie van
+  // afhangt — dus staat het er, in plaats van één vinkje voor allebei.
+  const krachtVan = (datum, gepland) => {
+    const g = krachtOp.get(datum);
+    if (g) {
+      return {
+        gedaan: true,
+        soort: g.soort,
+        weergave: g.soort === SOORT.ZWAAR ? 'zwaar'
+          : g.soort === SOORT.MATIG ? 'kracht' : 'circuit',
+        bron: g.bronLabel || null,
+      };
+    }
+    if (datum > currentDate && gepland) {
+      return { gedaan: false, gepland: true, soort: null, weergave: 'gepland' };
+    }
+    return { gedaan: false, gepland: false, soort: null, weergave: null };
+  };
+
   // Gelopen trainingen, oudste eerst — zodat de tabel van verleden naar
   // toekomst leest en "vandaag" er middenin staat.
   const gelopen = [...terug.rows].sort((a, b) => a.date.localeCompare(b.date))
     .map(r => ({ ...r, status: r.known ? 'gelopen' : 'onmeetbaar', gepland: false,
-      blokWeergave: r.known && r.langsteBlokMin ? `${r.langsteBlokMin}′` : null }));
+      blokWeergave: r.known && r.langsteBlokMin ? `${r.langsteBlokMin}′` : null,
+      kracht: krachtVan(r.date, false) }));
   const gelopenOp = new Map(gelopen.map(r => [r.date, r]));
 
   const vooruit = [];
@@ -270,6 +310,7 @@ export function volledigeTabel({ currentDate = todayLocal(), logs = {},
           : d.run.blockMin != null ? `${d.run.blockMin}′` : null,
       doelHr,
       doelTempo,
+      kracht: krachtVan(d.date, !!d.strength),
       gated: !!d.gated,
       gateReason: d.gateReason || null,
       gepland: true,

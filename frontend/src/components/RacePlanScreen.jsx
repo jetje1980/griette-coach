@@ -686,6 +686,68 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
           Het doel per rij is gereconstrueerd met de gegevens van de dag
           ervóór. Rekenen met de gegevens van vandaag zou haar prestatie
           afmeten aan een lat die achteraf is verlegd. */}
+      {/* ── Waarom staat de volgende loop daar ────────────────
+          Zij vroeg: "waarom staat er nu zondag pas weer een trainingsrun
+          klaar in plaats van vrijdag? Volgens mij kom je zo niet aan de 4
+          per week." Ze had op allebei gelijk, en het antwoord stond
+          nergens: haar weekplafond staat op drie, en drie loopdagen in
+          een week van zeven kunnen rekenkundig niet om de dag. Dat hoort
+          hier te staan, naast het schema waar ze naar kijkt — niet
+          verstopt in een knop verderop. */}
+      {plan.cadans && (
+        <>
+          <div className="os-section-label">{plan.cadans.kop}</div>
+          <div className="os-card" style={{ marginBottom: 12,
+            borderLeft: `3px solid ${plan.cadans.omDeDag ? 'var(--sage)' : 'var(--clay)'}` }}
+            data-cadans={plan.cadans.plafond}
+            data-cadans-omdedag={plan.cadans.omDeDag ? '1' : '0'}>
+            <div style={{ fontSize: 12, lineHeight: 1.55 }}>{plan.cadans.uitleg}</div>
+
+            <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
+              {[['plafond', `${plan.cadans.plafond}/week`],
+                ['grootste gat', plan.cadans.grootsteGat != null
+                  ? `${plan.cadans.grootsteGat} ${plan.cadans.grootsteGat === 1 ? 'dag' : 'dagen'}`
+                  : '—']].map(([l, v]) => (
+                  <div key={l}>
+                    <div style={{ fontSize: 9.5, color: 'var(--ghost)', fontWeight: 700,
+                      textTransform: 'uppercase', letterSpacing: '0.4px' }}>{l}</div>
+                    <div style={{ fontSize: 15, fontWeight: 800,
+                      fontFamily: 'var(--font-serif)' }}>{v}</div>
+                  </div>
+                ))}
+            </div>
+
+            {plan.cadans.winst && (
+              <div style={{ fontSize: 11.5, lineHeight: 1.5, marginTop: 8, paddingTop: 6,
+                borderTop: '1px solid var(--border)' }} data-cadans-winst>
+                {plan.cadans.winst}
+              </div>
+            )}
+
+            {plan.cadans.poort && (
+              <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5,
+                marginTop: 6 }} data-cadans-poort>
+                {plan.cadans.poort.regel}
+              </div>
+            )}
+
+            {!plan.cadans.omDeDag && (
+              <button type="button" data-cadans-knop
+                onClick={() => zetDoel({ metric: 'run_days_week', value: 4 })}
+                className="os-btn-save"
+                style={{ marginTop: 8, padding: '7px 14px', fontSize: 11.5 }}>
+                Zet het plafond op 4 loopdagen
+              </button>
+            )}
+
+            <div style={{ fontSize: 9.5, color: 'var(--ghost)', lineHeight: 1.45,
+              marginTop: 7 }}>
+              {plan.cadans.nuance}
+            </div>
+          </div>
+        </>
+      )}
+
       {volledig.known && (
         <>
           <div className="os-section-label">Elke training tot Ameland</div>
@@ -698,7 +760,8 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                 <thead>
                   <tr style={{ color: 'var(--ghost)', fontSize: 9.5, fontWeight: 700,
                     textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                    {['datum', 'doel HR', 'jouw HR', 'doeltempo', 'jouw tempo', 'blok', '']
+                    {['datum', 'doel HR', 'jouw HR', 'doeltempo', 'jouw tempo', 'blok',
+                      'kracht', '']
                       .map((k, i) => (
                         <th key={k + i} style={{ textAlign: i === 0 ? 'left' : 'right',
                           padding: '0 5px 5px 0', whiteSpace: 'nowrap',
@@ -722,7 +785,7 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                             fontSize: 9.5, marginLeft: 3 }}>{r.dayShort}</span> : null}
                         </td>
                         {r.status === 'onmeetbaar' ? (
-                          <td colSpan={6} style={{ padding: '5px 0', textAlign: 'right',
+                          <td colSpan={7} style={{ padding: '5px 0', textAlign: 'right',
                             color: 'var(--ghost)', fontSize: 10.5 }}>
                             niet te meten
                           </td>
@@ -754,6 +817,18 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                             </td>
                             <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
                               color: 'var(--sub)' }}>{r.blokWeergave ?? '—'}</td>
+                            {/* Heb ik die dag ook kracht gedaan? Zwaar, een
+                                volwaardige sessie en het circuit van acht
+                                minuten zijn niet hetzelfde ding, en juist dat
+                                verschil bepaalt haar loopeconomie — dus staan
+                                ze er los, niet als één vinkje. */}
+                            <td data-kracht={r.kracht?.weergave || 'geen'}
+                              style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                                fontSize: 9.5, whiteSpace: 'nowrap',
+                                color: r.kracht?.soort === 'zwaar' ? 'var(--sage)'
+                                  : r.kracht?.gedaan ? 'var(--sub)' : 'var(--ghost)' }}>
+                              {r.kracht?.weergave ?? '·'}
+                            </td>
                             <td style={{ textAlign: 'right', padding: '5px 0',
                               fontSize: 9.5, whiteSpace: 'nowrap',
                               color: (r.hrSuspect || r.uitbijter) ? 'var(--ghost)'

@@ -34,6 +34,7 @@
 
 import { todayLocal, daysBetween, addDays } from './datetime';
 import { loadWorkouts } from './workouts';
+import { runDayCeiling } from './restday';
 // Kracht komt uit meer dan één plek; zie krachtBronnen.js voor waarom.
 import { krachtBeeld } from './krachtBronnen';
 import { readSymptoms } from './symptoms';
@@ -242,7 +243,22 @@ function tekortRem({ currentDate, logs }) {
 }
 
 // ── De frequentierem ────────────────────────────────────────────
+// Haar regel, in haar woorden: "zet het plafond op 4 loopdagen waarbij
+// het er ook 3 mogen zijn, dus ik mag max 1 training skippen in de week."
+//
+// Hier stond 3,4 per week als los getal, en een grootste gat van drie
+// dagen. Allebei verzonnen drempels die niets wisten van haar plafond.
+// Nu volgt de rem haar regel: de ondergrens is het plafond min één
+// overgeslagen training, en één overgeslagen training in een cadans van
+// twee dagen maakt het gat vier dagen in plaats van twee. Staat het
+// plafond ooit ergens anders, dan schuift deze rem vanzelf mee in plaats
+// van te blijven hangen op een getal uit een andere week.
+export const SKIPS_PER_WEEK = 1;
+export const GAT_NA_SKIP = 4;
+
 function frequentieRem({ currentDate }) {
+  const plafond = runDayCeiling();
+  const ondergrens = Math.max(1, plafond - SKIPS_PER_WEEK);
   const runs = loadWorkouts()
     .filter(w => w?.date && w.date <= currentDate
       && (w.activityType === 'run' || w.activityType == null))
@@ -252,20 +268,24 @@ function frequentieRem({ currentDate }) {
   const gaten = dagen.slice(1).map((d, i) => daysBetween(dagen[i], d));
   const grootste = gaten.length ? Math.max(...gaten) : null;
 
-  if (perWeek >= 3.4 && (grootste == null || grootste <= 3)) {
+  if (perWeek >= ondergrens && (grootste == null || grootste <= GAT_NA_SKIP)) {
     return { id: 'frequentie', label: 'Loopdagen', gewicht: 0,
       stand: `${String(perWeek).replace('.', ',')} per week, grootste gat ${grootste} dagen`,
-      kost: null, wat: 'Zo houden.', status: 'aan' };
+      kost: null,
+      wat: `Zo houden. Je plafond staat op ${plafond}; met ${ondergrens} per week zit je `
+        + 'binnen de afspraak van hoogstens één overgeslagen training.',
+      status: 'aan' };
   }
   return {
     id: 'frequentie', label: 'Loopdagen', gewicht: REM_GEWICHT.frequentie,
     stand: `${String(perWeek).replace('.', ',')} per week in vier weken`
       + (grootste ? `, grootste gat ${grootste} dagen` : ''),
-    kost: 'Je economie piekte in de weken dat je om de drie à vier dagen liep en zakte in '
+    kost: 'Je economie piekte in de weken dat je om de dag liep en zakte in '
       + 'de weken met gaten. Een prikkel die er niet was, telt nergens mee — en dit is de '
       + 'knop die niets kost behalve plannen.',
-    wat: 'Om de dag, vier keer per week. Liever vier keer twintig minuten dan twee keer '
-      + 'veertig: de frequentie is de winst, niet de lengte.',
+    wat: `Om de dag. Je plafond staat op ${plafond} loopdagen; ${ondergrens} per week is `
+      + 'nog binnen de afspraak, daaronder niet. Liever vier keer twintig minuten dan '
+      + 'twee keer veertig: de frequentie is de winst, niet de lengte.',
     status: 'uit',
   };
 }

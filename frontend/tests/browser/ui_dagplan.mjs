@@ -275,6 +275,44 @@ ok('de bijsturing noemt een concrete doelhartslag',
 ok('en het doel van 35:00 blijft met de som erbij staan',
   /35:00/.test(bijTekst), bijTekst.slice(-220));
 
+// ── Waarom staat de volgende loop daar ───────────────────────
+//
+// Zij vroeg waarom er pas zondag weer een run stond in plaats van
+// vrijdag. Het antwoord — haar weekplafond staat op drie, en drie
+// loopdagen kunnen rekenkundig niet om de dag — hoort op het scherm te
+// staan, met de knop die het verandert.
+const cadansKaart = page.locator('[data-cadans]').first();
+ok('de cadansuitleg staat op het scherm', await cadansKaart.count() === 1,
+  String(await cadansKaart.count()));
+const cadansTekst = await cadansKaart.innerText();
+console.log(`      ${cadansTekst.split('\n')[0]}`);
+ok('met het weekplafond erin', /plafond/i.test(cadansTekst), cadansTekst.slice(0, 120));
+ok('en de uitleg waarom om de dag bij drie niet kan',
+  /kunnen niet om de dag/.test(cadansTekst), cadansTekst.slice(0, 200));
+ok('en wat het plafond verhogen oplevert',
+  await page.locator('[data-cadans-winst]').count() === 1, '');
+
+// De knop moet het ook echt doen: plafond omhoog, cadans aan, en het
+// schema eronder opnieuw gerekend.
+const voorStand = await page.getAttribute('[data-cadans]', 'data-cadans-omdedag');
+ok('de cadans staat nog uit', voorStand === '0', String(voorStand));
+const rijenVoor = await page.locator('[data-sessierij]').count();
+
+await page.locator('[data-cadans-knop]').first().click();
+await page.waitForTimeout(900);
+
+ok('na de knop staat de cadans aan',
+  await page.getAttribute('[data-cadans]', 'data-cadans-omdedag') === '1',
+  String(await page.getAttribute('[data-cadans]', 'data-cadans-omdedag')));
+ok('het plafond staat op vier',
+  await page.getAttribute('[data-cadans]', 'data-cadans') === '4',
+  String(await page.getAttribute('[data-cadans]', 'data-cadans')));
+ok('en er staan meer trainingen in de tabel dan ervoor',
+  await page.locator('[data-sessierij]').count() > rijenVoor,
+  `${rijenVoor} → ${await page.locator('[data-sessierij]').count()}`);
+ok('de knop is weg, want er valt niets meer te verhogen',
+  await page.locator('[data-cadans-knop]').count() === 0, '');
+
 ok('geen JS-fout', errors.length === 0, errors.join(' | '));
 await b.close();
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

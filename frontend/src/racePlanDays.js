@@ -220,6 +220,93 @@ function weekPatroonVoor(plafond) {
   return p;
 }
 
+// ── Waarom staat de volgende loop daar, en niet eerder ──────────
+//
+// Zij keek naar het schema en vroeg: "waarom staat er nu zondag pas weer
+// een trainingsrun klaar in plaats van vrijdag? Volgens mij kom je zo niet
+// aan de 4 per week."
+//
+// Ze heeft op allebei gelijk, en het antwoord stond nergens op het
+// scherm. Haar weekplafond staat op drie loopdagen. Drie loopdagen in een
+// week van zeven kán niet om de dag: de gaten tussen drie runs tellen
+// samen altijd op tot zeven, dus is er altijd één gat van drie dagen.
+// Donderdag naar zondag is dat gat. Het is geen fout in de planning maar
+// een rekenkundige onvermijdelijkheid van het getal drie.
+//
+// Pas vanaf vier gaat de cadans van twee dagen aan, en dan is het grootste
+// gat twee dagen en komt het gemiddelde op ongeveer 3,3 per week.
+//
+// Dat getal stond achter een knop die zij moest vinden, zonder dat ergens
+// stond dat juist díe knop het om-de-dag-lopen aanzet. Een plan dat zijn
+// eigen beperking niet uitlegt, laat de gebruiker denken dat het een fout
+// is. Daarom rekent dit blok het voor, met de stand van de poort erbij:
+// die vindt het nú niet verantwoord om zelf te verhogen, en waaróm hoort
+// er net zo goed te staan als dát.
+export function cadansUitleg({ plafond, verdict, dagen = [] }) {
+  const loopdagen = dagen.filter(d => d.run && !d.run.isRace).map(d => d.date);
+  const gaten = loopdagen.slice(1).map((d, i) => daysBetween(loopdagen[i], d));
+  const grootste = gaten.length ? Math.max(...gaten) : null;
+
+  // Het eerstvolgende gat van meer dan twee dagen: dát is de dag waar zij
+  // naar kijkt als ze vraagt waarom het niet eerder is.
+  const i = gaten.findIndex(g => g > 2);
+  const sprong = i >= 0
+    ? { van: loopdagen[i], naar: loopdagen[i + 1], dagen: gaten[i] } : null;
+
+  const omDeDag = plafond >= 4;
+  return {
+    plafond,
+    omDeDag,
+    grootsteGat: grootste,
+    sprong,
+    kop: omDeDag
+      ? 'Je loopt om de dag'
+      : `Je plafond staat op ${plafond} loopdagen per week`,
+    uitleg: omDeDag
+      ? `Met ${plafond} loopdagen als plafond loopt het schema op een cyclus van twee `
+        + 'dagen in plaats van op vaste weekdagen. Nooit twee dagen op rij, nooit meer '
+        + 'dan één dag ertussen, en de trainingsdagen schuiven door de week heen.'
+      : `Drie loopdagen in een week van zeven kunnen niet om de dag. De gaten tussen `
+        + 'drie runs tellen samen altijd op tot zeven dagen, dus er is er altijd één van '
+        + 'drie'
+        + (sprong
+          ? ` — bij jou van ${fmtDag(sprong.van)} naar ${fmtDag(sprong.naar)}.`
+          : '.')
+        + ' Dat is geen fout in de planning; dat is wat het getal drie doet.',
+    // Wat het oplevert als het plafond omhooggaat. Concreet, niet "meer".
+    winst: omDeDag ? null
+      : 'Zet je het plafond op 4, dan gaat de cadans van twee dagen aan: grootste gat '
+        + 'twee dagen in plaats van drie, en gemiddeld 3,3 loopdagen per week in plaats '
+        + 'van precies 3.',
+    // En wat de poort ervan vindt. Die verhoogt het niet uit zichzelf, en
+    // de reden daarvoor is geen detail: het blijkt vaak niet "je bent er
+    // niet klaar voor" te zijn maar "er staan herstelchecks open".
+    // Alleen relevant zolang het plafond ónder vier staat. Daarboven gaat
+    // dit oordeel over een vijfde loopdag, en dat is niet de vraag die zij
+    // stelde — dan leest het als een waarschuwing bij een schema dat
+    // precies doet wat ze wilde.
+    poort: (verdict && !omDeDag) ? {
+      magVanzelf: !!verdict.canRaise,
+      blokkades: verdict.blockers || [],
+      regel: verdict.canRaise
+        ? 'De poort vindt een extra loopdag nu verdedigbaar.'
+        : `De poort verhoogt het niet uit zichzelf: ${(verdict.blockers || [])[0] || 'onbekend'}.`
+          + ((verdict.blockers || []).some(b => /herstelcheck/.test(b))
+            ? ' Let op waar dat aan ligt: er staan herstelchecks open. Dat is '
+              + 'boekhouding, geen oordeel over je vorm — vul ze in en de telling '
+              + 'klopt weer.'
+            : ''),
+    } : null,
+    // Het plafond is een planningsgrens, geen dagelijkse veiligheidsklep.
+    // Die laatste is de poort, en die blijft elke dag gewoon zijn werk
+    // doen. Zonder die zin lijkt het verhogen van het plafond roekelozer
+    // dan het is.
+    nuance: 'Het plafond zegt hoeveel loopdagen het schema inplant. Of je op een '
+      + 'bepaalde dag ook werkelijk mag lopen, beslist de poort elke ochtend opnieuw '
+      + 'op je herstel — die blijft staan, wat het plafond ook is.',
+  };
+}
+
 // ── Om de dag, los van de weekdagen ─────────────────────────────
 //
 // "Absoluut om de dag" kan niet op vaste weekdagen. In een week van zeven
@@ -691,11 +778,26 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   // er twee runs tegen elkaar aan komen te liggen, en die blokkeert de
   // poort. Dan loopt het schema op een cyclus van twee dagen, verankerd
   // op haar laatste echte loop. Zie omDeDagPatroon().
+  // ── Waar de cadans op vastzit ─────────────────────────────────
+  //
+  // Zij vroeg waarom 13 november ontbrak. De cadans was verankerd op haar
+  // laatste gélopen training — 6 november — en telde van daaruit met
+  // stappen van twee: 8, 10, 12, 14. Maar vandaag, de 11e, staat er ook
+  // een loop: die komt van de dagkaart en niet uit het patroon. Dus liep
+  // ze vandaag én morgen, twee dagen op rij, en daarna weer om de dag
+  // vanaf de verkeerde voet.
+  //
+  // Twee dagen op rij is precies wat de poort daarna blokkeert, dus die
+  // geplande donderdag zou alsnog niet doorgaan. Het anker hoort de
+  // laatste dag te zijn waarop ze lóópt, en als dat vandaag is, dan
+  // vandaag — dan volgt 13, 15, 17 in plaats van 12, 14, 16.
   const plafond = runDayCeiling();
-  const laatsteLoop = workouts
+  const laatsteGelopen = workouts
     .filter(w => w?.date && w.date <= currentDate
       && (w.activityType === 'run' || w.activityType == null))
     .map(w => w.date).sort().slice(-1)[0] || addDays(currentDate, -2);
+  const loptVandaag = loopVrij && !!vandaagSessie?.run;
+  const laatsteLoop = loptVandaag ? currentDate : laatsteGelopen;
   const omDeDag = plafond >= 4;
   const cadans = omDeDag
     ? omDeDagPatroon({ vanaf: currentDate, tot: race, anker: laatsteLoop, plafond })
@@ -1022,6 +1124,16 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     weight: gewicht,
     fuel: brandstof,
     expectation: verwachting,
+    // Waarom de volgende loop staat waar hij staat, en wat er verandert
+    // als het weekplafond omhooggaat. Zij vroeg waarom er pas zondag weer
+    // een run stond in plaats van vrijdag; dat antwoord hoort op het
+    // scherm en niet alleen in de code.
+    cadans: cadansUitleg({
+      plafond,
+      verdict: poort?.frequency
+        || frequencyVerdict(trainingLoad(logs, currentDate), logs, currentDate),
+      dagen,
+    }),
     // Het pad naar haar wenstijd: wat hij vraagt en wanneer hij er is.
     goalPath: pad,
     // De ijksessie: één schone meting in plaats van zes weken schatten.
@@ -1227,7 +1339,7 @@ function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht
   {
     const plafond = runDayCeiling();
     const freq = poort?.frequency
-      || frequencyVerdict(trainingLoad({}, currentDate), {}, currentDate);
+      || frequencyVerdict(trainingLoad(logs, currentDate), logs, currentDate);
     const mag = plafond < 4 && freq.canRaise;
     uit.push({
       id: 'loopdagen', label: 'Loopdagen per week',

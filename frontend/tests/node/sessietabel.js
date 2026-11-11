@@ -431,7 +431,58 @@ S('12 · En hij werkt zich bij als er een training bijkomt');
     na.gelopen > voor.gelopen, `${voor.gelopen} → ${na.gelopen}`);
 }
 
-S('13 · Een leeg dossier verzint niets');
+S('13 · En de tabel laat zien of er die dag ook kracht is gedaan');
+{
+  // Zij vroeg: "voeg bij kolom ook toe of ik kracht heb gedaan". Dat
+  // moet uit alleKracht komen en niet uit één bron: de krachtmodule
+  // apart lezen meldde eerder "nul krachtsessies" terwijl zij er
+  // veertien had gedaan met het circuit van acht minuten.
+  const W = [-26, -22, -18, -14, -10, -6].map(n => run(addDays(TODAY, n), 0.72, 149));
+  const logs = wereld(W);
+  // Het circuit op twee van die dagen, en een zware les op een derde.
+  localStorage.setItem('gc_challenge75', JSON.stringify({ startDate: addDays(TODAY, -30),
+    days: { [addDays(TODAY, -22)]: { day: 1, kind: 'circuit',
+      doneAt: `${addDays(TODAY, -22)}T08:00:00Z` },
+    [addDays(TODAY, -10)]: { day: 13, kind: 'circuit',
+      doneAt: `${addDays(TODAY, -10)}T08:00:00Z` } } }));
+  localStorage.setItem('gc_strength_sessions', JSON.stringify([
+    { id: 's1', date: addDays(TODAY, -18), type: 'coach_class', duration: 30,
+      rpe: 5, couldDoMore: 'nee', completed: 'full' },
+  ]));
+  const plan = racePlan({ currentDate: TODAY, logs, raceDate: '2026-12-12',
+    raceKm: 5, raceSec: 2100 });
+  const v = volledigeTabel({ currentDate: TODAY, logs, dagen: plan.days });
+  const op = (n) => v.rows.find(r => r.date === addDays(TODAY, n));
+
+  console.log(`      ${v.rows.filter(r => r.kracht?.gedaan).length} dagen met kracht`);
+  ok('elke rij draagt een krachtveld', v.rows.every(r => !!r.kracht), '');
+  ok('het circuit van acht minuten telt mee',
+    op(-22).kracht.gedaan && op(-22).kracht.weergave === 'circuit',
+    JSON.stringify(op(-22).kracht));
+  ok('en een zware les ook, maar anders benoemd',
+    op(-18).kracht.gedaan && op(-18).kracht.weergave === 'zwaar',
+    JSON.stringify(op(-18).kracht));
+  // Dit onderscheid is de hele reden dat het geen vinkje is: haar
+  // economie komt van zwaar werk, niet van acht minuten circuit.
+  ok('zwaar en circuit zijn niet hetzelfde vakje',
+    op(-18).kracht.soort !== op(-22).kracht.soort, '');
+  ok('een dag zonder kracht staat als niet gedaan',
+    op(-26).kracht.gedaan === false && op(-26).kracht.weergave === null,
+    JSON.stringify(op(-26).kracht));
+
+  // Twee bronnen op één dag: de zwaarste wint, want die karakteriseert
+  // de dag. Een zware les náást het circuit is een krachtdag.
+  localStorage.setItem('gc_strength_sessions', JSON.stringify([
+    { id: 's1', date: addDays(TODAY, -22), type: 'coach_class', duration: 30,
+      rpe: 5, couldDoMore: 'nee', completed: 'full' },
+  ]));
+  const v2 = volledigeTabel({ currentDate: TODAY, logs, dagen: plan.days });
+  const beide = v2.rows.find(r => r.date === addDays(TODAY, -22));
+  ok('met twee bronnen op één dag wint de zwaarste',
+    beide.kracht.weergave === 'zwaar', JSON.stringify(beide.kracht));
+}
+
+S('14 · Een leeg dossier verzint niets');
 {
   wereld([]);
   const t = sessieTabel({ currentDate: TODAY, logs: {} });
