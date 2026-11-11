@@ -34,6 +34,27 @@ const KOLOMMEN = [
       + 'een tekort zit.' },
   { id: 'sleep_hours', kop: 'Slaap', eenheid: 'uur', stap: 0.5, breedte: 54,
     uitleg: 'Samen met je rusthartslag de beste voorspeller van hoe een sessie valt.' },
+  // ── HRV ─────────────────────────────────────────────────────
+  //
+  // Zij vroeg of dit nuttig is. Bij haar wel, en meer dan bij de
+  // gemiddelde loper: HRV meet de balans van je autonome zenuwstelsel, en
+  // dat is precies het systeem dat bij long COVID ontregeld raakt. Het
+  // beweegt ook eerder en duidelijker dan rusthartslag — die van haar
+  // schommelt tussen 59 en 66, zo'n tien procent, terwijl HRV bij
+  // oplopende belasting makkelijk twintig tot dertig procent zakt. Een
+  // signaal dat eerder uitslaat is een signaal waar je nog iets mee kunt.
+  //
+  // Eén ding moet erbij, anders is het getal misleidend: absolute
+  // HRV-waarden zeggen tussen mensen niets. Een 7-daags gemiddelde van 28
+  // is niet "slecht" en 60 niet "goed". Alleen haar eigen basislijn en de
+  // afwijking daarvan tellen, en daarom vraagt deze kolom om het 7-daags
+  // gemiddelde uit Garmin en niet om de losse nacht.
+  { id: 'hrv', kop: 'HRV', eenheid: 'ms', stap: 1, breedte: 54,
+    uitleg: 'Het 7-daags gemiddelde uit Garmin (HRV-status), niet de losse nacht — '
+      + 'die springt te veel. HRV meet de balans van je autonome zenuwstelsel, het '
+      + 'systeem dat bij long COVID ontregeld raakt, en zakt eerder en duidelijker dan '
+      + 'je rusthartslag. Absolute waarden zeggen niets tussen mensen; alleen jouw '
+      + 'eigen basislijn en de afwijking daarvan tellen.' },
 ];
 
 const VENSTERS = [30, 60, 90];
@@ -63,7 +84,7 @@ export default function BackfillPanel({ logs = {}, currentDate = todayLocal(), s
         <div>
           <div style={{ fontSize: 12.5, fontWeight: 800 }}>Met terugwerkende kracht invullen</div>
           <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45 }}>
-            Rusthartslag, gewicht en slaap uit je horloge — één regel per dag, drie kolommen.
+            Rusthartslag, gewicht, slaap en HRV uit je horloge — één regel per dag.
           </div>
         </div>
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>{open ? '▲' : '▼'}</span>

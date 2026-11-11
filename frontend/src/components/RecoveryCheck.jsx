@@ -3,7 +3,7 @@ import { lastRunWorkout, logAdaptiveEvent } from '../workouts';
 import { addDays } from '../datetime';
 import {
   HEADACHE_SEVERITY, HEADACHE_TIMING, HEADACHE_DURATION,
-  MIGRAINE_TYPES, MIGRAINE_TRIGGERS, MUSCLE_TYPES,
+  MIGRAINE_TYPES, MIGRAINE_TRIGGERS, MUSCLE_TYPES, INFECTION_TYPES,
   POST_EXERTIONAL_SIGNS, exertionalResponse,
 } from '../symptoms';
 
@@ -96,6 +96,7 @@ export default function RecoveryCheck({ log, logs, currentDate, saveField }) {
       currentDate })
     : null;
 
+  const ziekOn = !!(log?.infection_type && log.infection_type !== 'none');
   const migraineOn = log?.migraine_type && log.migraine_type !== 'none';
   const signCount = POST_EXERTIONAL_SIGNS.filter(s => log?.[`pe_${s.id}`]).length;
 
@@ -175,6 +176,27 @@ export default function RecoveryCheck({ log, logs, currentDate, saveField }) {
                 </div>
                 <Chips options={MIGRAINE_TRIGGERS} value={log?.migraine_triggers} multi
                   onChange={v => saveField('migraine_triggers', v)} />
+              </div>
+            )}
+          </Section>
+
+          {/* ── Gewoon ziek ──────────────────────────────────────
+              Zij vroeg hierom: ergens kunnen melden dat het gewoon griep
+              is, zonder dat het meteen als PEM of long COVID wordt
+              gelezen. Dezelfde logica als migraine: het telt niet mee in
+              het inspanningsoordeel en het breekt haar PEM-vrije reeks
+              niet — maar het geeft trainen ook niet vrij. */}
+          <Section title="Ziek"
+            hint="Gewoon griep of een verkoudheid? Zet het hier. Dan tellen de klachten die daarbij horen niet mee als reactie op je training, en blijft je PEM-vrije reeks staan. Trainen blijft wel dicht tot je beter bent.">
+            <Chips options={INFECTION_TYPES} value={log?.infection_type || 'none'}
+              onChange={v => saveField('infection_type', v || 'none')} />
+            {ziekOn && (
+              <div style={{ fontSize: 10.5, color: 'var(--ghost)', marginTop: 6,
+                lineHeight: 1.45 }} data-ziek-uitleg>
+                Genoteerd als infectie. Grieperig gevoel, rillingen, koorts en
+                hersenmist worden deze dagen niet gelezen als reactie op je
+                training. Borstklachten, hartkloppingen en neurologische klachten
+                blijven wél altijd een alarmsignaal — ook als je ziek bent.
               </div>
             )}
           </Section>

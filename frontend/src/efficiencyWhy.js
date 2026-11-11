@@ -53,6 +53,11 @@ const FACTOREN = [
   // weinig ingevuld" terwijl het getal er wél is.
   { id: 'hr_rest', label: 'rusthartslag', eenheid: 'bpm', omlaagIsBeter: true,
     uit: (p) => p.hr_rest },
+  // HRV beweegt eerder en sterker dan rusthartslag: haar rusthartslag
+  // schommelt zo'n tien procent, HRV makkelijk twintig tot dertig. Een
+  // factor die eerder uitslaat verdient een plek in deze vergelijking.
+  { id: 'hrv', label: 'HRV', eenheid: 'ms', omlaagIsBeter: false,
+    uit: (p) => p.hrv },
   { id: 'sleep_hours', label: 'slaapuren', eenheid: 'uur', omlaagIsBeter: false,
     uit: (p) => p.sleep_hours },
   { id: 'sleep_quality', label: 'slaapkwaliteit', eenheid: '(0–2)', omlaagIsBeter: false,
@@ -116,6 +121,9 @@ function contextVan(datum, logs, asOf, extra = {}) {
     date: datum,
     log,
     hr_rest: num(log?.hr_rest) ?? num(volgende?.hr_rest),
+    // Net als de rusthartslag wordt HRV 's nachts gemeten, dus hij hoort
+    // bij de ochtend ná een avondloop. Dezelfde terugval dus.
+    hrv: num(log?.hrv) ?? num(volgende?.hrv),
     hrFromNextDay: num(log?.hr_rest) == null && num(volgende?.hr_rest) != null,
     sleep_hours: num(log?.sleep_hours),
     sleep_quality: num(log?.sleep_quality),
@@ -202,7 +210,7 @@ export function efficiencyFactors({ currentDate = todayLocal(), logs = {},
     // de schalen van 0–2, twee slagen voor hartslag, een half uur slaap.
     // Elke factor heeft zijn eigen maat. Een halve kilometer verschil in
     // afstand zegt niets; een halve kilo gewicht wel.
-    const DREMPELS = { hr_rest: 2, sleep_hours: 0.5, cycleDay: 5,
+    const DREMPELS = { hr_rest: 2, hrv: 5, sleep_hours: 0.5, cycleDay: 5,
       afstand: 0.8, rustdagen: 1, kracht_voor: 0.5, gewicht: 0.5 };
     const drempel = DREMPELS[f.id] ?? 0.4;
     bevindingen.push({

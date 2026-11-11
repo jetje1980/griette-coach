@@ -88,6 +88,30 @@ export const POST_EXERTIONAL_SIGNS = [
 
 export const RED_FLAG_IDS = POST_EXERTIONAL_SIGNS.filter(s => s.red).map(s => s.id);
 
+// ── Gewoon ziek is geen PEM ─────────────────────────────────────
+//
+// Zij vroeg erom, en het is dezelfde fout als met migraine: "ik wil
+// ergens kunnen melden dat ik gewoon griep heb zonder dat er gelijk
+// wordt gedacht dat het PEM is of door long covid komt."
+//
+// Terecht, en het is ook medisch het juiste onderscheid. Een infectie
+// geeft precies de signalen waar het PEM-oordeel op let — grieperig
+// gevoel, rillingen, koorts, hersenmist, een hoge rusthartslag, een lage
+// HRV — maar de oorzaak is een virus en niet de training van eergisteren.
+// Zonder dit onderscheid telt een week griep als bewijs dat haar opbouw
+// te zwaar was, breekt het haar PEM-vrije reeks, en wordt haar schema
+// teruggezet voor iets wat met hardlopen niets te maken had.
+//
+// Wat het NIET doet: trainen vrijgeven. Ziek is ziek, en de poort blijft
+// dicht. Het verandert alleen de conclusie die eraan hangt.
+export const INFECTION_TYPES = [
+  { id: 'none', label: 'Geen' },
+  { id: 'cold', label: 'Verkoudheid' },
+  { id: 'flu', label: 'Griep of koorts' },
+  { id: 'stomach', label: 'Buikgriep' },
+  { id: 'other', label: 'Iets anders infectieus' },
+];
+
 // ── Uitlezen uit een daglog ─────────────────────────────────────
 // Werkt met de nieuwe velden, en valt terug op de oude booleans zodat
 // bestaande data niet plotseling niets meer betekent.
@@ -101,6 +125,14 @@ export function readSymptoms(log = {}) {
       timing: log.headache_timing || null,
       duration: log.headache_duration || null,
       present: headache != null && headache > 0,
+    },
+    // Een infectie: zelf gemeld, met een soort en of hij nog loopt.
+    infection: {
+      type: log.infection_type
+        || (log.infection === true || log.symptom_sick === true ? 'other' : 'none'),
+      present: !!(log.infection_type && log.infection_type !== 'none')
+        || log.infection === true || log.symptom_sick === true,
+      day: log.infection_day != null ? Number(log.infection_day) : null,
     },
     migraine: {
       type: log.migraine_type || ((log.symptom_migraine || log.migraine) ? 'without_aura' : 'none'),
@@ -191,10 +223,31 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
     const m = readSymptoms(w.log || {}).migraine;
     if (m.present && !m.triggers?.includes('exertion')) migraineDagen.add(w.offset);
   }
+
+  // ── Een infectie is geen bewijs over haar belastbaarheid ─────
+  //
+  // Op een dag die zij als griep of verkoudheid heeft gemeld, tellen de
+  // signalen die bij ziek zijn horen niet mee in het PEM-oordeel. Ze
+  // verdwijnen niet — ze worden apart gemeld, zodat zichtbaar blijft dat
+  // er iets was en waaróm het niet meetelt. Een signaal dat stilzwijgend
+  // wegvalt is net zo misleidend als een signaal dat verkeerd wordt
+  // uitgelegd.
+  const infectieDagen = new Set();
+  let infectieSoort = null;
+  for (const w of window) {
+    const inf = readSymptoms(w.log || {}).infection;
+    if (inf.present) { infectieDagen.add(w.offset); infectieSoort = infectieSoort || inf.type; }
+  }
+  // Welke signalen horen bij ziek zijn en dus bij de infectie, niet bij de
+  // sessie. Borstklachten en neurologische alarmsymptomen staan er
+  // nadrukkelijk níét bij: die blijven altijd een rode vlag.
+  const ZIEKTE_SIGNALEN = new Set(['malaise', 'fever', 'chills', 'brainfog',
+    'slow_thinking', 'cold_sweat', 'next_day_worse']);
   let worstHeadache = null, headacheWhen = null, headacheDuration = null;
   let migraineHoofdpijn = null;
   for (const w of window) {
     const s = readSymptoms(w.log || {});
+    if (infectieDagen.has(w.offset)) continue;
     if (migraineDagen.has(w.offset)) {
       if (s.headache.severity != null) {
         migraineHoofdpijn = Math.max(migraineHoofdpijn ?? 0, s.headache.severity);
@@ -218,6 +271,7 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
 
   // ── Overige signalen wegen ────────────────────────────────────
   const otherSigns = [];
+  const infectieSignalen = [];
   const seenSigns = new Set();
   for (const w of window) {
     if (!w.log) continue;
@@ -226,6 +280,13 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
       // is aangevinkt. Anders weegt volhardend invullen als verslechtering.
       if (s.red || seenSigns.has(s.id)) continue;
       seenSigns.add(s.id);
+      // Hoort dit signaal bij de gemelde infectie? Dan telt het daar en
+      // niet bij de sessie — behalve de rode vlaggen, die hierboven al
+      // apart gaan en altijd blijven staan.
+      if (infectieDagen.has(w.offset) && ZIEKTE_SIGNALEN.has(s.id)) {
+        infectieSignalen.push({ ...s, when: w.offset });
+        continue;
+      }
       otherSigns.push({ ...s, when: w.offset });
     }
   }
@@ -250,6 +311,21 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
   if (diffuse) parts.push('diffuse spierpijn');
   if (otherSigns.length) parts.push(otherSigns.map(s => s.label.toLowerCase()).join(', '));
 
+  // Wat er over de infectie te zeggen valt, los van het oordeel. Dit
+  // hoort zichtbaar te blijven: zij moet kunnen zien dát er signalen
+  // waren en waaróm ze niet meetellen, anders lijkt de app ze te missen.
+  const infectieLabel = INFECTION_TYPES.find(t => t.id === infectieSoort)?.label || null;
+  const infectieNoot = infectieDagen.size
+    ? `Je hebt in dit venster ${infectieLabel ? infectieLabel.toLowerCase() : 'een infectie'} `
+      + 'gemeld. '
+      + (infectieSignalen.length
+        ? `De klachten die daarbij horen (${infectieSignalen.map(x => x.label.toLowerCase()).join(', ')}) `
+          + 'tellen niet mee als reactie op je training. '
+        : '')
+      + 'Ziek zijn zegt niets over je belastbaarheid, en het breekt je PEM-vrije reeks niet. '
+      + 'Trainen blijft wel dicht tot je beter bent.'
+    : null;
+
   // Wat er over de migraine te zeggen valt, los van het oordeel.
   const migraineNoot = migraine && !migraineExertional
     ? `Er was migraine in dit venster${migraineHoofdpijn ? ` (hoofdpijn ${migraineHoofdpijn})` : ''}`
@@ -264,6 +340,7 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
       headache: worstHeadache, headacheTiming: headacheWhen, diffuse, otherSigns,
       migraine: migraine || null, migraineCountsAsPem: !!migraineExertional,
       migraineNote: migraineNoot,
+      infection: infectieSoort || null, infectionNote: infectieNoot,
       reason: `Duidelijke post-exertionele respons: ${parts.join(', ')}.`
         + (migraineNoot ? ` ${migraineNoot}` : ''),
       countsAsVolume: false, allowsBuild: false,
@@ -282,6 +359,7 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
       status: 'mild', level: 'AMBER',
       headache: worstHeadache ?? 0, headacheTiming: headacheWhen, diffuse, otherSigns,
       migraine: migraine, migraineCountsAsPem: true,
+      infection: infectieSoort || null, infectionNote: infectieNoot,
       reason: 'Migraine met inspanning als mogelijke trigger. Dat lees ik hier wél als reactie op de training.',
       countsAsVolume: true, allowsBuild: false,
       advice: 'Geen opbouw op deze sessie. Als dit zich herhaalt bij vergelijkbare belasting, is de belasting zelf de vraag — niet je discipline.',
@@ -293,7 +371,9 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
       status: 'mild', level: 'AMBER',
       headache: worstHeadache, headacheTiming: headacheWhen, diffuse, otherSigns,
       migraine: migraine || null, migraineCountsAsPem: !!migraineExertional,
-      reason: parts.length ? `Milde respons: ${parts.join(', ')}.` : 'Milde respons.',
+      infection: infectieSoort || null, infectionNote: infectieNoot,
+      reason: (parts.length ? `Milde respons: ${parts.join(', ')}.` : 'Milde respons.')
+        + (infectieNoot ? ` ${infectieNoot}` : ''),
       countsAsVolume: true, allowsBuild: false,
       advice: 'Verdragen, maar niet schoon genoeg om op te bouwen. Houd het niveau vast.',
     };
@@ -303,7 +383,8 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
     status: 'good', level: 'GREEN',
     headache: worstHeadache ?? 0, diffuse: false, doms,
     migraine: migraine || null, migraineCountsAsPem: false,
-    reason: doms
+    infection: infectieSoort || null, infectionNote: infectieNoot,
+    reason: infectieNoot ? `Geen tekenen van een post-exertionele reactie. ${infectieNoot}` : doms
       ? 'Goed verdragen. Wel gewone spierpijn — dat is een normale trainingsrespons, geen PEM.'
       : migraine?.present
         ? 'Goed verdragen. De migraine is apart geregistreerd en wordt niet als inspanningsrespons gelezen.'
@@ -419,8 +500,17 @@ export function pemFreeWeeks({ logs = {}, currentDate = todayLocal(), max = 12,
     // Migraine telt hier niet. Zij heeft gelijk: migraine zegt niets over
     // long COVID, een PEM-reactie wel. Een migrainedag die toevallig na een
     // training valt, zette de teller op nul en blokkeerde de opbouw.
-    const m = readSymptoms(l).migraine;
+    const sym = readSymptoms(l);
+    const m = sym.migraine;
     const migraineDag = m.present && !m.triggers?.includes('exertion');
+    // Een gemelde infectie telt hier net zo min. Griep geeft precies de
+    // klachten waar deze teller op let — slecht hersteld, hoofdpijn,
+    // diffuse spierpijn — maar de oorzaak is een virus. Zonder deze regel
+    // zet een week griep haar PEM-vrije reeks op nul en blokkeert dat
+    // haar opbouw voor weken, voor iets wat met hardlopen niets te maken
+    // had. Haar eigen PEM-vinkje en de rode vlaggen hierboven blijven
+    // wél gelden: die zijn een oordeel, geen afgeleide.
+    if (sym.infection?.present) return false;
     const hoofdpijn = !migraineDag && Number(l.headache_severity) >= 2;
     const klacht = l.training_recovery === 2 || l.recovery_check === 'bad'
       || hoofdpijn || l.muscle_type === 'diffuse';

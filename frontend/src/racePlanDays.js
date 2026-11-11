@@ -343,7 +343,55 @@ function niveauVoorWeek({ basis, weekIndex, fase }) {
   return Math.min(20, basis + weekIndex);
 }
 
-function vormVoor({ niveau, rol, fase }) {
+// ── De sleutelsessie bestond niet ───────────────────────────────
+//
+// WAT ER MIS WAS
+//
+// De intensiteitskaart hield haar voor dat 80% van haar loopminuten
+// rustig hoort te zijn en dat ze op 31% zat. Terechte meting. Maar toen
+// ik narekende wát het schema per dag vóórschrijft, stond er op élke dag
+// "mik op 106–132 bpm" — ook op de dagen die sleutelsessie heten. Geen
+// 80/20 dus, maar 100/0: er was helemaal geen kwaliteitssessie.
+//
+// De oorzaak zit in de bibliotheek: op haar niveaus bestaan alleen
+// EASY_ECONOMY, DURABILITY en RECOVERY. Vraagt vormVoor om een
+// RACE_SPECIFIC vorm, dan vindt hij niets, en de terugval pakt de
+// zwaarste vorm die er wél is — een easy-sessie. Stilletjes, want een
+// terugval die niet zegt dat hij terugvalt ziet er net zo uit als een
+// keuze.
+//
+// Zij werd dus gemeten langs een verdeling die haar schema nooit heeft
+// aangeboden. Dat is de vervelendste soort: het verwijt klopte wel, de
+// mogelijkheid om het anders te doen ontbrak.
+//
+// WAT ER NU GEBEURT
+//
+// De sleutelsessie wordt hier gebouwd in plaats van opgezocht. Korte
+// blokken op werkhartslag met ruime wandelpauzes — bewust en kort, één
+// keer per week, zoals de kaart zelf adviseert. De vorm komt van haar
+// eigen easy-sessie zodat de dosering bij haar belastbaarheid past; wat
+// verandert is de intensiteit van het blok en de lengte van de pauze.
+export const KWALITEIT_BLOK_MIN = 2;
+function kwaliteitsVorm({ basis, weekIndex }) {
+  // Vier blokken in de eerste opbouwweek, oplopend naar zes. Meer dan zes
+  // keer twee minuten is bij vijf weken tot de race geen opbouw meer maar
+  // een wedstrijd in de training.
+  const reps = Math.min(6, 4 + Math.floor(weekIndex / 2));
+  return {
+    id: `kwaliteit_${reps}`,
+    purpose: PURPOSE_ID.QUALITY_LITE,
+    runMin: KWALITEIT_BLOK_MIN,
+    walkMin: 2,
+    reps,
+    minutes: reps * (KWALITEIT_BLOK_MIN + 2),
+    duration: reps * (KWALITEIT_BLOK_MIN + 2),
+    label: `${reps} × ${KWALITEIT_BLOK_MIN} min op werkhartslag / 2 min wandelen`,
+    gebouwd: true,
+    basisVan: basis?.id || null,
+  };
+}
+
+function vormVoor({ niveau, rol, fase, weekIndex = 0 }) {
   const doel = rol === 'lang' ? PURPOSE_ID.DURABILITY
     : rol === 'sleutel'
       ? (fase === FASE.OPBOUW.id ? PURPOSE_ID.RACE_SPECIFIC : PURPOSE_ID.EASY_ECONOMY)
@@ -356,7 +404,14 @@ function vormVoor({ niveau, rol, fase }) {
   const eronder = sessionsUpTo(niveau, { purpose: doel });
   if (eronder.length) return eronder[eronder.length - 1];
   const alles = sessionsUpTo(niveau);
-  return alles.length ? alles[alles.length - 1] : null;
+  const terugval = alles.length ? alles[alles.length - 1] : null;
+  // Werd er om een racespecifieke vorm gevraagd en is die er niet, dan is
+  // een easy-sessie geen geldige terugval: dan verdwijnt de enige harde
+  // sessie van de week zonder dat iemand het ziet. Bouw hem.
+  if (doel === PURPOSE_ID.RACE_SPECIFIC) {
+    return kwaliteitsVorm({ basis: terugval, weekIndex });
+  }
+  return terugval;
 }
 
 // Minuten per kilometer als 9:30.
@@ -379,6 +434,7 @@ function fmtDag(datum) {
 
 function omschrijf(vorm) {
   if (!vorm) return null;
+  if (vorm.label && vorm.gebouwd) return vorm.label;
   if (vorm.continuous) return `${vorm.runMin} min doorlopend`;
   const f = (m) => (Number.isInteger(m) ? `${m}` : String(m).replace('.', ','));
   return `${f(vorm.runMin)} min lopen / ${f(vorm.walkMin)} min wandelen × ${vorm.reps}`;
@@ -756,7 +812,7 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
 
     const niveau = niveauVoorWeek({ basis: basisNiveau, weekIndex, fase });
     const vorm = (kind === DAG.RUN || kind === DAG.RUN_KRACHT)
-      ? vormVoor({ niveau, rol, fase }) : null;
+      ? vormVoor({ niveau, rol, fase, weekIndex }) : null;
 
     // ── Tijd op de benen op de lange dag ──────────────────────
     //
@@ -838,6 +894,15 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
           ? vandaagSessie.run.description : omschrijf(vorm),
         minutes: (vanPlanner || isVrijdag)
           ? vandaagSessie.run.duration : vorm.minutes,
+        // Het loopblok apart van de sessieduur. "33 min" klinkt als veel
+        // voor iemand met blokken van tien, maar die 33 is inclusief
+        // wandelen — en het blok is wat haar belast. Zonder dit getal is
+        // niet te zien of een sessie te zwaar is, en ook niet te testen.
+        blockMin: (vanPlanner || isVrijdag)
+          ? (vandaagSessie.run.runMin ?? null)
+          : (vorm.continuous ? vorm.runMin : (vorm.runMin ?? null)),
+        continuous: (vanPlanner || isVrijdag)
+          ? !!vandaagSessie.run.continuous : !!vorm.continuous,
         // Hoe hard, en op welke hartslag.
         pace: tempo ? fmtTempo(tempo) : null,
         paceMin: tempo,

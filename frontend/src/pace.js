@@ -15,7 +15,7 @@
 // geen norm voor vandaag.
 
 import { loadWorkouts, paceToMin, fmtPace } from './workouts';
-import { efficiencyTrend } from './efficiency';
+import { efficiencyTrend, MIN_METER_PER_MIN } from './efficiency';
 import { loadHrSettings } from './goals';
 import { todayLocal, addDays } from './datetime';
 import { RUNS } from './data/runningSchema';
@@ -288,7 +288,33 @@ export function paceBreakdown(workout, { hrSettings = null, plannedRun = null } 
     || classifyByEvidence(base, hr)
     || (splitsOnly ? [] : classifyWithin(meaningful, hr));
 
-  const segments = classified.map((s, i) => {
+  // ── Een ondergrens die niet relatief is ──────────────────────
+  //
+  // Alle drie de automaten hierboven zijn relatief of indirect: het plan,
+  // de hartslag, of het snelste deel van de sessie. Geen van drieën kijkt
+  // of het tempo überhaupt hardlopen kán zijn.
+  //
+  // Dat liep mis bij haar beachloop van 1 november. Die sessie bestond uit
+  // blokken van rond de 87 meter per minuut — wandeltempo op zacht zand —
+  // maar met een hartslag van 121 tot 136, en dus zei de hartslagroute
+  // "lopen". provenStructure nam daar een blok van 33 minuten uit over als
+  // bewezen loopblok, en het schema schreef vervolgens "45 min doorlopend"
+  // voor aan iemand wier langste werkelijke loopblok tien minuten is. Dat
+  // is geen onnauwkeurigheid meer; dat is een sessie die ze niet aankan.
+  //
+  // De bodem staat hier, ná de automaten en vóór haar eigen correcties:
+  // een getal kan zich vergissen, zij niet — corrigeert zij een blok met
+  // de hand naar lopen, dan wint dat. Dezelfde grens als de
+  // efficiëntiemeting gebruikt, uit één bron, anders ontstaan er twee
+  // definities van "dit is lopen".
+  const teTraag = (s) => s.pace != null && (1000 / s.pace) < MIN_METER_PER_MIN;
+  const metBodem = classified.map(s => (teTraag(s) && s.kind === SEGMENT.RUN
+    ? { ...s, kind: SEGMENT.WALK, confidence: 'high', source: 'ondergrens',
+      reason: `${fmtPace(s.pace)}/km is trager dan ${fmtPace(1000 / MIN_METER_PER_MIN)}/km `
+        + '— dat telt als wandelen, ongeacht hartslag of de rest van de sessie' }
+    : s));
+
+  const segments = metBodem.map((s, i) => {
     const corrected = corrections[`${workout.id}:${i}`];
     return { ...s, kind: corrected || s.kind, auto: !corrected, corrected: !!corrected,
       source: corrected ? 'correction' : (s.source || 'relative') };

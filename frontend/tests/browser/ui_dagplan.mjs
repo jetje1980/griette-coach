@@ -157,9 +157,13 @@ ok('het invulpaneel gaat open',
 ok('met zestig dagen in beeld',
   Number(await page.getAttribute('[data-terugwerkend-rijen]', 'data-terugwerkend-rijen')) === 60,
   String(await page.getAttribute('[data-terugwerkend-rijen]', 'data-terugwerkend-rijen')));
-ok('en drie kolommen naast elkaar',
-  await page.locator('[data-kolom]').count() === 3,
-  String(await page.locator('[data-kolom]').count()));
+// Op naam en niet op aantal: komt er een meting bij, dan hoort deze
+// toets niet om te vallen — hij hoort te bewaken dát elke meting zijn
+// eigen kolom heeft en ze elkaar niet overschrijven. Dat was de bug.
+for (const k of ['hr_rest', 'weight', 'sleep_hours', 'hrv']) {
+  ok(`kolom ${k} staat er`, await page.locator(`[data-kolom="${k}"]`).count() === 1,
+    String(await page.locator(`[data-kolom="${k}"]`).count()));
+}
 
 // Twee verschillende metingen op dezelfde dag: ze mogen elkaar niet
 // overschrijven of in elkaars kolom belanden — dat deed de vorige versie,

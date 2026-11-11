@@ -36,6 +36,7 @@ import { todayLocal, daysBetween, addDays } from './datetime';
 import { loadWorkouts } from './workouts';
 // Kracht komt uit meer dan één plek; zie krachtBronnen.js voor waarom.
 import { krachtBeeld } from './krachtBronnen';
+import { readSymptoms } from './symptoms';
 
 // Hoe zwaar weegt elke rem? Niet gevoel maar een schatting met een bron,
 // zodat de volgorde navolgbaar is en niet van mijn stemming afhangt.
@@ -145,8 +146,33 @@ function herstelRem({ currentDate, logs }) {
   const stijging = (nu != null && was != null) ? +(nu - was).toFixed(1) : null;
   const slaapGem = slaap.length ? +(slaap.reduce((a, b) => a + b, 0) / slaap.length).toFixed(1) : null;
 
+  // ── Ziek zijn verklaart een hoge rusthartslag ────────────────
+  //
+  // Een infectie jaagt de rusthartslag met gemak vijf tot tien slagen
+  // omhoog en drukt HRV. Dat als herstelschuld van de training lezen is
+  // onjuist én schadelijk: dan staat er "je herstelt te weinig van je
+  // opbouw" terwijl zij griep heeft. De rem blijft staan — ziek is ziek —
+  // maar met de juiste verklaring en zonder conclusie over haar opbouw.
+  const ziek = logsTussen(logs, addDays(currentDate, -6), currentDate)
+    .some(l => readSymptoms(l).infection?.present);
+
   const hartTeHoog = stijging != null && stijging >= 3;
   const slaapTeKort = slaapGem != null && slaapGem < 7;
+  if (ziek && (hartTeHoog || slaapTeKort)) {
+    return {
+      id: 'herstel', label: 'Herstel — je bent ziek', gewicht: REM_GEWICHT.herstel * 0.4,
+      stand: [hartTeHoog ? `rusthartslag ${nu} tegen ${was} in de twee weken ervoor` : null,
+        slaapTeKort ? `slaap ${String(slaapGem).replace('.', ',')} uur gemiddeld` : null]
+        .filter(Boolean).join(' · ') + ' — met een gemelde infectie erbij',
+      kost: 'Dit is wat een infectie doet met je rusthartslag en je slaap, en het zegt '
+        + 'niets over je opbouw. Geen reden om je schema terug te zetten; wel reden om '
+        + 'niet te trainen tot je beter bent.',
+      wat: 'Uitzieken. Begin weer als je rusthartslag terug is bij je eigen basis en je '
+        + 'een hele dag zonder klachten bent geweest — en begin dan één stap lager dan '
+        + 'waar je was, niet waar je gebleven was.',
+      status: 'uit',
+    };
+  }
   if (!hartTeHoog && !slaapTeKort) {
     return {
       id: 'herstel', label: 'Herstel', gewicht: 0,

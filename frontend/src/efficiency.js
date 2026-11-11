@@ -60,7 +60,7 @@ const MIN_BLOK_SECONDEN = 120;
 // haar loopblokken op 100–117 (8:33–9:55/km). Gaat zij merkbaar sneller
 // wandelen of langzamer lopen, dan hoort dit getal opnieuw bekeken te
 // worden — het is afgeleid uit háár sessies en niet uit een handboek.
-const MIN_METER_PER_MIN = 95;
+export const MIN_METER_PER_MIN = 95;
 
 const VENSTER_DAGEN = 90;
 
