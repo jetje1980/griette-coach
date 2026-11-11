@@ -8,6 +8,9 @@ import { activeMilestone, proposeMilestone, reviewDue, REVIEW_WEEKS } from '../b
 import { LIMITER_NL } from '../limiter';
 // Het oordeel zelf: ga je vooruit, waarop wel en waarop niet.
 import { voortgang, driemaandenplan } from '../voortgang';
+// Week, maand en kwartaal naast elkaar — het verschil tussen een dip en
+// een richting is de analyse waar zij om vroeg.
+import { trends } from '../trends';
 
 // Eén scherm dat de vraag beantwoordt: waar sta ik, en wat volgt daaruit?
 //
@@ -160,6 +163,10 @@ export default function ProgressieOverzicht({ currentDate = todayLocal(), sessio
     try { return voortgang({ currentDate, logs }); } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate, versie, logs]);
+  const tr = useMemo(() => {
+    try { return trends({ currentDate, logs }); } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, versie, logs]);
   const plan = useMemo(() => {
     try { return vg?.known ? driemaandenplan({ voortgang: vg, currentDate }) : null; }
     catch { return null; }
@@ -169,6 +176,69 @@ export default function ProgressieOverzicht({ currentDate = todayLocal(), sessio
 
   return (
     <div data-progressie-overzicht>
+      {/* ── TREND OVER WEEK, MAAND EN KWARTAAL ──────────────
+          Eén venster kan het verschil tussen een dip en een richting
+          niet zien. Een HRV die deze week acht procent lager ligt
+          betekent iets anders als de maand vlak is dan wanneer de maand
+          ook zakt. Daarom alle drie naast elkaar, met de duiding van
+          hoe ze zich tot elkaar verhouden. */}
+      {tr?.known && (
+        <Sectie titel="Trend · week, maand, kwartaal">
+          <div className="os-card" data-trends={tr.metrics.length}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.5 }}>
+              {tr.line}
+            </div>
+            {tr.metrics.map(m => {
+              const iets = m.horizons.some(h => h.known);
+              if (!iets) return null;
+              return (
+                <div key={m.id} data-trend={m.id}
+                  style={{ padding: '8px 0', borderTop: '1px solid var(--border)',
+                    marginTop: 6 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, flex: 1 }}>{m.label}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    {m.horizons.map(h => (
+                      <div key={h.id} data-horizon={h.id} style={{ flex: 1,
+                        padding: '4px 6px', borderRadius: 6,
+                        background: 'var(--border)', opacity: h.known ? 1 : 0.45 }}>
+                        <div style={{ fontSize: 9, color: 'var(--ghost)', fontWeight: 700,
+                          textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                          {h.kort}
+                        </div>
+                        <div style={{ fontSize: 11.5, fontWeight: 800,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: !h.known ? 'var(--ghost)'
+                            : h.richting === 'vooruit' ? 'var(--sage)'
+                              : h.richting === 'terug' ? 'var(--gold)' : 'var(--text)' }}>
+                          {h.known ? h.weergave : '—'}
+                        </div>
+                        {h.known && (
+                          <div style={{ fontSize: 9, color: 'var(--ghost)' }}>
+                            {h.was} → {h.nu}{m.eenheid ? ` ${m.eenheid}` : ''}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.45,
+                    marginTop: 4 }} data-duiding={m.duiding.id}>
+                    {m.duiding.tekst}
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ fontSize: 10, color: 'var(--ghost)', lineHeight: 1.45,
+              marginTop: 7, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+              Elk venster vergelijkt met de periode ervoor van dezelfde lengte, met de
+              mediaan en niet het gemiddelde — zodat één uitschieter het beeld niet
+              kantelt. Wijzen alle drie dezelfde kant op, dan is het een richting.
+            </div>
+          </div>
+        </Sectie>
+      )}
+
       {/* ── GA IK VOORUIT? ──────────────────────────────────
           Dit stond nergens. Progressie toonde grafieken, sessies en
           scores, maar nergens het oordeel zelf. "Nauwelijks progressie"
