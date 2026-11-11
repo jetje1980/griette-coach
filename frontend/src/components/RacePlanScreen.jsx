@@ -761,7 +761,7 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                   <tr style={{ color: 'var(--ghost)', fontSize: 9.5, fontWeight: 700,
                     textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                     {['datum', 'doel HR', 'jouw HR', 'doeltempo', 'jouw tempo', 'blok',
-                      'kracht', '']
+                      'kracht']
                       .map((k, i) => (
                         <th key={k + i} style={{ textAlign: i === 0 ? 'left' : 'right',
                           padding: '0 5px 5px 0', whiteSpace: 'nowrap',
@@ -783,9 +783,21 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                           {r.date.slice(8)}-{r.date.slice(5, 7)}
                           {r.dayShort ? <span style={{ color: 'var(--ghost)', fontWeight: 400,
                             fontSize: 9.5, marginLeft: 3 }}>{r.dayShort}</span> : null}
+                          {(() => {
+                            const merk = r.hrSuspect ? 'meting?'
+                              : r.uitbijter ? 'uitbijter'
+                                : r.gated ? 'op slot'
+                                  : r.isRace ? 'race' : null;
+                            return merk ? (
+                              <span data-rijmerk={merk} style={{ display: 'block',
+                                fontSize: 9, color: 'var(--ghost)', fontWeight: 400 }}>
+                                {merk}
+                              </span>
+                            ) : null;
+                          })()}
                         </td>
                         {r.status === 'onmeetbaar' ? (
-                          <td colSpan={7} style={{ padding: '5px 0', textAlign: 'right',
+                          <td colSpan={6} style={{ padding: '5px 0', textAlign: 'right',
                             color: 'var(--ghost)', fontSize: 10.5 }}>
                             niet te meten
                           </td>
@@ -829,19 +841,6 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                                   : r.kracht?.gedaan ? 'var(--sub)' : 'var(--ghost)' }}>
                               {r.kracht?.weergave ?? '·'}
                             </td>
-                            <td style={{ textAlign: 'right', padding: '5px 0',
-                              fontSize: 9.5, whiteSpace: 'nowrap',
-                              color: (r.hrSuspect || r.uitbijter) ? 'var(--ghost)'
-                                : komt ? 'var(--ghost)'
-                                  : r.teHard ? 'var(--clay)' : 'var(--sage)' }}>
-                              {r.hrSuspect ? 'meting?'
-                                : r.uitbijter ? 'telt niet mee'
-                                  : vandaag ? 'vandaag'
-                                    : r.gated ? 'op slot'
-                                      : r.isRace ? 'race'
-                                        : komt ? 'te gaan'
-                                          : r.teHard ? 'te hard' : 'goed'}
-                            </td>
                           </>
                         )}
                       </tr>
@@ -858,10 +857,14 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
               marginTop: 5 }}>
               Van je laatste trainingen tot en met de race. Een punt betekent: nog te
               lopen — zodra je hem loopt vult je eigen hartslag en tempo zich hier in,
-              en schuiven de doelen eronder mee met wat je dan blijkt te kunnen. Bij
-              gelopen trainingen is het doeltempo het doel zoals het op die dag gold,
-              gerekend met de gegevens van de dag ervóór. Blok is je langste
-              aaneengesloten loopblok, niet de sessieduur; 5×2′ is een intervalsessie.
+              en schuiven de doelen eronder mee met wat je dan blijkt te kunnen. Je
+              hartslag staat rood als je boven de band zat en groen als je erbinnen
+              bleef; het getal erachter is hoeveel slagen je ernaast zat. Bij gelopen
+              trainingen is het doeltempo het doel zoals het op die dag gold, gerekend
+              met de gegevens van de dag ervóór. Blok is je langste aaneengesloten
+              loopblok, niet de sessieduur; 5×2′ is een intervalsessie. Kracht komt uit
+              al je bronnen samen: een zware sessie, een gewone, of het circuit van acht
+              minuten.
             </div>
           </div>
         </>
