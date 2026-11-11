@@ -815,6 +815,26 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     const vorm = (kind === DAG.RUN || kind === DAG.RUN_KRACHT)
       ? vormVoor({ niveau, rol, fase, weekIndex }) : null;
 
+    // ── De racedag is ook een loopdag ─────────────────────────
+    //
+    // Hij had geen `vorm` en daarmee geen `run`, dus viel hij uit elke
+    // lijst van loopdagen weg — ook uit de tabel die juist tót en met de
+    // race moet lopen. De dag waar alles naartoe werkt stond nergens met
+    // een tempo en een hartslag erbij.
+    //
+    // Tempo en hartslag komen hier uit raceExpectation en niet uit het
+    // easy-voorschrift. Dat laatste zou 132 opleveren voor een wedstrijd:
+    // haar easy-richtgebied, niet haar racehartslag. Eén bron voor de
+    // raceverwachting, dezelfde die de rest van het scherm gebruikt.
+    const raceVorm = isRace && verwachting?.known ? {
+      id: 'race',
+      minutes: Math.round(verwachting.mid.time),
+      label: `${raceName} — ${raceKm || 5} km`,
+      continuous: true,
+      purpose: PURPOSE_ID.RACE_SPECIFIC,
+      isRace: true,
+    } : null;
+
     // ── Tijd op de benen op de lange dag ──────────────────────
     //
     // De race duurt bij haar tempo ongeveer drie kwartier. Haar
@@ -850,15 +870,22 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
       : vorm?.purpose === PURPOSE_ID.DURABILITY ? 'DURABILITY'
         : vorm?.purpose === PURPOSE_ID.QUALITY_LITE ? 'QUALITY_LITE'
           : fase === FASE.TAPER.id ? 'TAPER' : 'EASY_ECONOMY';
-    const tempo = (kind === DAG.RUN || kind === DAG.RUN_KRACHT || isRace)
-      ? (vanPlanner?.targetPace
-        ?? prescribedPace({ purpose: loopDoel, goal: raceDoel, easy, logs, currentDate }).paceMin
-        ?? tempoMin)
-      : null;
-    const hartslag = (kind === DAG.RUN || kind === DAG.RUN_KRACHT || isRace)
-      ? (vanPlanner?.hrZone
-        ?? hrPrescription({ purpose: loopDoel, logs, currentDate }).line)
-      : null;
+    // Op de racedag komen tempo en hartslag uit de raceverwachting en
+    // niet uit het easy-voorschrift: dat laatste geeft haar rustige
+    // richtgebied van 132, en een wedstrijd loop je niet op je easy-band.
+    const tempo = isRace && raceVorm
+      ? verwachting.mid.pace
+      : (kind === DAG.RUN || kind === DAG.RUN_KRACHT)
+        ? (vanPlanner?.targetPace
+          ?? prescribedPace({ purpose: loopDoel, goal: raceDoel, easy, logs, currentDate }).paceMin
+          ?? tempoMin)
+        : null;
+    const hartslag = isRace && raceVorm
+      ? `Start onder 140, gemiddeld rond ${verwachting.raceHr}`
+      : (kind === DAG.RUN || kind === DAG.RUN_KRACHT)
+        ? (vanPlanner?.hrZone
+          ?? hrPrescription({ purpose: loopDoel, logs, currentDate }).line)
+        : null;
 
     // ── Wat zou deze sessie moeten opleveren? ─────────────────
     //
@@ -866,8 +893,16 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     // en niet uit haar lichaam — maar vooruit vanaf haar gemeten
     // efficiëntie, met de bovenkant van wat per week haalbaar is. Naast
     // het doel staat wat ze dezelfde soort sessie de vorige keer liep.
-    const doelHr = hartslag ? hrUitVoorschrift(hartslag) : null;
-    const doel = (hartslag && doelHr)
+    // Op de racedag staat de hartslag er als "start onder 140, gemiddeld
+    // rond 150". Die regel uit laten lezen door hrUitVoorschrift zou 140
+    // opleveren — het eerste getal — en dat is niet haar racehartslag.
+    // Hier dus het getal zelf, uit dezelfde bron als het tempo.
+    const doelHr = isRace && raceVorm ? verwachting.raceHr
+      : hartslag ? hrUitVoorschrift(hartslag) : null;
+    // En geen sessionTarget voor de race: dat rekent een easy-doeltempo
+    // uit, terwijl het tempo van deze dag de raceverwachting zelf is.
+    // Twee tempo's op één dag is precies wat hier niet moet staan.
+    const doel = (!isRace && hartslag && doelHr)
       ? sessionTarget({ date: datum, hr: doelHr, currentDate, workouts })
       : null;
 
@@ -888,26 +923,45 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
         ? (poort.binding?.reason || poort.blockers?.[0] || poort.headline) : null,
       gateUntil: opSlot ? vrijVanaf : null,
       level: vorm ? niveau : null,
-      run: vorm ? {
-        level: (vanPlanner || isVrijdag)
-          ? (vandaagSessie.chosenLevel ?? vandaagSessie.level ?? niveau) : niveau,
-        description: (vanPlanner || isVrijdag)
-          ? vandaagSessie.run.description : omschrijf(vorm),
-        minutes: (vanPlanner || isVrijdag)
-          ? vandaagSessie.run.duration : vorm.minutes,
+      // De racedag heeft geen trainingsvorm maar is wel een loopdag. Zonder
+      // deze regel viel hij uit elke lijst van loopdagen — en dus ook uit
+      // de tabel die juist tot en met de race moet lopen.
+      run: (vorm || raceVorm) ? {
+        level: raceVorm ? niveau
+          : (vanPlanner || isVrijdag)
+            ? (vandaagSessie.chosenLevel ?? vandaagSessie.level ?? niveau) : niveau,
+        description: raceVorm ? raceVorm.label
+          : (vanPlanner || isVrijdag)
+            ? vandaagSessie.run.description : omschrijf(vorm),
+        minutes: raceVorm ? raceVorm.minutes
+          : (vanPlanner || isVrijdag)
+            ? vandaagSessie.run.duration : vorm.minutes,
         // Het loopblok apart van de sessieduur. "33 min" klinkt als veel
         // voor iemand met blokken van tien, maar die 33 is inclusief
         // wandelen — en het blok is wat haar belast. Zonder dit getal is
         // niet te zien of een sessie te zwaar is, en ook niet te testen.
-        blockMin: (vanPlanner || isVrijdag)
-          ? (vandaagSessie.run.runMin ?? null)
-          : (vorm.continuous ? vorm.runMin : (vorm.runMin ?? null)),
-        continuous: (vanPlanner || isVrijdag)
-          ? !!vandaagSessie.run.continuous : !!vorm.continuous,
+        blockMin: raceVorm ? null
+          : (vanPlanner || isVrijdag)
+            ? (vandaagSessie.run.runMin ?? null)
+            : (vorm.continuous ? vorm.runMin : (vorm.runMin ?? null)),
+        continuous: raceVorm ? true
+          : (vanPlanner || isVrijdag)
+            ? !!vandaagSessie.run.continuous : !!vorm.continuous,
         // Hoe hard, en op welke hartslag.
         pace: tempo ? fmtTempo(tempo) : null,
         paceMin: tempo,
         hr: hartslag,
+        // De doelhartslag als getal, naast de zin. Wie het getal uit de
+        // zin moet vissen, krijgt op de racedag 140 uit "start onder 140,
+        // gemiddeld rond 150" — het eerste getal in plaats van het
+        // bedoelde. Eén plek bepaalt dit, en dat is hier.
+        targetHr: doelHr,
+        // Het aantal herhalingen bij een intervalsessie. Zonder dit staat
+        // er in een blokkolom "2 min" voor een sessie van zes keer twee —
+        // het getal klopt per blok en bedriegt over de sessie.
+        reps: raceVorm ? null
+          : (vanPlanner || isVrijdag) ? (vandaagSessie.run.reps ?? null)
+            : (vorm.reps ?? null),
         fromPlanner: !!vanPlanner || !!isVrijdag,
         waitingForGate: !!isVrijdag,
         templateDescription: vorm ? omschrijf(vorm) : null,
@@ -916,7 +970,9 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
         // werkelijk opleverde.
         target: doel?.known ? doel : null,
         targetWhy: doel?.known ? doel.why : (doel?.why || null),
-        purpose: (vanPlanner || isVrijdag) ? vandaagSessie.purpose : vorm?.purpose,
+        purpose: raceVorm ? raceVorm.purpose
+          : (vanPlanner || isVrijdag) ? vandaagSessie.purpose : vorm?.purpose,
+        isRace: !!raceVorm,
         strides: (vanPlanner || isVrijdag) ? !!vandaagSessie.run.strides
           : (rol === 'easy' || rol === 'kort'),
         timeOnFeet: tijdOpBenen,

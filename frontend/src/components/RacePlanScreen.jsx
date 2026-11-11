@@ -5,7 +5,7 @@ import { loadWeightPhase, saveWeightPhase, FASE as GEWICHTSFASE } from '../weigh
 import BackfillPanel from './BackfillPanel';
 import { todayLocal, formatNLLong } from '../datetime';
 import { saveGoal } from '../goals';
-import { sessieTabel, bijsturing } from '../sessieVergelijking';
+import { sessieTabel, volledigeTabel, bijsturing } from '../sessieVergelijking';
 import { fmtPace } from '../workouts';
 
 // Het dagplan naar Ameland.
@@ -361,6 +361,12 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
   // erboven komen en niet uit een tweede venster.
   const tabel = useMemo(() => sessieTabel({ currentDate, logs }),
     [currentDate, logs, tick]);
+  // Dezelfde tabel, doorgetrokken tot en met de race: gelopen trainingen
+  // met doel én uitkomst, aanstaande met alleen het doel. Eén rij per
+  // training, zodat er geen aparte planning naast een apart logboek
+  // ontstaat die uit elkaar lopen.
+  const volledig = useMemo(() => volledigeTabel({ currentDate, logs, dagen: plan.days }),
+    [currentDate, logs, plan, tick]);
   const bij = useMemo(() => bijsturing({
     currentDate, logs, tabel, dagen: plan.days,
     targetSec: race?.targetTimeSec ?? null,
@@ -680,11 +686,12 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
           Het doel per rij is gereconstrueerd met de gegevens van de dag
           ervóór. Rekenen met de gegevens van vandaag zou haar prestatie
           afmeten aan een lat die achteraf is verlegd. */}
-      {tabel.known && (
+      {volledig.known && (
         <>
-          <div className="os-section-label">Doel tegen uitkomst</div>
+          <div className="os-section-label">Elke training tot Ameland</div>
           <div className="os-card" style={{ marginBottom: 12 }}
-            data-sessietabel={tabel.rows.length}>
+            data-sessietabel={volledig.rows.length}
+            data-tegaan={volledig.teGaan}>
             <div style={{ overflowX: 'auto', margin: '0 -2px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11,
                 fontVariantNumeric: 'tabular-nums' }}>
@@ -700,64 +707,86 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                   </tr>
                 </thead>
                 <tbody>
-                  {tabel.rows.map(r => (
-                    <tr key={r.date} data-sessierij={r.date}
-                      style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '5px 5px 5px 0', whiteSpace: 'nowrap' }}>
-                        {r.date.slice(8)}-{r.date.slice(5, 7)}
-                      </td>
-                      {!r.known ? (
-                        <td colSpan={6} style={{ padding: '5px 0', textAlign: 'right',
-                          color: 'var(--ghost)', fontSize: 10.5 }}>
-                          niet te meten
+                  {volledig.rows.map(r => {
+                    const komt = r.status === 'gepland' || r.status === 'vandaag';
+                    const vandaag = r.status === 'vandaag';
+                    return (
+                      <tr key={r.date} data-sessierij={r.date} data-rijstatus={r.status}
+                        style={{ borderBottom: '1px solid var(--border)',
+                          background: vandaag ? 'var(--wash, rgba(0,0,0,0.03))' : undefined }}>
+                        <td style={{ padding: '5px 5px 5px 0', whiteSpace: 'nowrap',
+                          fontWeight: vandaag || r.isRace ? 800 : 400,
+                          color: komt && !vandaag && !r.isRace ? 'var(--sub)' : undefined }}>
+                          {r.date.slice(8)}-{r.date.slice(5, 7)}
+                          {r.dayShort ? <span style={{ color: 'var(--ghost)', fontWeight: 400,
+                            fontSize: 9.5, marginLeft: 3 }}>{r.dayShort}</span> : null}
                         </td>
-                      ) : (
-                        <>
-                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
-                            color: 'var(--sub)' }}>{r.doelHr}</td>
-                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
-                            fontWeight: 700,
-                            color: (r.hrSuspect || r.uitbijter) ? 'var(--ghost)'
-                              : r.teHard ? 'var(--clay)' : 'var(--sage)' }}>
-                            {r.echteHr}
-                            <span style={{ fontWeight: 400, fontSize: 9.5,
-                              color: 'var(--ghost)', marginLeft: 2 }}>
-                              {r.hrDelta > 0 ? `+${r.hrDelta}` : r.hrDelta}
-                            </span>
+                        {r.status === 'onmeetbaar' ? (
+                          <td colSpan={6} style={{ padding: '5px 0', textAlign: 'right',
+                            color: 'var(--ghost)', fontSize: 10.5 }}>
+                            niet te meten
                           </td>
-                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
-                            color: 'var(--sub)' }}>
-                            {r.doelTempo != null ? `${fmtPace(r.doelTempo)}` : '—'}
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
-                            fontWeight: 700 }}>{fmtPace(r.echtTempo)}</td>
-                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
-                            color: 'var(--sub)' }}>{r.langsteBlokMin}′</td>
-                          <td style={{ textAlign: 'right', padding: '5px 0',
-                            fontSize: 9.5, whiteSpace: 'nowrap',
-                            color: (r.hrSuspect || r.uitbijter) ? 'var(--ghost)'
-                              : r.teHard ? 'var(--clay)' : 'var(--sage)' }}>
-                            {r.hrSuspect ? 'meting?'
-                              : r.uitbijter ? 'telt niet mee'
-                                : r.teHard ? 'te hard' : 'goed'}
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
+                        ) : (
+                          <>
+                            <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                              color: 'var(--sub)' }}>{r.doelHr ?? '—'}</td>
+                            <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                              fontWeight: 700,
+                              color: (r.hrSuspect || r.uitbijter) ? 'var(--ghost)'
+                                : r.teHard ? 'var(--clay)' : 'var(--sage)' }}>
+                              {r.echteHr ?? <span style={{ color: 'var(--ghost)',
+                                fontWeight: 400 }}>·</span>}
+                              {r.echteHr != null && (
+                                <span style={{ fontWeight: 400, fontSize: 9.5,
+                                  color: 'var(--ghost)', marginLeft: 2 }}>
+                                  {r.hrDelta > 0 ? `+${r.hrDelta}` : r.hrDelta}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                              color: 'var(--sub)' }}>
+                              {r.doelTempo != null ? fmtPace(r.doelTempo) : '—'}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                              fontWeight: 700 }}>
+                              {r.echtTempo != null ? fmtPace(r.echtTempo)
+                                : <span style={{ color: 'var(--ghost)', fontWeight: 400 }}>·</span>}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                              color: 'var(--sub)' }}>{r.blokWeergave ?? '—'}</td>
+                            <td style={{ textAlign: 'right', padding: '5px 0',
+                              fontSize: 9.5, whiteSpace: 'nowrap',
+                              color: (r.hrSuspect || r.uitbijter) ? 'var(--ghost)'
+                                : komt ? 'var(--ghost)'
+                                  : r.teHard ? 'var(--clay)' : 'var(--sage)' }}>
+                              {r.hrSuspect ? 'meting?'
+                                : r.uitbijter ? 'telt niet mee'
+                                  : vandaag ? 'vandaag'
+                                    : r.gated ? 'op slot'
+                                      : r.isRace ? 'race'
+                                        : komt ? 'te gaan'
+                                          : r.teHard ? 'te hard' : 'goed'}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5,
               marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
-              {tabel.samenvatting}
+              {volledig.samenvatting}
             </div>
             <div style={{ fontSize: 9.5, color: 'var(--ghost)', lineHeight: 1.45,
               marginTop: 5 }}>
-              Doeltempo is het doel zoals het op die dag gold, gerekend met de gegevens
-              van de dag ervóór. Blok is je langste aaneengesloten loopblok, niet de
-              sessieduur. Een streepje betekent dat er op die datum nog niet genoeg
-              gemeten sessies waren voor een doeltempo.
+              Van je laatste trainingen tot en met de race. Een punt betekent: nog te
+              lopen — zodra je hem loopt vult je eigen hartslag en tempo zich hier in,
+              en schuiven de doelen eronder mee met wat je dan blijkt te kunnen. Bij
+              gelopen trainingen is het doeltempo het doel zoals het op die dag gold,
+              gerekend met de gegevens van de dag ervóór. Blok is je langste
+              aaneengesloten loopblok, niet de sessieduur; 5×2′ is een intervalsessie.
             </div>
           </div>
         </>

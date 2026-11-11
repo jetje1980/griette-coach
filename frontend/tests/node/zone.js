@@ -151,7 +151,12 @@ S('3 · Het schema biedt de verdeling aan waarop zij wordt afgerekend');
   const logs = wereld();
   const pl = racePlan({ currentDate: TODAY, logs, raceDate: RACE,
     raceKm: 5, raceSec: 2100 });
-  const loopdagen = pl.days.filter(d => d.run);
+  // De racedag is sinds kort ook een loopdag in het plan — hij had geen
+  // trainingsvorm en viel daardoor uit elke lijst, ook uit de tabel die
+  // tot en met de race moet lopen. Maar een wedstrijd is geen rustige
+  // trainingsdag en hoort niet in deze verdeling: anders telt driekwartier
+  // racen mee als "rustig" en ziet 80/20 er beter uit dan het is.
+  const loopdagen = pl.days.filter(d => d.run && !d.run.isRace);
   const kwaliteit = loopdagen.filter(d => /werkhartslag/.test(d.run.description));
   const rustigMin = loopdagen.filter(d => !/werkhartslag/.test(d.run.description))
     .reduce((a, d) => a + (d.run.minutes || 0), 0);
@@ -171,6 +176,17 @@ S('3 · Het schema biedt de verdeling aan waarop zij wordt afgerekend');
     loopdagen.filter(d => !/werkhartslag/.test(d.run.description))
       .every(d => /onder VT1/.test(d.run.hr || '')),
     JSON.stringify(loopdagen[0]?.run.hr));
+
+  // De racedag staat er wél in als loopdag, met een eigen hartslag. Zou
+  // die uit het easy-voorschrift komen, dan stond er 132 voor een
+  // wedstrijd — haar rustige richtgebied.
+  const race = pl.days.find(d => d.run?.isRace);
+  console.log(`      racedag: ${race?.run.hr} · ${race?.run.pace}`);
+  ok('de racedag is een loopdag in het plan', !!race, '');
+  ok('met een eigen hartslag, niet het easy-richtgebied',
+    !/onder VT1/.test(race.run.hr) && race.run.targetHr > 132,
+    `${race.run.hr} → ${race.run.targetHr}`);
+  ok('en een eigen tempo', race.run.paceMin > 0, String(race.run.paceMin));
 }
 
 S('4 · Rustig is het doel, het plafond is de grens');

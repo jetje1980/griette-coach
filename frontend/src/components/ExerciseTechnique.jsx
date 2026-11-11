@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { techniqueFor, loadExerciseVideos, saveExerciseVideo, searchUrl } from '../data/exerciseTechnique';
+import { techniqueFor, loadExerciseVideos, saveExerciseVideo, searchUrl,
+  GEWICHTEN_UITLEG } from '../data/exerciseTechnique';
 import { youtubeEmbedUrl, detectProvider } from '../data/strengthClasses';
 
 // Demo en techniek, in de sessie zelf.
@@ -13,6 +14,7 @@ import { youtubeEmbedUrl, detectProvider } from '../data/strengthClasses';
 export default function ExerciseTechnique({ exercise }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [uitleg, setUitleg] = useState(false);
   const [draft, setDraft] = useState('');
   const [videos, setVideos] = useState(() => loadExerciseVideos());
 
@@ -35,7 +37,7 @@ export default function ExerciseTechnique({ exercise }) {
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
           fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
         <span>{open ? '▲' : '▶'}</span>
-        <span>Demo en techniek{url ? ' · video' : ''}</span>
+        <span>Wat is dit, en hoe zwaar{url ? ' · video' : ''}</span>
       </button>
 
       {open && (
@@ -77,7 +79,29 @@ export default function ExerciseTechnique({ exercise }) {
             </div>
           )}
 
+          {/* Eerst: wat is dit eigenlijk. De drie aanwijzingen hieronder
+              gaan over hoe je het goed doet en nemen aan dat je dat al
+              weet. Dat is precies de stap die ontbrak. */}
+          {tech.wat && (
+            <div data-oefening-wat style={{ fontSize: 11.5, lineHeight: 1.55,
+              marginBottom: 7 }}>{tech.wat}</div>
+          )}
+          {tech.gewicht && (
+            <div data-oefening-gewicht style={{ fontSize: 11.5, lineHeight: 1.55,
+              marginBottom: 8, paddingLeft: 8,
+              borderLeft: '2px solid var(--sage)' }}>
+              <span style={{ fontSize: 9.5, color: 'var(--ghost)', fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '0.4px', display: 'block',
+                marginBottom: 1 }}>Wat pak je vast</span>
+              {tech.gewicht}
+            </div>
+          )}
+
           {/* Precies drie aanwijzingen */}
+          <div style={{ fontSize: 9.5, color: 'var(--ghost)', fontWeight: 700,
+            textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>
+            Waar je op let
+          </div>
           {tech.cues.map((c, i) => (
             <div key={i} style={{ display: 'flex', gap: 7, fontSize: 11.5, lineHeight: 1.5,
               marginBottom: 3 }}>
@@ -85,6 +109,25 @@ export default function ExerciseTechnique({ exercise }) {
               <span style={{ color: i === 2 ? 'var(--rust)' : 'var(--sub)' }}>{c}</span>
             </div>
           ))}
+
+          <button type="button" onClick={() => setUitleg(v => !v)} data-gewichtuitleg-knop
+            style={{ background: 'none', border: 'none', padding: '8px 0 0', cursor: 'pointer',
+              fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center',
+              gap: 5 }}>
+            <span>{uitleg ? '▲' : '▶'}</span>
+            <span>Hoe werken series, herhalingen en gewicht?</span>
+          </button>
+          {uitleg && (
+            <div data-gewichtuitleg style={{ marginTop: 6 }}>
+              {GEWICHTEN_UITLEG.map(b => (
+                <div key={b.kop} style={{ marginBottom: 7 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 1 }}>{b.kop}</div>
+                  <div style={{ fontSize: 11.5, lineHeight: 1.55,
+                    color: 'var(--sub)' }}>{b.tekst}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {url && (
             <button type="button" onClick={() => { setVideos(saveExerciseVideo(exercise.id, '')); }}

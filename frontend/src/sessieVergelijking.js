@@ -215,6 +215,108 @@ export function sessieTabel({ currentDate = todayLocal(), logs = {}, workouts = 
   };
 }
 
+// ── Dezelfde tabel, doorgetrokken tot de race ───────────────────
+//
+// Zij vroeg het blok "alvast in te vullen tot en met de race, met
+// doeltempo en hartslag", en dat het zich telkens bijwerkt: de doelen bij
+// nieuwe trainingen, en het werkelijke tempo en de hartslag erbij zodra
+// een training gelopen is.
+//
+// Dat is één tabel, geen twee. Een aparte "planning" naast een aparte
+// "logboek" zou betekenen dat dezelfde training op twee plekken staat met
+// twee verschillende doelen — en dan loopt het uit elkaar zodra er iets
+// verschuift. Hier staat elke training één keer: een toekomstige rij
+// heeft alleen een doel, een gelopen rij heeft een doel én een uitkomst,
+// en vandaag kan allebei zijn.
+//
+// Het bijwerken hoeft nergens te worden aangezet. Een toekomstige rij
+// haalt zijn doeltempo uit `sessionTarget` van die dag, en dat rekent met
+// de gemeten efficiëntie van nú. Loopt zij een goede sessie, dan schuift
+// de hele rechterkolom mee bij de eerstvolgende keer dat dit scherm
+// opent. Dat is nagerekend: EF 0,716 → 0,748 na één sessie op 0,80, en
+// het doeltempo van 10:35 naar 10:02/km.
+export function volledigeTabel({ currentDate = todayLocal(), logs = {},
+  workouts = null, dagen = [], aantal = TABEL_AANTAL } = {}) {
+  const terug = sessieTabel({ currentDate, logs, workouts, aantal });
+
+  // Gelopen trainingen, oudste eerst — zodat de tabel van verleden naar
+  // toekomst leest en "vandaag" er middenin staat.
+  const gelopen = [...terug.rows].sort((a, b) => a.date.localeCompare(b.date))
+    .map(r => ({ ...r, status: r.known ? 'gelopen' : 'onmeetbaar', gepland: false,
+      blokWeergave: r.known && r.langsteBlokMin ? `${r.langsteBlokMin}′` : null }));
+  const gelopenOp = new Map(gelopen.map(r => [r.date, r]));
+
+  const vooruit = [];
+  for (const d of dagen) {
+    if (d.date < currentDate || !d.run) continue;
+    // Het getal zelf als het plan het meegeeft; alleen anders uit de zin
+    // gelezen. Zie racePlanDays: op de racedag levert de zin het verkeerde
+    // getal op.
+    const doelHr = d.run.targetHr ?? hrUitVoorschrift(d.run.hr, { fallback: 132 });
+    const doelTempo = d.run.target?.known ? d.run.target.targetPace : (d.run.paceMin ?? null);
+    const basis = {
+      date: d.date,
+      dayShort: d.dayShort,
+      rol: d.role || null,
+      beschrijving: d.run.description || null,
+      blokMin: d.run.blockMin ?? null,
+      reps: d.run.reps ?? null,
+      isRace: !!d.run.isRace,
+      // Hoe het blok te lezen is: een doorlopend blok van twaalf minuten
+      // is iets anders dan zes keer twee, en de race is geen blok maar een
+      // afstand.
+      blokWeergave: d.run.isRace ? 'race'
+        : d.run.reps > 1 ? `${d.run.reps}×${d.run.blockMin}′`
+          : d.run.blockMin != null ? `${d.run.blockMin}′` : null,
+      doelHr,
+      doelTempo,
+      gated: !!d.gated,
+      gateReason: d.gateReason || null,
+      gepland: true,
+      known: true,
+    };
+
+    // Vandaag kan al gelopen zijn. Dan is het één rij met allebei, niet
+    // twee rijen die elkaar tegenspreken.
+    const al = gelopenOp.get(d.date);
+    if (al) {
+      gelopenOp.set(d.date, { ...al, ...basis, ...{
+        echteHr: al.echteHr, echtTempo: al.echtTempo, ef: al.ef,
+        hrDelta: al.known ? Math.round(al.echteHr - doelHr) : null,
+        langsteBlokMin: al.langsteBlokMin,
+        teHard: al.teHard, hrSuspect: al.hrSuspect, uitbijter: al.uitbijter,
+        oordeel: al.oordeel, uitleg: al.uitleg, known: al.known,
+        status: al.known ? 'gelopen' : 'onmeetbaar',
+        // Is hij gelopen, dan telt wat er werkelijk gelopen is, niet wat
+        // er was voorgenomen.
+        blokWeergave: al.blokWeergave || basis.blokWeergave,
+      } });
+      continue;
+    }
+    vooruit.push({ ...basis, status: d.date === currentDate ? 'vandaag' : 'gepland',
+      echteHr: null, echtTempo: null });
+  }
+
+  const rows = [...gelopenOp.values(), ...vooruit]
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const teGaan = rows.filter(r => r.status === 'gepland' || r.status === 'vandaag');
+  return {
+    known: rows.length > 0,
+    rows,
+    gelopen: rows.filter(r => r.status === 'gelopen').length,
+    teGaan: teGaan.length,
+    // Hetzelfde oordeel over het verleden als in sessieTabel: één bron,
+    // zodat er geen tweede samenvatting ontstaat die iets anders zegt.
+    bruikbaar: terug.bruikbaar,
+    teHard: terug.teHard,
+    patroon: terug.patroon,
+    overschot: terug.overschot,
+    samenvatting: terug.samenvatting,
+    tabel: terug,
+  };
+}
+
 // ── Wat er aan de volgende training moet veranderen ─────────────
 //
 // Vier knoppen, en per training degene die op dat moment bindt. De
@@ -275,7 +377,7 @@ export function bijsturing({ currentDate = todayLocal(), dagen = [], logs = {},
   const uitgelegd = new Set();
 
   const items = komend.map(d => {
-    const doelHr = hrUitVoorschrift(d.run.hr, { fallback: 132 });
+    const doelHr = d.run.targetHr ?? hrUitVoorschrift(d.run.hr, { fallback: 132 });
     const doelTempo = d.run.target?.known ? d.run.target.targetPace : d.run.paceMin;
     const blok = d.run.blockMin ?? null;
     const tempoTekst = doelTempo ? `${fmtPace(doelTempo)}/km` : 'het geplande tempo';

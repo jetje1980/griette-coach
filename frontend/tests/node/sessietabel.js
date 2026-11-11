@@ -28,8 +28,9 @@
 //     voor dezelfde vraag is hoe dit project al een paar keer in
 //     tegenspraak met zichzelf is geraakt.
 import './_storage-stub.js';
-import { sessieTabel, sessieRij, bijsturing, HR_MARGE, TABEL_AANTAL }
+import { sessieTabel, sessieRij, volledigeTabel, bijsturing, HR_MARGE, TABEL_AANTAL }
   from '../../src/sessieVergelijking.js';
+import { racePlan } from '../../src/racePlanDays.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = '') => {
@@ -353,7 +354,84 @@ S('10 · Een dag op slot krijgt geen opdracht');
     b.items.some(i => i.date === addDays(TODAY, 2)), JSON.stringify(b.items.map(i => i.date)));
 }
 
-S('11 · Een leeg dossier verzint niets');
+S('11 · De tabel loopt door tot en met de race');
+{
+  // Zij vroeg het blok "alvast in te vullen tot en met de race". Dat is
+  // één tabel: gelopen trainingen met doel én uitkomst, aanstaande met
+  // alleen het doel. Een aparte planning naast een apart logboek zou
+  // dezelfde training twee keer tonen met twee doelen.
+  const W = [-26, -22, -18, -14, -10, -6].map(n => run(addDays(TODAY, n), 0.72, 149));
+  const logs = wereld(W);
+  localStorage.setItem('gc_race_goals', JSON.stringify([{ id: 'a', date: '2026-12-12',
+    name: 'Ameland', type: 'TARGET', enabled: true, terrain: 'trail',
+    distanceKm: 5, targetTimeSec: 2100 }]));
+  const plan = racePlan({ currentDate: TODAY, logs, raceDate: '2026-12-12',
+    raceKm: 5, raceSec: 2100, raceName: 'Ameland' });
+  const v = volledigeTabel({ currentDate: TODAY, logs, dagen: plan.days });
+  const laatste = v.rows[v.rows.length - 1];
+  console.log(`      ${v.gelopen} gelopen, ${v.teGaan} te gaan, laatste ${laatste.date}`);
+
+  ok('de tabel eindigt op de racedag', laatste.date === '2026-12-12', laatste.date);
+  ok('en die racedag is er een met een eigen hartslag en tempo',
+    laatste.doelHr > 0 && laatste.doelTempo > 0,
+    JSON.stringify([laatste.doelHr, laatste.doelTempo]));
+  // De race loop je niet op je easy-band. Kwam dit getal uit het
+  // easy-voorschrift, dan stond er 132 voor een wedstrijd.
+  ok('de racehartslag is hoger dan de easy-hartslag',
+    laatste.doelHr > v.rows.find(r => r.status === 'gepland').doelHr,
+    `${laatste.doelHr} tegen ${v.rows.find(r => r.status === 'gepland').doelHr}`);
+  ok('en hij staat als race gemarkeerd', laatste.isRace === true, '');
+
+  ok('de rijen staan op datum, oud naar nieuw',
+    v.rows.every((r, i) => i === 0 || v.rows[i - 1].date <= r.date), '');
+  ok('gelopen trainingen staan erin met hun uitkomst',
+    v.rows.filter(r => r.status === 'gelopen').every(r => r.echteHr > 0), '');
+  ok('aanstaande trainingen hebben een doel maar nog geen uitkomst',
+    v.rows.filter(r => r.status === 'gepland')
+      .every(r => r.doelHr > 0 && r.echteHr == null), '');
+  ok('er staat ruim een maand aan trainingen klaar', v.teGaan >= 10, String(v.teGaan));
+
+  // Eén training, één rij. Vandaag is zowel gepland als mogelijk gelopen.
+  const data = v.rows.map(r => r.date);
+  ok('geen enkele datum staat er twee keer in',
+    new Set(data).size === data.length, JSON.stringify(data));
+
+  // Het oordeel over het verleden komt uit dezelfde bron als de losse
+  // tabel: anders staan er twee samenvattingen die iets anders zeggen.
+  const los = sessieTabel({ currentDate: TODAY, logs });
+  ok('de samenvatting is dezelfde als die van de losse tabel',
+    v.samenvatting === los.samenvatting && v.overschot === los.overschot, '');
+}
+
+S('12 · En hij werkt zich bij als er een training bijkomt');
+{
+  // Dit is wat zij vroeg: "telkens aanpassen bij nieuwe trainingen".
+  // Er is niets om aan te zetten — een toekomstige rij rekent met de
+  // gemeten efficiëntie van nu, dus een betere sessie verschuift de hele
+  // rechterkolom vanzelf.
+  const W = [-26, -22, -18, -14, -10, -6].map(n => run(addDays(TODAY, n), 0.72, 149));
+  const logs = wereld(W);
+  const plan = racePlan({ currentDate: TODAY, logs, raceDate: '2026-12-12',
+    raceKm: 5, raceSec: 2100 });
+  const voor = volledigeTabel({ currentDate: TODAY, logs, dagen: plan.days });
+  const doelVoor = voor.rows.filter(r => r.status === 'gepland').slice(-1)[0].doelTempo;
+
+  // Twee duidelijk betere sessies erbij.
+  const beter = [...W, run(addDays(TODAY, -3), 0.80, 140), run(addDays(TODAY, -1), 0.82, 140)];
+  const logs2 = wereld(beter);
+  const plan2 = racePlan({ currentDate: TODAY, logs: logs2, raceDate: '2026-12-12',
+    raceKm: 5, raceSec: 2100 });
+  const na = volledigeTabel({ currentDate: TODAY, logs: logs2, dagen: plan2.days });
+  const doelNa = na.rows.filter(r => r.status === 'gepland').slice(-1)[0].doelTempo;
+
+  console.log(`      doeltempo laatste trainingsdag: ${doelVoor} → ${doelNa}`);
+  ok('betere sessies maken het doeltempo sneller', doelNa < doelVoor,
+    `${doelVoor} → ${doelNa}`);
+  ok('en de nieuwe sessies staan zelf ook in de tabel',
+    na.gelopen > voor.gelopen, `${voor.gelopen} → ${na.gelopen}`);
+}
+
+S('13 · Een leeg dossier verzint niets');
 {
   wereld([]);
   const t = sessieTabel({ currentDate: TODAY, logs: {} });

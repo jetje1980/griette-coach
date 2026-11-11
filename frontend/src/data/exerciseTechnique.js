@@ -18,6 +18,8 @@ const VIDEO_KEY = 'gc_exercise_videos';
 export const TECHNIQUE = {
   // ── Programma A ───────────────────────────────────────────────
   a_squat: {
+    wat: 'Een kniebuiging waarbij je één gewicht met twee handen tegen je borst houdt, alsof je een grote beker vasthoudt. Dat is ook wat het woord betekent: goblet is bokaal. Doordat het gewicht vóór je hangt blijf je vanzelf rechtop, in plaats van voorover te kantelen.',
+    gewicht: 'Eén halter of kettlebell, vastgehouden bij de bovenkant. Begin licht — 6 tot 8 kilo — en ga pas zwaarder als je alle herhalingen netjes haalt.',
     search: 'goblet squat techniek',
     cues: [
       'Dumbbell tegen je borst, ellebogen naar binnen, voeten iets breder dan je heupen.',
@@ -26,6 +28,8 @@ export const TECHNIQUE = {
     ],
   },
   a_hinge: {
+    wat: 'Je buigt vanuit je heupen naar voren, met je benen bijna gestrekt, en laat de gewichten langs je benen omlaag glijden. Deadlift betekent letterlijk: iets tillen dat stil ligt. Romanian is alleen de naam van deze variant. Je voelt hem aan de achterkant van je bovenbenen.',
+    gewicht: 'Twee halters, één in elke hand. Begin met 5 kilo per hand. Dit voelt lichter dan het is, omdat je onderrug meedoet.',
     search: 'romanian deadlift dumbbell techniek',
     cues: [
       'Gewichten voor je dijen, knieën licht gebogen en dáár houden.',
@@ -34,6 +38,8 @@ export const TECHNIQUE = {
     ],
   },
   a_glutes: {
+    wat: 'Je zit op de grond met je rug tegen de zijkant van een bank of bed, voeten plat op de vloer. Van daaruit duw je je heupen omhoog, tot je lichaam een rechte plank vormt van knie tot schouder. Hip thrust is letterlijk heup-omhoog-duwen.',
+    gewicht: 'Een halter of kettlebell op je heupbotten, met een opgevouwen handdoek eronder want het drukt. Hier kun je sneller zwaarder dan bij de rest — je bilspieren zijn de sterkste die je hebt.',
     search: 'hip thrust techniek',
     cues: [
       'Schouderbladen op de bank, voeten plat, schenen verticaal bovenin.',
@@ -42,6 +48,8 @@ export const TECHNIQUE = {
     ],
   },
   a_push: {
+    wat: 'Opdrukken. Op je tenen of op je knieën. Op je knieën is geen mindere versie: het is dezelfde oefening met minder gewicht.',
+    gewicht: 'Geen gewicht nodig — je tilt jezelf. Te zwaar? Zet je handen hoger, bijvoorbeeld op de rand van de bank. Te licht? Zet je voeten hoger.',
     search: 'push-up techniek knieen',
     cues: [
       'Handen iets breder dan schouders, lichaam één rechte lijn van hoofd tot knie of teen.',
@@ -50,6 +58,8 @@ export const TECHNIQUE = {
     ],
   },
   a_pull: {
+    wat: 'Je steunt met één hand en één knie op een bank, staat voorovergebogen, en trekt met je andere arm een gewicht omhoog naar je heup. De beweging lijkt op roeien, en row is het Engelse woord voor roeien. Dumbbell is gewoon een losse halter.',
+    gewicht: 'Eén halter. Hier kun je meer dan je denkt, want je rug is sterk. Begin met 6 tot 8 kilo.',
     search: 'dumbbell row single arm techniek',
     cues: [
       'Eén hand en knie op de bank, rug vlak, schouders evenwijdig aan de grond.',
@@ -58,6 +68,8 @@ export const TECHNIQUE = {
     ],
   },
   a_core: {
+    wat: 'Je ligt op je rug met je armen recht omhoog en je knieën boven je heupen, als een kever die op zijn rug is beland — vandaar de naam. Je strekt steeds één arm en het tegenovergestelde been uit, langzaam.',
+    gewicht: 'Geen gewicht. Zwaarder maak je hem door langzamer te gaan, niet door iets vast te pakken.',
     search: 'dead bug oefening techniek',
     cues: [
       'Op je rug, armen recht omhoog, knieën boven je heupen in een hoek van 90°.',
@@ -66,6 +78,8 @@ export const TECHNIQUE = {
     ],
   },
   a_calves: {
+    wat: 'Op je tenen gaan staan en weer langzaam zakken. Calf is het Engelse woord voor kuit. Dit is de spier waarmee je bij elke stap afzet.',
+    gewicht: 'Begin op twee benen zonder gewicht. Gaat dat makkelijk, doe hem dan op één been — dat is in één klap twee keer zo zwaar.',
     search: 'staande kuitheffing techniek',
     cues: [
       'Sta op de rand van een tree of verhoging, hielen vrij, licht steunen voor balans.',
@@ -76,6 +90,8 @@ export const TECHNIQUE = {
 
   // ── Programma B ───────────────────────────────────────────────
   b_lunge: {
+    wat: 'Een kniebuiging met één been voor en één been achter, waarbij je op die plek blijft staan. Split betekent gesplitst: je benen staan uit elkaar. Je zakt recht omlaag; je stapt niet.',
+    gewicht: 'Eerst zonder gewicht tot je stabiel staat. Daarna één halter in elke hand, 4 tot 5 kilo om te beginnen.',
     search: 'split squat techniek',
     cues: [
       'Grote stap naar voren, gewicht verdeeld, romp rechtop.',
@@ -84,6 +100,8 @@ export const TECHNIQUE = {
     ],
   },
   b_hinge: {
+    wat: 'Een gewicht met een handvat tussen je voeten van de grond tillen door je heupen te strekken. Kettlebell is letterlijk ketelbel, naar de vorm. Je komt omhoog door je heupen naar voren te duwen, niet door je rug recht te trekken.',
+    gewicht: 'Eén kettlebell, 8 tot 12 kilo. Van de grond tillen voelt zwaarder dan hetzelfde gewicht in je handen houden.',
     search: 'kettlebell deadlift techniek',
     cues: [
       'Kettlebell tussen je voeten, heupen hoog, borst open.',
@@ -92,6 +110,8 @@ export const TECHNIQUE = {
     ],
   },
   b_glutes: {
+    wat: 'Een bruggetje op één been: je ligt op je rug, zet één voet op de grond en duwt je heupen omhoog terwijl het andere been in de lucht blijft. Glute is je bilspier.',
+    gewicht: 'Geen gewicht nodig. Eén been doet hier al het werk dat anders twee benen deden.',
     search: 'single leg glute bridge techniek',
     cues: [
       'Eén voet plat, andere knie opgetrokken, armen naast je.',
@@ -100,6 +120,8 @@ export const TECHNIQUE = {
     ],
   },
   b_push: {
+    wat: 'Gewichten vanaf schouderhoogte recht boven je hoofd duwen, zittend of staand. Press betekent duwen.',
+    gewicht: 'Twee halters. Begin licht — 3 tot 4 kilo per hand — want je schouders zijn kwetsbaarder dan je benen.',
     search: 'dumbbell shoulder press techniek',
     cues: [
       'Gewichten op schouderhoogte, polsen recht boven je ellebogen.',
@@ -108,6 +130,8 @@ export const TECHNIQUE = {
     ],
   },
   b_pull: {
+    wat: 'Een elastische band op borsthoogte voor je uit elkaar trekken, tot je schouderbladen naar elkaar toe komen. Pull-apart is uit-elkaar-trekken.',
+    gewicht: 'Geen kilo\'s maar de stugheid van de band. Zwaarder betekent: een dikkere band, of je handen dichter bij elkaar pakken.',
     search: 'band pull apart techniek',
     cues: [
       'Band op borsthoogte, armen gestrekt, handen op schouderbreedte.',
@@ -116,6 +140,8 @@ export const TECHNIQUE = {
     ],
   },
   b_carry: {
+    wat: 'Met een zwaar gewicht in elke hand rechtop een stuk lopen. Een boer die met twee volle emmers sjouwt doet precies dit, en vandaar de naam.',
+    gewicht: 'Zo zwaar als je kunt dragen zonder scheef te hangen. Dit is de oefening waarbij je het meeste gewicht aankunt — wees hier niet te voorzichtig.',
     search: 'farmer carry techniek',
     cues: [
       'Zwaar gewicht in elke hand, schouders naar achteren, blik vooruit.',
@@ -124,6 +150,8 @@ export const TECHNIQUE = {
     ],
   },
   b_feet: {
+    wat: 'Je tenen optillen terwijl je hielen op de grond blijven, en daarna je voetholte actief hol maken zonder je tenen te krullen. Het maakt de kleine spieren in je voet sterker, en die vangen elke stap op.',
+    gewicht: 'Geen gewicht. Dit gaat om precisie, niet om kracht.',
     search: 'voetboog training hardlopen',
     cues: [
       'Blote voeten, sta rechtop met je gewicht verdeeld over de hele voet.',
@@ -330,6 +358,60 @@ export const TECHNIQUE = {
     'Krul je tenen wel, dan doe je het met de verkeerde spieren — begin dan zittend opnieuw.',
   ] },
 };
+
+// ── Hoe gewichten werken, in gewone woorden ────────────────────
+//
+// Zij vroeg om duidelijker uitleg: "wat een goblet squat is enzo, en hoe
+// gewichten gebruiken, in jip-en-janneke-taal".
+//
+// Wat er stond waren drie technische aanwijzingen per oefening. Die gaan
+// over hoe je een beweging goed uitvoert, en ze gaan er stilzwijgend van
+// uit dat je al weet wát de beweging is. "Dumbbell tegen je borst,
+// ellebogen naar binnen" helpt niemand die zich afvraagt wat een goblet
+// squat eigenlijk is. Daarom staat er nu per oefening eerst een zin die
+// de naam uitlegt en zegt wat je gaat doen, en daarna wat je vastpakt en
+// hoe zwaar.
+//
+// Wat hieronder staat, staat één keer: het geldt voor elke oefening en
+// hoort niet veertien keer herhaald te worden.
+export const GEWICHTEN_UITLEG = [
+  {
+    kop: 'Serie en herhaling',
+    tekst: 'Een herhaling is de beweging één keer: één keer zakken en weer omhoog. '
+      + 'Een serie is een rijtje herhalingen achter elkaar, zonder rust. "3 series van '
+      + '10" betekent dus: tien keer, rusten, tien keer, rusten, tien keer. Tussen de '
+      + 'series rust je ongeveer twee minuten — korter voelt stoerder maar maakt de '
+      + 'volgende serie alleen slechter.',
+  },
+  {
+    kop: 'Hoe zwaar',
+    tekst: 'Het juiste gewicht is het gewicht waarbij de laatste twee herhalingen zwaar '
+      + 'zijn maar nog netjes gaan. Kun je er makkelijk vijf bij doen, dan is het te '
+      + 'licht. Gaat de laatste herhaling alleen nog met zwaaien of een holle rug, dan '
+      + 'is het te zwaar. Je raadt de eerste keer, en na één training weet je het.',
+  },
+  {
+    kop: 'Wanneer zwaarder',
+    tekst: 'Haal je alle series met twee of drie herhalingen over, dan is dat gewicht '
+      + 'klaar: de volgende keer één kilo erbij, of één herhaling per serie erbij. Eén '
+      + 'van de twee, niet allebei tegelijk. Dat lijkt weinig — één kilo per twee weken '
+      + 'is in drie maanden zes kilo.',
+  },
+  {
+    kop: 'Waarom zwaar en weinig',
+    tekst: 'Voor hardlopen werkt zwaar met weinig herhalingen beter dan licht met veel. '
+      + 'Je wordt er niet zwaarder van: je zenuwstelsel leert je bestaande spieren '
+      + 'harder aanspannen, en daardoor kost elke stap minder. Dat is precies waarom je '
+      + 'hartslag bij hetzelfde tempo zakt. Vijf herhalingen die echt zwaar zijn doen '
+      + 'daarvoor meer dan vijftien makkelijke.',
+  },
+  {
+    kop: 'Heb je geen gewichten',
+    tekst: 'Een volle rugzak, een waterfles van vijf liter of een pak kattenbakvulling '
+      + 'werken prima. Het lichaam telt kilo\'s, niet merken. Alleen bij oefeningen waar '
+      + 'je het gewicht met één hand vasthoudt is een echte halter prettiger.',
+  },
+];
 
 export function techniqueFor(exerciseId) {
   return TECHNIQUE[exerciseId] || null;
