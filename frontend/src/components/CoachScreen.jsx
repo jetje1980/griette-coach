@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import SubTabs from './SubTabs';
 import { ai } from '../ai';
+import { kwartaalDossier, dossierAlsTekst } from '../kwartaalanalyse';
+import { buildCoachContext, contextAsText } from '../coachContext';
 import { store } from '../store';
 import { todayLocal } from '../datetime';
 import WhyPanel from './WhyPanel';
 
-const SUBTABS = ['Nu', 'Weekanalyse', 'Maand'];
+const SUBTABS = ['Nu', 'Weekanalyse', 'Maand', 'Kwartaal'];
 
 const REPORT_KEY      = 'gc_coach_report';
 const REPORT_DATE_KEY = 'gc_coach_report_date';
@@ -423,6 +425,111 @@ function TabMaand({ logs }) {
 // ═══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
+
+// ── Het kwartaal ────────────────────────────────────────────────
+//
+// Zij vroeg om een analyse waarin alles meetelt: slaap, HRV, cyclus,
+// gewicht, hartslag, de toning van haar lichaam. Een cyclus duurt vier
+// weken, dus in een maand zie je er één en daarmee geen patroon;
+// loopeconomie beweegt in maanden en lichaamsverandering nog trager.
+// Daarom dit venster.
+//
+// De opzet: het dossier staat er altijd, ook zonder AI. Dat is berekend
+// en controleerbaar. De duiding erboven komt van het model, dat alleen
+// over dat dossier mag redeneren en er geen getal aan mag toevoegen.
+function TabKwartaal({ logs }) {
+  const [tekst, setTekst] = useState('');
+  const [bezig, setBezig] = useState(false);
+  const [fout, setFout] = useState(null);
+  const vandaag = todayLocal();
+
+  const dossier = useMemo(() => {
+    try { return kwartaalDossier({ currentDate: vandaag, logs }); }
+    catch (e) { return { fout: e?.message || 'Het dossier kon niet worden opgebouwd.' }; }
+  }, [logs, vandaag]);
+
+  async function analyseer() {
+    setBezig(true); setFout(null);
+    try {
+      const t = await ai.quarterReview(dossierAlsTekst(dossier),
+        { context: contextAsText(buildCoachContext({ asOf: vandaag })) });
+      setTekst(t);
+    } catch (e) {
+      setFout(e?.message || 'De analyse is niet gelukt.');
+    } finally { setBezig(false); }
+  }
+
+  if (dossier?.fout) {
+    return <div className="os-card" style={{ fontSize: 12 }}>{dossier.fout}</div>;
+  }
+
+  return (
+    <div data-kwartaal={dossier.dagen}>
+      <div className="os-card" style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800 }}>
+          Kwartaalanalyse · {dossier.van} t/m {dossier.tot}
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5, marginTop: 3 }}>
+          Alles over negentig dagen naast elkaar: slaap, HRV, rusthartslag, cyclus,
+          gewicht, maten, foto's, training en kracht. Het dossier hieronder is
+          gerekend uit je eigen metingen en staat er ook zonder AI. De duiding
+          erboven komt van het model, dat alleen over dit dossier mag redeneren
+          en er geen getal aan mag toevoegen.
+        </div>
+        <button type="button" onClick={analyseer} disabled={bezig}
+          data-kwartaal-knop
+          style={{ marginTop: 8, padding: '7px 12px', borderRadius: 7,
+            border: '1px solid var(--sage)', background: 'transparent',
+            color: 'var(--sage)', fontSize: 12, fontWeight: 800,
+            cursor: bezig ? 'default' : 'pointer', opacity: bezig ? 0.6 : 1 }}>
+          {bezig ? 'Bezig met analyseren…' : 'Analyseer dit kwartaal'}
+        </button>
+        {fout && (
+          <div style={{ fontSize: 11, color: 'var(--alert)', marginTop: 6,
+            lineHeight: 1.5 }}>{fout}</div>
+        )}
+      </div>
+
+      {tekst && (
+        <div className="os-card" style={{ marginBottom: 10, whiteSpace: 'pre-wrap',
+          fontSize: 12.5, lineHeight: 1.6 }} data-kwartaal-analyse>{tekst}</div>
+      )}
+
+      {/* Wat de app zelf hard kan maken — ook zonder model. */}
+      {dossier.observaties?.length > 0 && (
+        <div className="os-card" style={{ marginBottom: 10 }}
+          data-kwartaal-observaties={dossier.observaties.length}>
+          <div style={{ fontSize: 12, fontWeight: 800 }}>Wat uit de cijfers volgt</div>
+          {dossier.observaties.map(o => (
+            <div key={o.id} style={{ fontSize: 11.5, lineHeight: 1.5, marginTop: 5,
+              paddingTop: 5, borderTop: '1px solid var(--border)',
+              fontWeight: o.zwaar ? 700 : 400 }}>{o.tekst}</div>
+          ))}
+        </div>
+      )}
+
+      {dossier.gaten?.length > 0 && (
+        <div className="os-card" style={{ marginBottom: 10,
+          borderLeft: '3px solid var(--gold)' }} data-kwartaal-gaten={dossier.gaten.length}>
+          <div style={{ fontSize: 12, fontWeight: 800 }}>Waarover ik niets kan zeggen</div>
+          {dossier.gaten.map((g, i) => (
+            <div key={i} style={{ fontSize: 11, color: 'var(--sub)', lineHeight: 1.5,
+              marginTop: 4 }}>· {g}</div>
+          ))}
+        </div>
+      )}
+
+      <details className="os-card">
+        <summary style={{ fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+          Het dossier zelf
+        </summary>
+        <pre style={{ fontSize: 10.5, lineHeight: 1.5, whiteSpace: 'pre-wrap',
+          marginTop: 8, color: 'var(--sub)' }}>{dossierAlsTekst(dossier)}</pre>
+      </details>
+    </div>
+  );
+}
+
 export default function CoachScreen({ logs }) {
   const [activeTab, setActiveTab] = useState(0);
   const [measurements, setMeasurements] = useState([]);
@@ -441,6 +548,7 @@ export default function CoachScreen({ logs }) {
       {activeTab === 0 && <TabNu logs={logs} measurements={measurements} />}
       {activeTab === 1 && <TabWeekanalyse logs={logs} measurements={measurements} />}
       {activeTab === 2 && <TabMaand logs={logs} />}
+      {activeTab === 3 && <TabKwartaal logs={logs} />}
     </div>
   );
 }

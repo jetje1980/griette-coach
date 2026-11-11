@@ -785,6 +785,57 @@ Toon: direct, nieuwsgierig, data-gedreven. Behandel haar als iemand die haar eig
     return callClaude([{ role: 'user', content: prompt }], 900);
   },
 
+  // ── De kwartaalanalyse ────────────────────────────────────────
+  //
+  // Zij vroeg om een analyse over een kwartaal waarin alles meetelt:
+  // slaap, HRV, cyclus, gewicht, hartslag, de toning van haar lichaam.
+  // Met patroonherkenning, observaties en advies.
+  //
+  // De verdeling hier is bewust strak. kwartaalanalyse.js rékent het
+  // dossier uit — elk getal komt uit een functie die los te testen is —
+  // en dit model duidt dat dossier. Het mag verbanden leggen die een
+  // berekening niet ziet, want dat is waar een model goed in is, maar
+  // het mag er geen cijfer aan toevoegen. Zij heeft al twee keer een
+  // uitspraak moeten weerleggen die nergens op rustte; een vloeiend
+  // verhaal met verzonnen getallen is hier het gevaarlijkste product.
+  //
+  // Daarom staat in het dossier ook expliciet wat eraan ontbreekt. Een
+  // model dat niet weet wat het mist, vult dat gat met iets plausibels.
+  async quarterReview(dossierTekst, { context = '' } = {}) {
+    const prompt = `${context ? context + '\n\n' : ''}${dossierTekst}
+
+Je bent de hardloop- en gezondheidscoach van Griëtte: long COVID in de
+voorgeschiedenis, perimenopauze, Mounjaro, traint naar een 5 km. Hierboven
+staat haar kwartaaldossier. Alle getallen daarin zijn berekend uit haar eigen
+metingen.
+
+JOUW TAAK: patroonherkenning over dat dossier. Verbanden tussen domeinen die
+een losse berekening niet ziet — slaap en economie, cyclusfase en hartslag,
+gewichtsverloop en herstel, krachtwerk en loopeconomie, infecties en dips.
+
+HARDE REGELS:
+- Gebruik uitsluitend getallen die hierboven staan. Geen enkel cijfer erbij,
+  geen afgeronde herhaling die anders uitvalt, geen schatting.
+- Noem bij elke bewering waar hij op rust. "Je HRV zakte" zonder de meting
+  erbij is hier waardeloos.
+- Wat onder WAT ONTBREEKT staat, is onbekend. Daar trek je geen conclusie
+  over — ook geen voorzichtige. Benoem liever dat het ontbreekt en wat het
+  zou opleveren.
+- Een verband is geen oorzaak. Twee dingen die samen oplopen kunnen allebei
+  door een derde komen; zeg dat als het kan.
+- Geen generieke gezondheidsadviezen. Alleen wat uit haar gegevens volgt.
+
+Structuur, exact deze kopjes:
+📊 Wat dit kwartaal werkelijk veranderde
+🔍 Patronen tussen de domeinen
+⚠️ Wat ik niet kan zien, en wat dat zou kosten
+🎯 Komend kwartaal: drie dingen, op volgorde van opbrengst
+
+Nederlands, nuchter, geen aanmoediging zonder grond. Max 450 woorden.`;
+
+    return callClaude([{ role: 'user', content: prompt }], 1400);
+  },
+
   // ── Werkelijk kijken naar de foto's ───────────────────────────
   //
   // Hier stond een functie die de beelden keurig als image-blokken opbouwde
