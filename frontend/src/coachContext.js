@@ -378,6 +378,14 @@ function recoveryContext(asOf) {
       mean7: rollingMean('hr_rest', 7, { asOf }),
       trend28: trend('hr_rest', 28, { asOf }),
     },
+    // HRV naast de rusthartslag: twee metingen van hetzelfde systeem.
+    // Samen gelezen zeggen ze meer dan elk apart — wijzen ze dezelfde
+    // kant op, dan is het beeld eenduidig.
+    hrv: {
+      last: latest('hrv', { asOf })?.value ?? null,
+      mean7: rollingMean('hrv', 7, { asOf }),
+      trend28: trend('hrv', 28, { asOf }),
+    },
     energy: { mean7: rollingMean('energy', 7, { asOf }) },
     steps7: rollingMean('steps', 7, { asOf }),
     pem: {
@@ -557,6 +565,7 @@ export function usedData(ctx) {
   push('krachtsessies (4 wk)', ctx.strength.known ? `${ctx.strength.sessions28}` : null);
   push('slaap (7 dg gem.)', ctx.recovery.sleep.mean7 != null ? `${ctx.recovery.sleep.mean7} u` : null);
   push('rusthartslag (7 dg gem.)', ctx.recovery.hrRest.mean7 != null ? `${ctx.recovery.hrRest.mean7} bpm` : null);
+  push('HRV (7 dg gem.)', ctx.recovery.hrv?.mean7 != null ? `${ctx.recovery.hrv.mean7} ms` : null);
   push('cyclusdag', ctx.cycle.cycleDay);
   push('cyclusfase', ctx.cycle.phase.label !== 'onbekend'
     ? `${ctx.cycle.phase.label} (${ctx.cycle.phase.certainty})` : 'onbekend');
@@ -722,6 +731,12 @@ export function contextAsText(ctx) {
   zeg('HERSTEL:');
   zeg(`  slaap 7-daags: ${ctx.recovery.sleep.mean7 ?? 'onbekend'} u · kwaliteit ${ctx.recovery.sleep.quality7 ?? 'onbekend'}`);
   zeg(`  rusthartslag 7-daags: ${ctx.recovery.hrRest.mean7 ?? 'onbekend'} bpm`);
+  // HRV erbij, met de waarschuwing die erbij hoort: absolute waarden
+  // zeggen tussen mensen niets, alleen haar eigen verandering telt.
+  zeg(`  HRV 7-daags: ${ctx.recovery.hrv?.mean7 ?? 'onbekend'}`
+    + `${ctx.recovery.hrv?.mean7 != null ? ' ms' : ''}`
+    + `${ctx.recovery.hrv?.trend28 != null ? ` (28 dg: ${ctx.recovery.hrv.trend28 > 0 ? '+' : ''}${ctx.recovery.hrv.trend28})` : ''}`
+    + ' — alleen haar eigen verloop zegt iets, niet de absolute waarde');
   zeg(`  energie 7-daags: ${ctx.recovery.energy.mean7 ?? 'onbekend'}`);
   zeg(`  stappen 7-daags: ${ctx.recovery.steps7 ?? 'onbekend'}`);
   zeg(`  laatste PEM-signaal: ${ctx.recovery.pem.lastDate || 'geen in 12 weken'}${ctx.recovery.pem.freeWeeks != null ? ` (${ctx.recovery.pem.freeWeeks} weken geleden)` : ''}`);

@@ -105,6 +105,11 @@ function uitDaglogs() {
     push(DOMAIN.RECOVERY, 'sleep_quality', num(l.sleep_quality));
     push(DOMAIN.RECOVERY, 'energy', num(l.energy));
     push(DOMAIN.RECOVERY, 'hr_rest', num(l.hr_rest), { unit: 'bpm', certainty: CERTAINTY.MEASURED });
+    // HRV hoort in dezelfde laag als de rusthartslag: allebei 's nachts
+    // gemeten, allebei een maat voor de toestand van het autonome
+    // zenuwstelsel. Stond hij hier niet, dan zag geen enkele analyse hem —
+    // en dan is invullen werk zonder opbrengst.
+    push(DOMAIN.RECOVERY, 'hrv', num(l.hrv), { unit: 'ms', certainty: CERTAINTY.MEASURED });
     push(DOMAIN.RECOVERY, 'training_recovery', num(l.training_recovery));
     push(DOMAIN.RECOVERY, 'recovery_check', l.recovery_check);
     push(DOMAIN.RECOVERY, 'headache_severity', num(l.headache_severity));

@@ -177,6 +177,59 @@ export function restingDrift({ currentDate = todayLocal(), window = VENSTER_DAGE
     reboundFromLow: opleving,
     weightDelta: gewichtDelta,
     sleepMedian: slaapMediaan,
+    // ── HRV naast de rusthartslag ─────────────────────────────
+    //
+    // Ze meten hetzelfde systeem en horen samen gelezen te worden. Dat is
+    // ook het nut: gaan ze dezelfde kant op — rusthartslag omhoog, HRV
+    // omlaag — dan is het beeld eenduidig en is er werkelijk
+    // herstelschuld. Spreken ze elkaar tegen, dan is er aan één van de
+    // twee iets anders aan de hand (een slechte nacht, een meetfout, de
+    // cyclus) en is het geen reden om het schema terug te zetten.
+    //
+    // Eén waarschuwing hoort erbij: HRV is in absolute zin niet te
+    // vergelijken tussen mensen. Alleen haar eigen verandering telt,
+    // daarom staat hier een percentage en geen oordeel over de waarde.
+    hrv: (() => {
+      const h = series('hrv', { asOf: currentDate, since: vanaf })
+        .filter(o => typeof o.value === 'number' && o.value > 3 && o.value < 250);
+      if (h.length < MIN_PER_BLOK * 2) {
+        return { known: false, count: h.length,
+          why: `${h.length} HRV-metingen in ${window} dagen; vanaf ${MIN_PER_BLOK * 2} `
+            + 'staat hier of hij meebeweegt met je rusthartslag.' };
+      }
+      const helft = Math.floor(h.length / 2);
+      const med = (a) => {
+        const v = a.map(x => x.value).sort((x, y) => x - y);
+        return v.length ? v[Math.floor(v.length / 2)] : null;
+      };
+      const was = med(h.slice(0, helft));
+      const nu = med(h.slice(-helft));
+      const pct = was ? +(((nu - was) / was) * 100).toFixed(1) : null;
+      const omlaag = pct != null && pct <= -8;
+      const omhoog = pct != null && pct >= 8;
+      // Wijzen ze samen dezelfde kant op? Rusthartslag omhoog hoort bij
+      // HRV omlaag; dat samen is een eenduidig signaal.
+      const samen = omlaag && delta >= DRIFT_SIGNAAL;
+      return {
+        known: true, count: h.length, from: rond(was), to: rond(nu), deltaPct: pct,
+        direction: omlaag ? 'omlaag' : omhoog ? 'omhoog' : 'stabiel',
+        agreesWithRestingHr: samen,
+        line: `HRV ${rond(was)} → ${rond(nu)} ms (${pct > 0 ? '+' : ''}${pct}%) over `
+          + `${weken} weken.`,
+        why: samen
+          ? 'Je rusthartslag loopt op én je HRV zakt. Twee metingen van hetzelfde '
+            + 'systeem die dezelfde kant op wijzen — dit is een echt hersteltekort en '
+            + 'geen ruis.'
+          : omlaag
+            ? 'Je HRV zakt, maar je rusthartslag beweegt niet mee. Kijk eerst naar '
+              + 'slaap, alcohol, stress en je cyclusfase voordat je dit als '
+              + 'trainingsschuld leest.'
+            : omhoog
+              ? 'Je HRV loopt op. Dat hoort bij een systeem dat herstelt van wat het '
+                + 'krijgt.'
+              : 'Je HRV ligt stabiel over deze periode.',
+      };
+    })(),
     line: opleving
       ? `Rusthartslag ${rond(eerste.median)} → ${rond(laagste.median)} → ${rond(laatste.median)} `
         + `over ${weken} weken.`

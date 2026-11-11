@@ -190,6 +190,11 @@ export function voortgang({ currentDate = todayLocal(), logs = {}, workouts = nu
   };
 
   // 5. Rusthartslag.
+  const hrvVan = (van, tot) => mediaan(Object.entries(logs || {})
+    .map(([k, l]) => ({ date: l?.date || k, v: num(l?.hrv) }))
+    .filter(x => x.date >= van && x.date <= tot && Number.isFinite(x.v))
+    .map(x => x.v));
+
   const rhrVan = (van, tot) => mediaan(Object.entries(logs || {})
     .map(([k, l]) => ({ date: l?.date || k, v: num(l?.hr_rest) }))
     .filter(x => x.date >= van && x.date <= tot && Number.isFinite(x.v))
@@ -250,6 +255,12 @@ export function voortgang({ currentDate = todayLocal(), logs = {}, workouts = nu
         + '4% betere loopeconomie. Een circuit van acht minuten telt voor je ritme en '
         + 'je romp, maar niet voor deze winst — dat zijn twee verschillende dingen die '
         + 'allebei kracht heten.' }),
+    oordeel({ id: 'hrv', label: 'HRV', eenheid: 'ms',
+      was: hrvVan(eerderVan, recentVan), nu: hrvVan(recentVan, currentDate), hoger: true,
+      toelichting: 'De balans van je autonome zenuwstelsel — het systeem dat bij long '
+        + 'COVID ontregeld raakt. Beweegt eerder en sterker dan je rusthartslag, dus '
+        + 'een verandering hier is vroeger zichtbaar. Alleen jouw eigen verloop telt; '
+        + 'absolute waarden zijn tussen mensen niet te vergelijken.' }),
     oordeel({ id: 'rusthartslag', label: 'Rusthartslag', eenheid: 'bpm',
       was: rhrVan(eerderVan, recentVan), nu: rhrVan(recentVan, currentDate), hoger: false,
       toelichting: 'Een dalende rusthartslag hoort bij een systeem dat herstelt van wat '

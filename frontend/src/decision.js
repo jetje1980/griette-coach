@@ -155,8 +155,21 @@ export function economyVersusCycle({ logs = {}, currentDate = todayLocal() } = {
   const patroon = positie.phase !== PHASE.UNKNOWN
     ? phasePattern('hr_rest', positie.phase, { asOf: currentDate })
     : { known: false };
+  // ── HRV telt hier net zo goed mee ───────────────────────────
+  //
+  // De vraag die deze functie beantwoordt is: ligt haar hartslag hoger
+  // door de cyclus of door conditieverlies? Daarvoor werd alleen gekeken
+  // of haar rústhartslag in deze fase een patroon heeft. Maar HRV volgt
+  // de cyclus minstens zo duidelijk — in de luteale fase ligt hij bij de
+  // meeste vrouwen lager — en hij beweegt eerder. Een cyclusgebonden
+  // HRV-dip is dus net zo goed bewijs voor "dit is hormonaal" als een
+  // cyclusgebonden rusthartslag, en zonder deze regel werd dat bewijs
+  // weggegooid en een hormonale week als conditieverlies geboekt.
+  const hrvPatroon = positie.phase !== PHASE.UNKNOWN
+    ? phasePattern('hrv', positie.phase, { asOf: currentDate })
+    : { known: false };
   const hormonaalPlausibel = attributie.attribution === ATTRIBUTION.HORMONAL &&
-    (patroon.known || attributie.supportingPatterns?.length > 0);
+    (patroon.known || hrvPatroon.known || attributie.supportingPatterns?.length > 0);
 
   // Over meerdere fasen heen slechter, zonder hormonale verklaring: dat is
   // een structurele trend en die hoort serieus genomen te worden.
@@ -170,7 +183,8 @@ export function economyVersusCycle({ logs = {}, currentDate = todayLocal() } = {
   return { known: true, verdict: 'MOGELIJK_HORMONAAL',
     gainSec: econ.gainSec, hrDrift: econ.hrDrift, phases: [...contexten],
     structural: false,
-    note: `Je hartslag ligt hoger bij hetzelfde tempo, maar dit valt samen met ${hormonaalPlausibel ? 'een hormonaal patroon dat je eerder had' : 'één cycluscontext'} en je herstel is normaal. Dat is waarschijnlijker hormonale ruis dan conditieverlies — nog niet als achteruitgang boeken.` };
+    hrvPattern: hrvPatroon.known ? hrvPatroon.note : null,
+    note: `Je hartslag ligt hoger bij hetzelfde tempo, maar dit valt samen met ${hormonaalPlausibel ? `een hormonaal patroon dat je eerder had${hrvPatroon.known ? ' — ook je HRV volgt in deze fase een vast patroon' : ''}` : 'één cycluscontext'} en je herstel is normaal. Dat is waarschijnlijker hormonale ruis dan conditieverlies — nog niet als achteruitgang boeken.` };
 }
 
 // ── Wat de foto's zeggen, en hoe hard ──────────────────────────

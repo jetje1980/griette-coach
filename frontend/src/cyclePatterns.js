@@ -178,6 +178,10 @@ export const CYCLE_METRICS = [
   { id: 'navel', label: 'navelomtrek', unit: 'cm', decimals: 1 },
   { id: 'waist', label: 'taille', unit: 'cm', decimals: 1 },
   { id: 'hr_rest', label: 'rusthartslag', unit: 'bpm', decimals: 0 },
+  // HRV beweegt met de cyclus mee — in de luteale fase ligt hij bij de
+  // meeste vrouwen lager, net als de rusthartslag hoger ligt. Zonder deze
+  // regel zou een cyclusgebonden dip gelezen worden als trainingsschuld.
+  { id: 'hrv', label: 'HRV', unit: 'ms', decimals: 0 },
   { id: 'sleep_hours', label: 'slaap', unit: 'u', decimals: 1 },
   { id: 'energy', label: 'energie', unit: '', decimals: 1 },
   { id: 'bloating', label: 'opgeblazen gevoel', unit: '', decimals: 1 },
@@ -367,7 +371,7 @@ export function learnedPatterns({ asOf = todayLocal(), minConfidence = PATTERN_C
 // Niet "vrouwen schommelen 1–2 kg" maar wat jóuw reeks laat zien. En binnen
 // cycluscontext, want de vraag is meestal niet "hoeveel varieer ik" maar
 // "hoeveel varieer ik zónder dat er iets structureels aan de hand is".
-export const RANGE_METRICS = ['weight', 'navel', 'waist', 'hr_rest',
+export const RANGE_METRICS = ['weight', 'navel', 'waist', 'hr_rest', 'hrv',
   'sleep_hours', 'energy', 'bloating'];
 
 export function fluctuationRanges({ asOf = todayLocal(), days = 180 } = {}) {
