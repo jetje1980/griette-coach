@@ -182,6 +182,11 @@ export const CYCLE_METRICS = [
   // meeste vrouwen lager, net als de rusthartslag hoger ligt. Zonder deze
   // regel zou een cyclusgebonden dip gelezen worden als trainingsschuld.
   { id: 'hrv', label: 'HRV', unit: 'ms', decimals: 0 },
+  // Niet "hoeveel kracht" maar "houd je het vol": één of nul per dag.
+  // Het interessante patroon is wanneer het wegvalt — in haar
+  // laatluteale week of juist niet.
+  { id: 'challenge_done', label: 'circuit van acht minuten volgehouden',
+    unit: '', decimals: 2 },
   { id: 'sleep_hours', label: 'slaap', unit: 'u', decimals: 1 },
   { id: 'energy', label: 'energie', unit: '', decimals: 1 },
   { id: 'bloating', label: 'opgeblazen gevoel', unit: '', decimals: 1 },

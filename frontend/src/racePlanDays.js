@@ -77,6 +77,7 @@ import { raceExpectation } from './progressExpectation';
 // Het weekplafond komt uit de poort, niet uit een tweede getal hier.
 import { runDayCeiling, trainingLoad, frequencyVerdict } from './restday';
 import { remmen } from './remmen';
+import { krachtBeeld } from './krachtBronnen';
 import { doelPad } from './doelPad';
 import { ijksessie } from './ijksessie';
 import { loadHrSettings } from './goals';
@@ -986,7 +987,7 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     gate: poort ? { action: poort.action, headline: poort.headline, locksUntil: vrijVanaf,
       earliestRunDate: poort.earliestRunDate, binding: poort.binding || null,
       blockers: poort.blockers || [] } : null,
-    levers: knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht, poort }),
+    levers: knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht, poort, logs }),
     note: 'Wat je vandaag loopt komt van de dagkaart zelf — die weegt je herstelcheck, '
       + 'de poort en de dosering van vandaag mee. Dit overzicht tekent de weken eromheen, '
       + 'en wordt elke keer opnieuw gerekend uit wat er werkelijk gebeurd is.',
@@ -1139,7 +1140,7 @@ function perWeek(dagen) {
 // Geen algemene tips: alleen knoppen waarvan in háár gegevens te zien is
 // hoe ze ervoor staan, met de huidige stand erbij. Een knop zonder meting
 // is een mening.
-function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht, poort }) {
+function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht, poort, logs = {} }) {
   const uit = [];
 
   // 1. Frequentie — de grootste, en meetbaar.
@@ -1256,18 +1257,33 @@ function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht
     });
   }
 
-  // 3. Kracht — twee per week, met de werkelijke stand erbij.
-  const kracht28 = loadStrengthSessions()
-    .filter(s => s?.date && s.date <= currentDate
-      && daysBetween(s.date, currentDate) <= 28).length;
+  // 3. Kracht — uit álle bronnen, en zwaar apart geteld.
+  //
+  // Hier stond nog loadStrengthSessions() alleen, en dat is precies de
+  // bron die haar circuit van acht minuten uit de 75-dagen-challenge
+  // niet kent. Deze knop meldde dus "0 krachtsessies in de laatste vier
+  // weken" terwijl ze er veertien had gedaan. Diezelfde fout had ik
+  // elders in de app al hersteld en hier over het hoofd gezien — dat is
+  // wat er gebeurt als een bron op meer dan één plek wordt gelezen.
+  //
+  // En het onderscheid dat nodig blijft: haar circuit telt mee, maar
+  // niet als de prikkel die loopeconomie verbetert. Die komt van zwaar
+  // en laag in herhalingen. Beide getallen staan er daarom.
+  const kb = krachtBeeld({ currentDate, logs, dagen: 28 });
+  const zwaarPerWeek = kb.zwaarPerWeek;
   uit.push({
-    id: 'kracht', label: 'Kracht twee keer per week',
-    stand: `${kracht28} ${kracht28 === 1 ? 'krachtsessie' : 'krachtsessies'} in de laatste vier weken`
-      + (kracht28 >= 8 ? '' : ' — het plan zet ze op woensdag en vrijdag'),
-    doel: '2 × per week, zwaar en kort (3 × 5), met kuitheffen erbij',
-    waarom: 'Krachttraining verbetert de loopeconomie met enkele procenten in zes tot acht '
-      + 'weken. Dat is meer dan je aerobe systeem in vijf weken kan opleveren.',
-    status: kracht28 >= 6 ? 'goed' : 'open',
+    id: 'kracht', label: 'Kracht: twee keer per week met gewichten',
+    stand: kb.regel,
+    doel: '2 × per week zwaar met gewichten (3 × 5), met kuitheffen erbij — je circuit '
+      + 'van acht minuten blijft daarnaast gewoon staan',
+    waarom: kb.zwaar === 0 && kb.dagenMetKracht > 0
+      ? 'Je doet het werk, en het telt voor je ritme en je romp. Alleen komt de '
+        + 'loopeconomiewinst — enkele procenten in zes tot acht weken — uit zware, lage '
+        + 'herhalingen met gewicht, niet uit korte circuits. Dat zijn twee verschillende '
+        + 'dingen die allebei kracht heten.'
+      : 'Krachttraining verbetert de loopeconomie met enkele procenten in zes tot acht '
+        + 'weken. Dat is meer dan je aerobe systeem in vijf weken kan opleveren.',
+    status: zwaarPerWeek >= 1.5 ? 'goed' : 'open',
   });
 
   // 4. Pasfrequentie.

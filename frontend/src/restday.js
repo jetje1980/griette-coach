@@ -116,7 +116,21 @@ export function trainingLoad(logs, currentDate) {
 
   const sum = (arr, f) => arr.reduce((s, w) => s + f(w), 0);
 
-  // Aantal dagen in de afgelopen 7 waarop níets is geregistreerd
+  // ── Aantal dagen in de afgelopen 7 waarop iets belastends stond ──
+  //
+  // Hier hoort een keuze en geen reparatie. Haar circuit van acht
+  // minuten uit de 75-dagen-challenge staat hier bewust NIET bij, en dat
+  // is het enige punt in de app waar die bron niet meetelt.
+  //
+  // De reden: deze teller dient één regel — zeven dagen achter elkaar
+  // belast, dan is een echte rustdag de training. Het circuit is met
+  // opzet dagelijks en met opzet klein. Telde het mee, dan zou zij
+  // vanaf dag zeven van haar challenge permanent "geen rustdag" hebben
+  // en zou de poort haar blijven blokkeren voor acht minuten
+  // bandwerk — dat is de regel misbruiken tegen de bedoeling in.
+  //
+  // Elders telt het circuit wél mee, want daar is de vraag "doe je
+  // kracht" en niet "heb je rust gehad". Zie krachtBronnen.js.
   const loadedDays = new Set([
     ...runs7.map(w => w.date),
     ...strength7.map(s => s.date),

@@ -204,6 +204,36 @@ function uitWorkouts() {
   return uit;
 }
 
+// ── Het circuit van acht minuten als dagwaarde ──────────────────
+//
+// Eén of nul per dag, zodat de cyclusanalyse er iets mee kan. Zij vroeg
+// om patroonherkenning waarin de challenge meetelt, en het interessante
+// patroon is niet "hoeveel" maar "wanneer valt het weg": houdt ze het
+// vol in haar laatluteale week, of juist niet? Dat is precies het soort
+// vraag waar een cyclusanalyse voor bestaat, en zonder dagwaarde kan
+// die hem niet stellen.
+function uitChallenge() {
+  const uit = [];
+  let ch = null;
+  try { ch = JSON.parse(localStorage.getItem('gc_challenge75') || 'null'); }
+  catch { return uit; }
+  const dagen = ch?.days || {};
+  const datums = Object.keys(dagen).sort();
+  if (!datums.length) return uit;
+  // Alleen vanaf de eerste afgevinkte dag: daarvóór bestond de challenge
+  // niet, en een nul invullen voor augustus zou een patroon suggereren
+  // dat er niet was.
+  const start = datums[0];
+  const eind = datums[datums.length - 1];
+  for (let d = start; d <= eind; ) {
+    uit.push(obs({ observedAt: d, domain: DOMAIN.TRAINING, metric: 'challenge_done',
+      value: dagen[d]?.doneAt ? 1 : 0, source: 'challenge' }));
+    const x = new Date(`${d}T12:00:00`); x.setDate(x.getDate() + 1);
+    d = x.toISOString().slice(0, 10);
+  }
+  return uit;
+}
+
 function uitKracht() {
   const uit = [];
   for (const s of lees('gc_strength_sessions', [])) {
@@ -422,7 +452,7 @@ const num = (x) => {
 export function timeline({ asOf = null, domains = null, since = null } = {}) {
   let alles = [
     ...uitDaglogs(), ...uitMetingen(), ...uitWorkouts(),
-    ...uitKracht(), ...uitCyclus(), ...uitFotos(), ...uitFotoAnalyses(),
+    ...uitKracht(), ...uitChallenge(), ...uitCyclus(), ...uitFotos(), ...uitFotoAnalyses(),
     ...uitOverrides(),
   ];
 
