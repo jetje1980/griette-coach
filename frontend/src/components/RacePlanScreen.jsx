@@ -5,6 +5,8 @@ import { loadWeightPhase, saveWeightPhase, FASE as GEWICHTSFASE } from '../weigh
 import BackfillPanel from './BackfillPanel';
 import { todayLocal, formatNLLong } from '../datetime';
 import { saveGoal } from '../goals';
+import { sessieTabel, bijsturing } from '../sessieVergelijking';
+import { fmtPace } from '../workouts';
 
 // Het dagplan naar Ameland.
 //
@@ -353,6 +355,19 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
     raceTerrain: race?.terrain ?? null,
   }), [currentDate, logs, race, tick]);
 
+  // Doel tegen uitkomst, per training — en wat er daarna moet veranderen.
+  // De tabel wordt één keer berekend en daarna doorgegeven aan de
+  // bijsturing, zodat de getallen in het advies letterlijk uit de tabel
+  // erboven komen en niet uit een tweede venster.
+  const tabel = useMemo(() => sessieTabel({ currentDate, logs }),
+    [currentDate, logs, tick]);
+  const bij = useMemo(() => bijsturing({
+    currentDate, logs, tabel, dagen: plan.days,
+    targetSec: race?.targetTimeSec ?? null,
+    distanceKm: race?.distanceKm ?? null,
+    terrain: race?.terrain ?? 'trail',
+  }), [currentDate, logs, tabel, plan, race]);
+
   function bewaar(datum, veld, waarde) {
     saveField?.(veld, waarde, datum);
     setTick(t => t + 1);
@@ -648,6 +663,151 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Doel tegen uitkomst, per training ─────────────────
+          Zij vroeg om "een tabel per training met doel hartslag en tempo
+          en wat mijn hartslag en tempo was in die training". Dat bestond
+          nergens: het plan loopt van vandaag vooruit, dus gelopen
+          trainingen stonden er niet in, en het voorschrift van een
+          voorbije dag werd niet bewaard. Zonder deze tabel is niet te
+          zien of een plan werkt — alleen of het bestaat.
+
+          Het doel per rij is gereconstrueerd met de gegevens van de dag
+          ervóór. Rekenen met de gegevens van vandaag zou haar prestatie
+          afmeten aan een lat die achteraf is verlegd. */}
+      {tabel.known && (
+        <>
+          <div className="os-section-label">Doel tegen uitkomst</div>
+          <div className="os-card" style={{ marginBottom: 12 }}
+            data-sessietabel={tabel.rows.length}>
+            <div style={{ overflowX: 'auto', margin: '0 -2px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11,
+                fontVariantNumeric: 'tabular-nums' }}>
+                <thead>
+                  <tr style={{ color: 'var(--ghost)', fontSize: 9.5, fontWeight: 700,
+                    textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    {['datum', 'doel HR', 'jouw HR', 'doeltempo', 'jouw tempo', 'blok', '']
+                      .map((k, i) => (
+                        <th key={k + i} style={{ textAlign: i === 0 ? 'left' : 'right',
+                          padding: '0 5px 5px 0', whiteSpace: 'nowrap',
+                          borderBottom: '1px solid var(--border)' }}>{k}</th>
+                      ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tabel.rows.map(r => (
+                    <tr key={r.date} data-sessierij={r.date}
+                      style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '5px 5px 5px 0', whiteSpace: 'nowrap' }}>
+                        {r.date.slice(8)}-{r.date.slice(5, 7)}
+                      </td>
+                      {!r.known ? (
+                        <td colSpan={6} style={{ padding: '5px 0', textAlign: 'right',
+                          color: 'var(--ghost)', fontSize: 10.5 }}>
+                          niet te meten
+                        </td>
+                      ) : (
+                        <>
+                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                            color: 'var(--sub)' }}>{r.doelHr}</td>
+                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                            fontWeight: 700,
+                            color: (r.hrSuspect || r.uitbijter) ? 'var(--ghost)'
+                              : r.teHard ? 'var(--clay)' : 'var(--sage)' }}>
+                            {r.echteHr}
+                            <span style={{ fontWeight: 400, fontSize: 9.5,
+                              color: 'var(--ghost)', marginLeft: 2 }}>
+                              {r.hrDelta > 0 ? `+${r.hrDelta}` : r.hrDelta}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                            color: 'var(--sub)' }}>
+                            {r.doelTempo != null ? `${fmtPace(r.doelTempo)}` : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                            fontWeight: 700 }}>{fmtPace(r.echtTempo)}</td>
+                          <td style={{ textAlign: 'right', padding: '5px 5px 5px 0',
+                            color: 'var(--sub)' }}>{r.langsteBlokMin}′</td>
+                          <td style={{ textAlign: 'right', padding: '5px 0',
+                            fontSize: 9.5, whiteSpace: 'nowrap',
+                            color: (r.hrSuspect || r.uitbijter) ? 'var(--ghost)'
+                              : r.teHard ? 'var(--clay)' : 'var(--sage)' }}>
+                            {r.hrSuspect ? 'meting?'
+                              : r.uitbijter ? 'telt niet mee'
+                                : r.teHard ? 'te hard' : 'goed'}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5,
+              marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+              {tabel.samenvatting}
+            </div>
+            <div style={{ fontSize: 9.5, color: 'var(--ghost)', lineHeight: 1.45,
+              marginTop: 5 }}>
+              Doeltempo is het doel zoals het op die dag gold, gerekend met de gegevens
+              van de dag ervóór. Blok is je langste aaneengesloten loopblok, niet de
+              sessieduur. Een streepje betekent dat er op die datum nog niet genoeg
+              gemeten sessies waren voor een doeltempo.
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Wat er aan de volgende trainingen moet veranderen ──
+          Zij vroeg: "geef per volgende training aan wat er aangepast moet
+          worden om dat doel van 35 min Ameland te halen". Hier staat één
+          knop per training — de bindende, in de volgorde hartslag,
+          frequentie, bloklengte, kracht. Die volgorde is de inhoud:
+          zolang elke sessie boven VT1 ligt, levert meer volume of meer
+          kracht niets op. */}
+      {bij.known && (
+        <>
+          <div className="os-section-label">Wat je volgende trainingen anders moeten</div>
+          <div className="os-card" style={{ marginBottom: 12,
+            borderLeft: '3px solid var(--clay)' }} data-bijsturing={bij.items.length}>
+            {bij.items.map(i => (
+              <div key={i.date} data-bijstuur={i.date}
+                style={{ paddingBottom: 8, marginBottom: 8,
+                  borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'baseline', gap: 8 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 700 }}>
+                    {i.dayShort} {i.date.slice(8)}-{i.date.slice(5, 7)}
+                    {i.rol ? <span style={{ fontWeight: 400, color: 'var(--ghost)' }}>
+                      {' '}· {i.rol}</span> : null}
+                  </div>
+                  <div style={{ fontSize: 9.5, color: 'var(--ghost)', fontWeight: 700,
+                    textTransform: 'uppercase', letterSpacing: '0.4px',
+                    whiteSpace: 'nowrap' }}>{i.knop}</div>
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--sub)', marginTop: 2,
+                  fontVariantNumeric: 'tabular-nums' }}>
+                  hartslag {i.doelHr}
+                  {i.doelTempo != null ? ` · ${fmtPace(i.doelTempo)}/km` : ''}
+                  {i.blokMin != null ? ` · blok ${i.blokMin}′` : ''}
+                </div>
+                <div style={{ fontSize: 11.5, lineHeight: 1.5, marginTop: 4 }}>
+                  {i.aanpassing}
+                </div>
+                {i.waarom && (
+                  <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5,
+                    marginTop: 4 }}>{i.waarom}</div>
+                )}
+              </div>
+            ))}
+            {bij.kader && (
+              <div style={{ fontSize: 10.5, color: 'var(--sub)', lineHeight: 1.5 }}>
+                {bij.kader}
               </div>
             )}
           </div>

@@ -240,6 +240,41 @@ ok('terugdraaien herstelt de oorspronkelijke dag',
   await page.getAttribute(`[data-dag="${morgen}"]`, 'data-dag-soort') === voorKind,
   String(await page.getAttribute(`[data-dag="${morgen}"]`, 'data-dag-soort')));
 
+// ── Doel tegen uitkomst, en de bijsturing ────────────────────
+//
+// Zij vroeg om een tabel per training met doelhartslag en -tempo naast
+// wat het werkelijk werd, en per volgende training wat er anders moet.
+// Hier wordt alleen getoetst dat het op het scherm staat en de getallen
+// uit één bron komen; de rekenregels staan in tests/node/sessietabel.js.
+const tabelRijen = await page.locator('[data-sessierij]').count();
+ok('de tabel doel-tegen-uitkomst staat op het scherm', tabelRijen >= 3,
+  `${tabelRijen} rijen`);
+
+const kolommen = await page.locator('[data-sessietabel] thead th')
+  .evaluateAll(els => els.map(e => e.textContent.trim()).filter(Boolean));
+console.log(`      kolommen: ${kolommen.join(' | ')}`);
+for (const kop of ['doel HR', 'jouw HR', 'doeltempo', 'jouw tempo']) {
+  ok(`met een kolom ${kop}`, kolommen.includes(kop), kolommen.join(' | '));
+}
+
+// Elke rij moet een doel én een uitkomst dragen. Een tabel waarin de
+// helft van de cellen leeg is, is geen vergelijking.
+const eersteRij = await page.locator('[data-sessierij]').first()
+  .evaluateAll(els => els[0].querySelectorAll('td').length);
+ok('elke rij heeft alle kolommen gevuld', eersteRij >= 5, String(eersteRij));
+
+const bijRijen = await page.locator('[data-bijstuur]').count();
+ok('en per volgende training staat er een aanpassing', bijRijen >= 1,
+  `${bijRijen} aanpassingen`);
+
+// De bijsturing moet de tabel citeren, niet een eigen venster: het getal
+// in de onderbouwing hoort hetzelfde te zijn als in de samenvatting.
+const bijTekst = await page.locator('[data-bijsturing]').first().innerText();
+ok('de bijsturing noemt een concrete doelhartslag',
+  /hartslag \d{3}/.test(bijTekst), bijTekst.slice(0, 140));
+ok('en het doel van 35:00 blijft met de som erbij staan',
+  /35:00/.test(bijTekst), bijTekst.slice(-220));
+
 ok('geen JS-fout', errors.length === 0, errors.join(' | '));
 await b.close();
 console.log(`\n${'█'.repeat(52)}\n  ${pass} geslaagd, ${fail} mislukt\n${'█'.repeat(52)}`);

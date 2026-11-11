@@ -40,6 +40,13 @@
 
 import { todayLocal, daysBetween } from './datetime';
 import { loadWorkouts } from './workouts';
+// De ondergrens voor "dit is lopen en geen wandeling" stond hier als los
+// getal 95 én in efficiency.js als MIN_METER_PER_MIN. Twee kopieën van
+// dezelfde drempel: verander je er één, dan gaat een strandwandeling op
+// de ene plek wél en op de andere níét als loopblok door. Precies die
+// fout liet het plan eerder "45 min doorlopend" voorschrijven op grond
+// van een wandeling van 33 minuten.
+import { MIN_METER_PER_MIN } from './efficiency';
 
 // Een blok telt pas mee als de hartslag op niveau kan zijn gekomen.
 export const STEADY_SECONDEN = 300;
@@ -71,7 +78,7 @@ function blokkenVan(w) {
     const hr = Number(l.avgHr ?? l.average_heartrate ?? 0);
     if (!(sec >= STEADY_SECONDEN) || !(meter > 0) || !(hr > 0)) return null;
     const mpm = meter / (sec / 60);
-    if (mpm < 95) return null;
+    if (mpm < MIN_METER_PER_MIN) return null;
     return { sec, mpm, hr, ef: mpm / hr };
   }).filter(Boolean);
 }
@@ -99,6 +106,11 @@ export function steadyEfficiency(w) {
     paceMin: +(1000 / mpm).toFixed(2),
     blocks: b.length,
     seconds: T,
+    // Het langste aaneengesloten blok, los van de som. Twee blokken van
+    // tien minuten zijn twintig minuten lopen maar bewijzen geen blok van
+    // twintig: wie daarop een voorschrift baseert, schrijft een duur voor
+    // die nooit achter elkaar is gelopen.
+    langsteBlokSec: b.reduce((a, x) => Math.max(a, x.sec), 0),
     hrSuspect: verdacht,
     hrSuspectWhy: verdacht
       ? `Je hartslag zakte in deze sessie ${Math.round(hrDaling)} slagen terwijl je `
