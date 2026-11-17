@@ -60,6 +60,39 @@ export function cpetZones({ vt1Hr = CPET.vt1Hr, vt2Hr = CPET.vt2Hr } = {}) {
   ];
 }
 
+// ── Het getal dat op haar horloge staat ─────────────────────────
+//
+// Zij vroeg: "is het niet reëler om de hartslag tussen 132 en 150 goed te
+// keuren? Maar in de trainingen wel Garmin zo instellen dat ik ren onder
+// de 140. Ik denk dat ik het anders nooit niet haal."
+//
+// Dat is één onderscheid dat hier ontbrak, en het is het juiste. Er zijn
+// drie verschillende getallen die door elkaar liepen:
+//
+//   · VT1 (132) — waar de aerobe opbouw het meest oplevert. Een ideaal.
+//   · het alarm — wat ze op haar horloge zet en waar ze op stuurt.
+//   · het plafond — waarboven een sessie echt te hard was.
+//
+// De app gebruikte VT1 als alle drie tegelijk. Gevolg: elke sessie die ze
+// liep werd afgekeurd, want ze loopt nooit op 132. Een beoordeling die
+// altijd "fout" zegt, stuurt niets meer; hij wordt weggeklikt. En erger:
+// een doel dat onhaalbaar is, is geen doel maar een reden om te stoppen
+// met kijken.
+//
+// Het alarm ligt acht slagen boven VT1. Niet willekeurig: dat is de marge
+// waarbinnen een optische polsmeter nog betrouwbaar is en waarbinnen de
+// aerobe prikkel grotendeels overeind blijft. Haalbaar vandaag, en elke
+// week dat haar economie stijgt wordt het tempo erachter sneller — tot
+// 132 vanzelf binnen bereik komt.
+export const ALARM_BOVEN_VT1 = 8;
+
+export function trainingsAlarm(model = null) {
+  const m = model || loadHrModel();
+  // Nooit boven het afgesproken plafond: dan zou het alarm toestemming
+  // geven voor iets wat de afspraak verbiedt.
+  return Math.min(m.easyTargetHigh, m.vt1Hr + ALARM_BOVEN_VT1);
+}
+
 export function zoneOf(hr, { vt1Hr = CPET.vt1Hr, vt2Hr = CPET.vt2Hr } = {}) {
   if (hr == null) return null;
   if (hr >= vt2Hr + 4) return ZONE.ABOVE_VT2;
@@ -485,10 +518,22 @@ export function hrPrescription({
   // in één oogopslag leesbaar zijn; `text` staat in het sessiedetail en mag
   // de nuance dragen. Ze spreken elkaar nooit tegen — de korte is een
   // verkorting van de lange, geen andere regel.
+  // Eén getal om op te sturen, en daarna pas de nuance.
+  //
+  // Hier stond "Mik op 106–132 bpm (onder VT1) · grens 145". Twee getallen
+  // en een bereik, en zij liep structureel op geen van beide. Haar eigen
+  // woorden: "ik denk dat ik het anders nooit niet haal." Een voorschrift
+  // dat niet gehaald wordt, stuurt niets; het wordt genegeerd en dan zijn
+  // alle getallen erin even nutteloos.
+  //
+  // Dus staat het alarm vooraan — het getal dat ze op haar horloge zet —
+  // en daarachter waar het nóg beter wordt en waar de grens ligt.
+  const alarm = isEasy ? Math.min(afgesprokenPlafond, m.vt1Hr + ALARM_BOVEN_VT1) : null;
   const line = work
     ? `Easy ${easy.low}–${easy.high} bpm · werkblokken ${work.low}–${work.high} bpm`
     : splitsing
-      ? `Mik op ${easy.low}–${easy.high} bpm (onder VT1) · grens ${afgesprokenPlafond}`
+      ? `Zet je alarm op ${alarm} · onder ${m.vt1Hr} levert het meest op · `
+        + `plafond ${afgesprokenPlafond}`
       : `Richtgebied ${easy.low}–${easy.high} bpm — kort erboven is geen fout`;
 
   return {
@@ -497,6 +542,9 @@ export function hrPrescription({
     // Het afgesproken plafond blijft apart leesbaar: het richtgebied kan
     // lager liggen zonder dat de afspraak verdwijnt.
     agreedCeiling: afgesprokenPlafond,
+    // Het getal op haar horloge, als getal en niet als zin: wie het uit
+    // de tekst moet vissen, leest het eerste getal en dat is het verkeerde.
+    alarm,
     aerobicTarget: splitsing,
     resumeBelow: m.resumeBelow,
     ceiling: rel.ceiling,

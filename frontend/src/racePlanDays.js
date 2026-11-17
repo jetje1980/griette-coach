@@ -982,11 +982,12 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
           ?? prescribedPace({ purpose: loopDoel, goal: raceDoel, easy, logs, currentDate }).paceMin
           ?? tempoMin)
         : null;
+    const voorschrift = (kind === DAG.RUN || kind === DAG.RUN_KRACHT) && !isRace
+      ? hrPrescription({ purpose: loopDoel, logs, currentDate }) : null;
     const hartslag = isRace && raceVorm
       ? `Start onder 140, gemiddeld rond ${verwachting.raceHr}`
       : (kind === DAG.RUN || kind === DAG.RUN_KRACHT)
-        ? (vanPlanner?.hrZone
-          ?? hrPrescription({ purpose: loopDoel, logs, currentDate }).line)
+        ? (vanPlanner?.hrZone ?? voorschrift?.line)
         : null;
 
     // ── Wat zou deze sessie moeten opleveren? ─────────────────
@@ -999,8 +1000,12 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     // rond 150". Die regel uit laten lezen door hrUitVoorschrift zou 140
     // opleveren — het eerste getal — en dat is niet haar racehartslag.
     // Hier dus het getal zelf, uit dezelfde bron als het tempo.
+    // Bij een rustige sessie is de doelhartslag het alarm dat zij op haar
+    // horloge zet, niet VT1. Uit het voorschrift zelf, als getal — want de
+    // zin begint sinds kort met het alarm en niet met het richtgebied, en
+    // wie er een getal uit vist leest altijd het eerste.
     const doelHr = isRace && raceVorm ? verwachting.raceHr
-      : hartslag ? hrUitVoorschrift(hartslag) : null;
+      : voorschrift?.alarm ?? (hartslag ? hrUitVoorschrift(hartslag) : null);
     // En geen sessionTarget voor de race: dat rekent een easy-doeltempo
     // uit, terwijl het tempo van deze dag de raceverwachting zelf is.
     // Twee tempo's op één dag is precies wat hier niet moet staan.

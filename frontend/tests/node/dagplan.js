@@ -388,8 +388,9 @@ S('12 · Tempo en hartslag staan erbij');
   ok('en is niet het onuitvoerbare doeltempo van 7:00',
     loopdagen.every(d => d.run.paceMin > 7.5),
     JSON.stringify([...new Set(loopdagen.map(d => d.run.pace))]));
-  ok('de hartslagregel noemt een bereik',
-    /\d+–\d+ bpm/.test(loopdagen[1].run.hr), loopdagen[1].run.hr);
+  ok('de hartslagregel geeft één getal om op te sturen',
+    /Zet je alarm op \d{3}/.test(loopdagen[1].run.hr)
+    || /\d+–\d+ bpm/.test(loopdagen[1].run.hr), loopdagen[1].run.hr);
 }
 
 S('13 · De dag van vandaag komt van de planner, niet van de sjabloon');

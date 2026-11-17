@@ -172,10 +172,18 @@ S('3 · Het schema biedt de verdeling aan waarop zij wordt afgerekend');
   ok('de kwaliteitssessie krijgt ook een ander hartslagvoorschrift',
     kwaliteit.every(d => /werkblokken/.test(d.run.hr || '')),
     JSON.stringify(kwaliteit.map(d => d.run.hr).slice(0, 1)));
-  ok('en de rustige dagen mikken onder VT1, niet op het plafond',
+  // De rustige dagen sturen op het alarm en niet op het plafond. Dat het
+  // alarm boven VT1 ligt is geen versoepeling maar een erkenning: een doel
+  // dat nooit gehaald wordt, is geen doel.
+  ok('de rustige dagen sturen op een alarm onder het plafond',
     loopdagen.filter(d => !/werkhartslag/.test(d.run.description))
-      .every(d => /onder VT1/.test(d.run.hr || '')),
+      .every(d => /Zet je alarm op \d{3}/.test(d.run.hr || '')),
     JSON.stringify(loopdagen[0]?.run.hr));
+  ok('en dat alarm is het getal waarop het doeltempo staat',
+    loopdagen.filter(d => !/werkhartslag/.test(d.run.description))
+      .every(d => d.run.targetHr > 0
+        && d.run.hr.includes(String(d.run.targetHr))),
+    JSON.stringify(loopdagen.map(d => [d.run.targetHr, d.run.hr]).slice(0, 2)));
 
   // De racedag staat er wél in als loopdag, met een eigen hartslag. Zou
   // die uit het easy-voorschrift komen, dan stond er 132 voor een
@@ -192,9 +200,21 @@ S('3 · Het schema biedt de verdeling aan waarop zij wordt afgerekend');
 S('4 · Rustig is het doel, het plafond is de grens');
 {
   const logs = wereld();
+  // Het voorschrift noemde een bereik: "Mik op 106–132 bpm (onder VT1) ·
+  // grens 145". Twee getallen en een bereik, en zij liep structureel op
+  // geen van beide: "ik denk dat ik het anders nooit niet haal." Een
+  // voorschrift dat niet gehaald wordt stuurt niets, dus staat er nu één
+  // getal vooraan om op te sturen — haar alarm — met daarachter waar het
+  // nóg beter wordt en waar de grens ligt.
   for (const p of ['EASY_ECONOMY', 'DURABILITY', 'TAPER']) {
     const r = hrPrescription({ purpose: p, logs, currentDate: TODAY });
-    ok(`${p} mikt onder VT1`, /106–132/.test(r.line), r.line);
+    ok(`${p} geeft één getal om op te sturen`, /Zet je alarm op \d{3}/.test(r.line), r.line);
+    ok(`${p} noemt VT1 als waar het het meest oplevert`,
+      new RegExp(`onder ${r.vt1Hr} levert het meest op`).test(r.line), r.line);
+    ok(`${p} houdt het alarm onder het plafond`, r.alarm < r.agreedCeiling,
+      `${r.alarm} tegen ${r.agreedCeiling}`);
+    ok(`${p} houdt het alarm boven VT1`, r.alarm > r.vt1Hr,
+      `${r.alarm} tegen ${r.vt1Hr}`);
   }
   const q = hrPrescription({ purpose: 'QUALITY_LITE', logs, currentDate: TODAY });
   console.log(`      kwaliteit: ${q.line}`);

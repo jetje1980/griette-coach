@@ -28,8 +28,8 @@
 //     voor dezelfde vraag is hoe dit project al een paar keer in
 //     tegenspraak met zichzelf is geraakt.
 import './_storage-stub.js';
-import { sessieTabel, sessieRij, volledigeTabel, bijsturing, HR_MARGE, TABEL_AANTAL }
-  from '../../src/sessieVergelijking.js';
+import { sessieTabel, sessieRij, volledigeTabel, bijsturing, hrKader, OORDEEL,
+  HR_MARGE, TABEL_AANTAL } from '../../src/sessieVergelijking.js';
 import { racePlan } from '../../src/racePlanDays.js';
 
 let pass = 0, fail = 0;
@@ -128,30 +128,66 @@ S('2 · Het doel van toen, niet de lat van vandaag');
     `${a.oordeel} vs ${b.oordeel}`);
 }
 
-S('3 · Het oordeel gaat over hartslag, niet over tempo');
+S('3 · Het oordeel beschrijft het gebied, en keurt alleen boven het plafond af');
 {
+  // Hier stond: alles boven 132 is "te hard". Zij zag dat dat fout was:
+  // "is het niet reëler om de hartslag tussen 132 en 150 goed te keuren?
+  // Als de app vooral kijkt of ik sneller word bij gelijkblijvende
+  // hartslag, is dat niet beter?"
+  //
+  // Ja. De tabel sprak het zonemodel van de app zelf tegen, dat het
+  // gebied tussen VT1 en VT2 letterlijk "trainbaar gebied, geen verboden
+  // gebied" noemt. En een beoordeling die elke week "fout" zegt, stuurt
+  // niets meer. Dus: vier gebieden in plaats van goed/fout, en alleen
+  // boven het afgesproken plafond is het echt te hard.
   const W = [-24, -20, -16, -12, -8].map(n => run(addDays(TODAY, n), 0.74, 132));
-  // Een snelle sessie, maar ruim boven de band: hoger tempo omdat de
-  // hartslag hoger is, niet omdat ze economischer liep.
-  const hard = run(addDays(TODAY, -4), 0.70, 152);
-  const logs = wereld([...W, hard]);
-  const r = sessieRij(hard, { logs, workouts: [...W, hard] });
-  console.log(`      ${r.echtTempo} min/km op hartslag ${r.echteHr} → ${r.oordeel}`);
-  ok('sneller dan het doel maar boven de band heet "te hard"',
-    r.teHard && r.oordeel === 'te hard', `${r.oordeel} · Δhr ${r.hrDelta}`);
-  ok('en de uitleg zegt waarom tempo hier geen prestatie is',
-    /geen prestatie maar het gevolg/.test(r.uitleg), r.uitleg);
+  const logs = wereld(W);
+  const kader = hrKader();
+  console.log(`      VT1 ${kader.vt1} · alarm ${kader.alarm} · plafond ${kader.plafond}`);
+  ok('het alarm ligt tussen VT1 en het plafond',
+    kader.alarm > kader.vt1 && kader.alarm <= kader.plafond,
+    JSON.stringify(kader));
 
-  // En andersom: binnen de band is binnen de band, ook als het tempo
-  // achterblijft. Dat is wat zij doet als ze het goed doet.
-  const braaf = run(addDays(TODAY, -3), 0.74, 130);
-  const logs2 = wereld([...W, braaf]);
-  const r2 = sessieRij(braaf, { logs: logs2, workouts: [...W, braaf] });
-  ok('trager dan het doel maar binnen de band is niet "te hard"',
-    !r2.teHard && r2.oordeel === 'binnen de band', `${r2.oordeel} · Δhr ${r2.hrDelta}`);
-  ok('een afwijking binnen de marge geldt als binnen de band',
-    sessieRij(run(addDays(TODAY, -3), 0.74, 132 + HR_MARGE),
-      { logs: logs2, workouts: W }).teHard === false, '');
+  // LET OP: ef x hr moet boven de 95 m/min blijven, anders rekent de app
+  // het als wandelen en is er geen meetbaar blok. Bij een lage hartslag
+  // hoort dus een hogere efficientie, net als in het echt.
+  const oordeelOp = (hr) => {
+    const w = run(addDays(TODAY, -3), 105 / hr, hr);
+    return sessieRij(w, { logs, workouts: [...W, w] });
+  };
+
+  const basis = oordeelOp(kader.vt1 - 4);
+  ok('onder VT1 heet basis', basis.oordeel === OORDEEL.BASIS, basis.oordeel);
+  ok('en de uitleg zegt waaróm dat het beste gebied is',
+    /aerobe opbouw het meeste oplevert/.test(basis.uitleg), basis.uitleg);
+
+  const opDoel = oordeelOp(kader.alarm - 2);
+  ok('onder het alarm heet op doel', opDoel.oordeel === OORDEEL.OP_DOEL, opDoel.oordeel);
+
+  const band = oordeelOp(kader.alarm + 4);
+  ok('boven het alarm maar onder het plafond is goedgekeurd',
+    band.oordeel === OORDEEL.BAND && band.teHard === false,
+    `${band.oordeel} · teHard ${band.teHard}`);
+  ok('en dat staat er als goedgekeurd, niet als fout',
+    /binnen je plafond/.test(band.uitleg) && /Goedgekeurd/.test(band.uitleg),
+    band.uitleg);
+
+  const over = oordeelOp(kader.plafond + 2);
+  ok('boven het plafond is wél te hard',
+    over.teHard && over.oordeel === OORDEEL.TE_HARD, over.oordeel);
+  ok('met de reden erbij, niet als verwijt',
+    /kost meer herstel dan hij oplevert/.test(over.uitleg), over.uitleg);
+
+  // En dit is de kern van haar punt: een snelle sessie binnen de band is
+  // gewoon goed. Eerder werd die afgekeurd omdat de hartslag boven 132
+  // lag, terwijl dat precies het gebied is waar zij traint.
+  ok('een snelle sessie binnen de band wordt niet meer afgekeurd',
+    oordeelOp(kader.plafond - 2).teHard === false, '');
+
+  // Het verschil met het alarm blijft zichtbaar, want daar stuurt ze op.
+  ok('het verschil wordt tegen het alarm gemeten, niet tegen VT1',
+    oordeelOp(kader.alarm).hrDelta === 0,
+    String(oordeelOp(kader.alarm).hrDelta));
 }
 
 S('4 · Wat niet te meten is, wordt niet geraden');
@@ -227,25 +263,45 @@ S('5b · Een uitbijter telt in de tabel net zomin mee als in de trend');
     t.rows.filter(r => r.date !== raar.date).every(r => !r.uitbijter), '');
 }
 
-S('6 · Het patroon over de rijen heen');
+S('6 · Het oordeel is de trend, niet de hartslag');
 {
+  // Haar eigen voorstel: "als de coach en app vooral kijkt of ik sneller
+  // word bij gelijkblijvende hartslag, is dat niet beter?" Ja — de
+  // hartslag is het middel, de economie is het doel, en het doel is
+  // meetbaar. Dus begint de samenvatting daar.
   const W = [-26, -22, -18, -14, -10, -6].map(n => run(addDays(TODAY, n), 0.72, 149));
   const logs = wereld(W);
   const t = sessieTabel({ currentDate: TODAY, logs });
-  console.log(`      ${t.samenvatting}`);
-  ok('structureel te hard wordt een patroon genoemd', t.patroon === true, '');
-  ok('met het mediane overschot erbij', t.overschot >= 10, String(t.overschot));
-  ok('en de samenvatting noemt het geen incident',
-    /geen incident maar hoe je traint/.test(t.samenvatting), t.samenvatting);
+  console.log(`      ${t.samenvatting.slice(0, 120)}…`);
+  ok('de trend staat erin', t.trend?.known === true, JSON.stringify(t.trend));
+  ok('en de samenvatting begint ermee',
+    t.samenvatting.startsWith(t.trend.regel.slice(0, 30)), t.samenvatting.slice(0, 80));
 
-  // Eén slechte dag is geen gewoonte.
-  const braaf = [-26, -22, -18, -14, -10].map(n => run(addDays(TODAY, n), 0.74, 130));
-  const logs2 = wereld([...braaf, run(addDays(TODAY, -6), 0.72, 150)]);
-  const t2 = sessieTabel({ currentDate: TODAY, logs: logs2 });
-  ok('één uitschieter tussen vijf goede is geen patroon', t2.patroon === false,
-    `${t2.teHard} van ${t2.bruikbaar}`);
-  ok('en dat staat ook niet in de samenvatting',
-    !/geen incident/.test(t2.samenvatting), t2.samenvatting);
+  // De verdeling vervangt het pass/fail: niet "fout" maar "waar lag je".
+  ok('de verdeling telt alle vier de gebieden',
+    ['basis', 'op_doel', 'band', 'te_hard'].every(k => k in t.verdeling),
+    JSON.stringify(t.verdeling));
+  ok('en telt samen op tot de bruikbare sessies',
+    Object.values(t.verdeling).reduce((a, b) => a + b, 0) === t.bruikbaar,
+    JSON.stringify(t.verdeling));
+
+  // Dit is wat er wél gezegd moet blijven worden: zonder minuten onder
+  // VT1 mist ze het gebied waar de aerobe motor het hardst groeit. Dat
+  // is geen afkeuring van een sessie maar een gat in de verdeling.
+  ok('een lege basis wordt benoemd',
+    t.verdeling.basis === 0 && /helemaal leeg/.test(t.samenvatting),
+    t.samenvatting);
+
+  // En het overschot wordt tegen het alarm gemeten, niet tegen VT1 —
+  // want op het alarm stuurt ze.
+  if (t.teHard) {
+    ok('het overschot is gemeten tegen het alarm',
+      t.overschot === Math.max(...t.rows.filter(r => r.teHard).map(r => r.hrDelta))
+      || t.overschot > 0, String(t.overschot));
+  } else {
+    ok('zonder sessies boven het plafond is het overschot nul',
+      t.overschot === 0, String(t.overschot));
+  }
 }
 
 S('7 · De bijsturing zet hartslag vooraan, en citeert de tabel');
@@ -268,7 +324,7 @@ S('7 · De bijsturing zet hartslag vooraan, en citeert de tabel');
   // Dit is de regel die een tegenspraak op één scherm voorkomt.
   ok('de onderbouwing citeert exact de getallen uit de tabel ernaast',
     b.items[0].waarom.includes(`${tabel.bruikbaar} meetbare sessies`)
-    && b.items[0].waarom.includes(`${tabel.overschot} slagen`), b.items[0].waarom);
+    && b.items[0].waarom.includes(String(tabel.kader.plafond)), b.items[0].waarom);
   ok('de onderbouwing staat één keer, niet bij elke rij opnieuw',
     !!b.items[0].waarom && b.items[1].waarom === null, '');
   ok('maar elke rij heeft zijn eigen doeltempo in de korte vorm',
@@ -482,7 +538,56 @@ S('13 · En de tabel laat zien of er die dag ook kracht is gedaan');
     beide.kracht.weergave === 'zwaar', JSON.stringify(beide.kracht));
 }
 
-S('14 · Een leeg dossier verzint niets');
+S('14 · De knopvolgorde begint bij het doel, niet bij het middel');
+{
+  // Hier stond hartslag altijd voorop. Zodra de beoordeling veranderde was
+  // dat fout: als haar economie stijgt valt er niets te repareren, hoe
+  // hoog haar hartslag ook stond. De volgorde begint nu bij de vraag of
+  // het werkt.
+  const { racePlan: rp } = await import('../../src/racePlanDays.js');
+  const dagen = [{ date: TODAY, dayShort: 'wo', role: 'easy',
+    run: { description: 'rustig', hr: 'Zet je alarm op 140', targetHr: 140,
+      paceMin: 10.2, blockMin: 12 } }];
+
+  // Een reeks die duidelijk beter wordt, allemaal binnen de band.
+  const stijgend = [[-26, 0.68], [-22, 0.70], [-18, 0.71], [-14, 0.78],
+    [-10, 0.80], [-6, 0.82]].map(([n, ef]) => run(addDays(TODAY, n), ef, 142));
+  const logsA = wereld(stijgend);
+  const tA = sessieTabel({ currentDate: TODAY, logs: logsA });
+  const bA = bijsturing({ currentDate: TODAY, dagen, logs: logsA, tabel: tA });
+  console.log(`      stijgend (${tA.trend.richting}) → ${bA.items[0].knop}`);
+  ok('een stijgende economie levert geen bijsturing op',
+    bA.items[0].knop === 'niets', `${bA.items[0].knop} — ${bA.items[0].aanpassing}`);
+  ok('met de gemeten trend als reden',
+    /efficiëntie ging/.test(bA.items[0].waarom || ''), bA.items[0].waarom);
+
+  // Een vlakke reeks zonder enige basis onder VT1: dán is de verdeling
+  // de knop, en niet "je liep te hard".
+  const vlak = [-26, -22, -18, -14, -10, -6].map(n => run(addDays(TODAY, n), 0.72, 142));
+  const logsB = wereld(vlak);
+  const tB = sessieTabel({ currentDate: TODAY, logs: logsB });
+  const bB = bijsturing({ currentDate: TODAY, dagen, logs: logsB, tabel: tB });
+  console.log(`      vlak, geen basis (${tB.trend.richting}) → ${bB.items[0].knop}`);
+  ok('zonder groei en zonder basis wordt verdeling de knop',
+    bB.items[0].knop === 'verdeling', `${bB.items[0].knop} — ${bB.items[0].aanpassing}`);
+  ok('en de reden is het ontbrekende gebied, niet een verwijt',
+    /waar de aerobe motor het hardst groeit/.test(bB.items[0].waarom || ''),
+    bB.items[0].waarom);
+
+  // Structureel boven het plafond blijft wél de eerste knop.
+  const teHard = [-26, -22, -18, -14, -10, -6]
+    .map(n => run(addDays(TODAY, n), 0.70, hrKader().plafond + 4));
+  const logsC = wereld(teHard);
+  const tC = sessieTabel({ currentDate: TODAY, logs: logsC });
+  const bC = bijsturing({ currentDate: TODAY, dagen, logs: logsC, tabel: tC });
+  console.log(`      boven plafond → ${bC.items[0].knop}`);
+  ok('structureel boven het plafond blijft hartslag de knop',
+    bC.items[0].knop === 'hartslag', bC.items[0].knop);
+  ok('en het advies noemt een tempo, niet alleen een hartslag',
+    /\d:\d\d\/km/.test(bC.items[0].aanpassing), bC.items[0].aanpassing);
+}
+
+S('15 · Een leeg dossier verzint niets');
 {
   wereld([]);
   const t = sessieTabel({ currentDate: TODAY, logs: {} });

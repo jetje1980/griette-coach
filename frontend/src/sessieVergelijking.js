@@ -50,9 +50,9 @@
 import { todayLocal, addDays } from './datetime';
 import { loadWorkouts, fmtPace } from './workouts';
 import { steadyEfficiency } from './gemetenTempo';
-import { efficiencyTrend } from './efficiency';
 import { sessionTarget, hrUitVoorschrift } from './sessionTarget';
-import { hrPrescription } from './hrModel';
+import { trainingsAlarm, loadHrModel, zoneOf } from './hrModel';
+import { efficiencyTrend as trendVanEfficientie } from './efficiency';
 import { benodigdeEfficientie } from './doelPad';
 import { TERREIN } from './progressExpectation';
 import { krachtBeeld, alleKracht, SOORT } from './krachtBronnen';
@@ -64,6 +64,52 @@ const fmtTijd = (sec) => (sec == null || !Number.isFinite(sec) ? null
 // slagen — een hartslagband is geen scherpe lijn en een optische meter
 // al helemaal niet.
 export const HR_MARGE = 4;
+
+// ── Wanneer was een sessie goed? ────────────────────────────────
+//
+// Hier stond: boven het doel van 132 is "te hard". Dat was fout, en zij
+// zag het eerder dan ik: "is het niet reëler om de hartslag tussen 132 en
+// 150 goed te keuren? Als de app vooral kijkt of ik sneller word bij
+// gelijkblijvende hartslag, is dat niet beter?"
+//
+// Ja. Twee redenen, en de tweede is de zwaarste.
+//
+// Ten eerste sprak de tabel het zonemodel van de app zelf tegen. Dat
+// noemt het gebied tussen VT1 en VT2 letterlijk "trainbaar gebied, geen
+// verboden gebied". Zes van haar zes sessies werden afgekeurd omdat ze
+// daarin lagen. Twee delen van één app die iets anders zeggen over
+// dezelfde meting — precies het soort tegenspraak dat hier steeds terug
+// blijft komen.
+//
+// Ten tweede: een hartslag is geen prestatie. Het doel van rustig lopen
+// is sneller worden bij gelijke hartslag, en dát is te meten. Een sessie
+// afkeuren op het middel terwijl het doel gemeten kan worden, is sturen
+// op de verkeerde knop. Dus beschrijft dit bestand nu per sessie in welk
+// gebied ze lag, en komt het oordeel van de trend: gaat haar economie
+// omhoog, ja of nee.
+//
+// Wat blijft: boven het afgesproken plafond is wél te hard. Niet als
+// morele categorie maar als feit — daar kost een sessie meer herstel dan
+// hij oplevert, en dat is zichtbaar in de dagen erna.
+export const OORDEEL = {
+  BASIS: 'basis',          // onder VT1: waar de aerobe opbouw het meest oplevert
+  OP_DOEL: 'op doel',      // tussen VT1 en haar alarm: waar ze op stuurt
+  BAND: 'binnen de band',  // tussen alarm en plafond: goedgekeurd, bovenkant
+  TE_HARD: 'te hard',      // boven het afgesproken plafond
+};
+
+export function hrKader(model = null) {
+  const m = model || loadHrModel();
+  return { vt1: m.vt1Hr, vt2: m.vt2Hr, alarm: trainingsAlarm(m), plafond: m.easyTargetHigh };
+}
+
+export function oordeelOverHr(hr, kader) {
+  if (hr == null) return null;
+  if (hr > kader.plafond) return OORDEEL.TE_HARD;
+  if (hr > kader.alarm) return OORDEEL.BAND;
+  if (hr > kader.vt1) return OORDEEL.OP_DOEL;
+  return OORDEEL.BASIS;
+}
 
 // Wanneer is te hard geen incident meer maar een gewoonte? Bij de helft.
 export const PATROON_DEEL = 0.5;
@@ -89,21 +135,30 @@ export function sessieRij(workout, { logs = {}, workouts = null } = {}) {
   // Het voorschrift zoals het die dag gold: gerekend met de gegevens van
   // de dag ervóór. Zie de toelichting bovenaan.
   const vooraf = addDays(workout.date, -1);
-  let regel = null;
-  try {
-    regel = hrPrescription({ purpose: 'EASY_ECONOMY', logs, currentDate: vooraf }).line;
-  } catch { regel = null; }
-  const doelHr = hrUitVoorschrift(regel, { fallback: 132 });
+
+  // Het doel waar zij op stuurt is haar alarm, niet VT1. Zie OORDEEL
+  // hierboven: VT1 is waar het het meest oplevert, het alarm is wat ze
+  // werkelijk kan aanhouden, en op dát getal hoort de vergelijking te
+  // staan. Vergelijken met 132 betekende dat de tabel haar elke week
+  // afrekende op een lat die ze nooit haalt, en dan zegt een tabel steeds
+  // hetzelfde en stuurt hij niets meer.
+  //
+  // Het doeltempo hoort bij diezelfde hartslag: een tempo berekend op 132
+  // terwijl ze op 140 loopt, is een tempo dat nergens bij hoort.
+  const kader = hrKader();
+  const doelHr = kader.alarm;
 
   let doel = null;
   try {
     doel = sessionTarget({ date: workout.date, hr: doelHr, currentDate: vooraf, workouts });
   } catch { doel = null; }
 
-  const hrDelta = Math.round(gemeten.avgHr - doelHr);
+  const hrDelta = Math.round(gemeten.avgHr - kader.alarm);
   const doelTempo = doel?.known ? doel.targetPace : null;
   const tempoDelta = doelTempo != null ? +(gemeten.paceMin - doelTempo).toFixed(2) : null;
-  const teHard = hrDelta > HR_MARGE;
+  const oordeelHr = oordeelOverHr(gemeten.avgHr, kader);
+  const teHard = oordeelHr === OORDEEL.TE_HARD;
+  const zone = zoneOf(gemeten.avgHr, { vt1Hr: kader.vt1, vt2Hr: kader.vt2 });
 
   // Een leeg doeltempo is geen storing en mag niet als streepje in de
   // tabel blijven staan: op dat moment waren er simpelweg nog niet genoeg
@@ -136,18 +191,26 @@ export function sessieRij(workout, { logs = {}, workouts = null } = {}) {
     tempoDelta,
     hrSuspect: !!gemeten.hrSuspect,
     teHard,
-    oordeel: gemeten.hrSuspect ? 'meting onbetrouwbaar'
-      : teHard ? 'te hard' : 'binnen de band',
+    zone: zone?.id || null,
+    zoneLabel: zone?.label || null,
+    bovenVt1: gemeten.avgHr > kader.vt1,
+    kader,
+    oordeel: gemeten.hrSuspect ? 'meting onbetrouwbaar' : oordeelHr,
     uitleg: gemeten.hrSuspect
       ? gemeten.hrSuspectWhy
       : teHard
-        ? `Hartslag ${gemeten.avgHr} tegen een doel van ${doelHr}. Het tempo van `
-          + `${fmtPace(gemeten.paceMin)}/km is dan geen prestatie maar het gevolg: je `
-          + 'hebt harder gewerkt, niet economischer gelopen.'
-        : `Hartslag ${gemeten.avgHr} tegen doel ${doelHr}`
-          + (doelTempo != null
-            ? `, tempo ${fmtPace(gemeten.paceMin)} tegen doel ${fmtPace(doelTempo)}.`
-            : '.'),
+        ? `Hartslag ${gemeten.avgHr}, boven je afgesproken plafond van ${kader.plafond}. `
+          + 'Dat is geen rustige sessie meer; die kost meer herstel dan hij oplevert, en '
+          + 'dat zie je terug in de dagen erna.'
+        : oordeelHr === OORDEEL.BASIS
+          ? `Hartslag ${gemeten.avgHr}, onder VT1 (${kader.vt1}). Dit is het gebied waar `
+            + 'aerobe opbouw het meeste oplevert.'
+          : oordeelHr === OORDEEL.OP_DOEL
+            ? `Hartslag ${gemeten.avgHr}, onder je alarm van ${kader.alarm}. Precies waar `
+              + 'je op stuurt.'
+            : `Hartslag ${gemeten.avgHr}: boven je alarm van ${kader.alarm}, maar binnen `
+              + `je plafond van ${kader.plafond}. Goedgekeurd; het telt als de bovenkant `
+              + 'van je band, niet als een rustige sessie.',
   };
 }
 
@@ -166,7 +229,7 @@ export function sessieTabel({ currentDate = todayLocal(), logs = {}, workouts = 
   // bepaalt, rekent er niet mee.
   let uitbijters = new Set();
   try {
-    const t = efficiencyTrend({ currentDate, workouts: alle });
+    const t = trendVanEfficientie({ currentDate, workouts: alle });
     uitbijters = new Set((t.outliers || []).map(o => o.date));
   } catch { uitbijters = new Set(); }
 
@@ -194,6 +257,29 @@ export function sessieTabel({ currentDate = todayLocal(), logs = {}, workouts = 
     ? teHard.map(r => r.hrDelta).sort((a, b) => a - b)[Math.floor(teHard.length / 2)]
     : 0;
 
+  // ── Het eigenlijke oordeel ────────────────────────────────────
+  //
+  // Niet "hoe vaak zat je te hoog" maar "word je sneller bij gelijke
+  // hartslag". Dat was haar eigen voorstel en het is het juiste: de
+  // hartslag is het middel, de economie is het doel, en het doel is
+  // meetbaar. Een tabel die het middel beoordeelt terwijl het doel
+  // gemeten kan worden, kijkt de verkeerde kant op.
+  const kader = hrKader();
+  let trend = null;
+  try { trend = trendVanEfficientie({ currentDate, workouts: alle }); } catch { trend = null; }
+
+  // En de verdeling: hoeveel sessies lagen waar. Dit vervangt het
+  // pass/fail niet door niets — het vervangt het door het beeld waar 80/20
+  // werkelijk over gaat.
+  const verdeling = { basis: 0, op_doel: 0, band: 0, te_hard: 0 };
+  for (const r of bruikbaar) {
+    if (r.oordeel === OORDEEL.BASIS) verdeling.basis++;
+    else if (r.oordeel === OORDEEL.OP_DOEL) verdeling.op_doel++;
+    else if (r.oordeel === OORDEEL.BAND) verdeling.band++;
+    else if (r.oordeel === OORDEEL.TE_HARD) verdeling.te_hard++;
+  }
+  const binnenBand = verdeling.basis + verdeling.op_doel + verdeling.band;
+
   return {
     known: rows.length > 0,
     rows,
@@ -201,17 +287,43 @@ export function sessieTabel({ currentDate = todayLocal(), logs = {}, workouts = 
     teHard: teHard.length,
     patroon,
     overschot,
+    kader,
+    verdeling,
+    binnenBand,
+    // De trend is het oordeel. `known` staat erbij want met minder dan zes
+    // sessies is een richting een toevalstreffer, en dat hoort gezegd.
+    trend: trend?.known ? {
+      known: true,
+      genoeg: !!trend.enough,
+      richting: trend.direction,
+      deltaPct: trend.deltaPct,
+      nu: trend.current,
+      tempoNu: trend.paceAtTarget,
+      tempoToen: trend.paceAtTargetBefore,
+      bijHr: trend.targetHr,
+      regel: trend.verdict,
+    } : { known: false, regel: trend?.why || null },
     // Het patroon over de rijen heen. Dit is waar de tabel voor dient:
     // één sessie te hard is een dag, zeven van de tien is een gewoonte.
-    samenvatting: bruikbaar.length
-      ? `${teHard.length} van de ${bruikbaar.length} sessies lagen meer dan `
-        + `${HR_MARGE} slagen boven het doel.`
-        + (patroon
-          ? ` De mediaan van die sessies zat ${overschot} slagen te hoog. Dat is geen `
-            + 'incident maar hoe je traint — en het is de meest waarschijnlijke reden '
-            + 'dat je tempo bij gelijke hartslag niet zakt.'
-          : '')
-      : 'Nog geen sessie met een bruikbaar loopblok om te vergelijken.',
+    // De samenvatting begint bij het doel en niet bij het middel.
+    samenvatting: !bruikbaar.length
+      ? 'Nog geen sessie met een bruikbaar loopblok om te vergelijken.'
+      : [
+        trend?.known ? trend.verdict : null,
+        `${binnenBand} van de ${bruikbaar.length} sessies lagen binnen je band tot `
+          + `${kader.plafond}`
+          + (verdeling.basis
+            ? `, waarvan ${verdeling.basis} onder VT1 (${kader.vt1}).`
+            : `. Geen daarvan onder VT1 (${kader.vt1}) — dat is het gebied waar aerobe `
+              + 'opbouw het meest oplevert, en het is nu helemaal leeg.'),
+        teHard.length
+          ? (teHard.length === 1
+            ? `Eén sessie lag boven je plafond van ${kader.plafond}; die kostte meer `
+              + 'herstel dan hij opleverde.'
+            : `${teHard.length} sessies lagen boven je plafond van ${kader.plafond}; die `
+              + 'kosten meer herstel dan ze opleveren.')
+          : null,
+      ].filter(Boolean).join(' '),
   };
 }
 
@@ -426,15 +538,46 @@ export function bijsturing({ currentDate = todayLocal(), dagen = [], logs = {},
     // De bindende knop voor déze dag. De volgorde is de kern: zolang zij
     // elke sessie boven VT1 loopt, levert meer volume of meer kracht
     // niets op, dus staat hartslag voorop.
+    // ── De volgorde van de knoppen ────────────────────────────
+    //
+    // Hier stond hartslag altijd voorop. Dat was fout zodra de beoordeling
+    // veranderde: als haar economie stijgt, is er niets te repareren — hoe
+    // hoog haar hartslag ook stond. Het doel is sneller worden bij gelijke
+    // hartslag, dus begint de volgorde bij de vraag of dát gebeurt.
+    //
+    // Pas als het antwoord nee is, komt de vraag waaróm niet, en dan in
+    // deze volgorde: boven het plafond, geen basis onder VT1, te weinig
+    // loopdagen, een blok dat ze nooit liep, geen zware kracht.
+    const groeit = tabel.trend?.known && tabel.trend.genoeg
+      && tabel.trend.richting === 'beter';
+    const geenBasis = (tabel.verdeling?.basis ?? 0) === 0 && tabel.bruikbaar >= 3;
+
     let knop, kort, waarom = null;
-    if (tabel.patroon) {
+    if (groeit) {
+      knop = 'niets';
+      kort = `Niets. Houd je alarm op ${doelHr} en loop deze zoals hij er staat.`;
+      waarom = `${tabel.trend.regel} Dat is precies waar rustig lopen voor bedoeld is, `
+        + 'dus er valt nu niets bij te sturen. Verander pas iets als dit stilvalt.';
+    } else if (tabel.patroon) {
       knop = 'hartslag';
-      kort = `Op ${doelHr} of lager. Wordt je tempo daardoor trager dan ${tempoTekst}: `
-        + 'dat is de bedoeling van deze sessie, niet het falen ervan.';
-      waarom = `Je laatste ${tabel.bruikbaar} meetbare sessies zaten mediaan `
-        + `${tabel.overschot} slagen boven het doel. Boven VT1 groeit de aerobe motor `
-        + 'nauwelijks, dus zolang dat zo blijft is er geen prikkel om economischer te '
-        + 'gaan lopen — hoeveel je ook doet. Dit is de enige knop die nu iets verandert.';
+      // Het doeltempo hoort in de korte vorm: zonder dat getal staat er bij
+      // elke sessie dezelfde zin, en dan is het geen advies per training
+      // meer maar een sjabloon.
+      kort = `Houd hem onder je plafond van ${tabel.kader.plafond}; mikken doe je op `
+        + `${doelHr}, en dat komt bij jou uit rond ${tempoTekst}.`;
+      waarom = `${tabel.teHard} van je laatste ${tabel.bruikbaar} meetbare sessies lagen `
+        + `boven ${tabel.kader.plafond}. Dat is geen rustige training meer maar `
+        + 'wedstrijdinspanning, en drie of vier keer per week kost dat meer herstel dan '
+        + 'het oplevert.';
+    } else if (geenBasis) {
+      knop = 'verdeling';
+      kort = `Loop deze bewust onder ${tabel.kader.vt1}, ook al voelt dat traag — `
+        + `reken op trager dan ${tempoTekst}.`;
+      waarom = `Al je meetbare sessies lagen boven VT1 (${tabel.kader.vt1}). Dat is `
+        + 'toegestaan en het is geen fout, maar het betekent dat je nooit traint in het '
+        + 'gebied waar de aerobe motor het hardst groeit. Eén sessie per week daar is '
+        + 'waarschijnlijk het verschil tussen een economie die stilstaat en een die '
+        + 'stijgt.';
     } else if (frequentie < 3) {
       knop = 'frequentie';
       kort = 'Deze sessie hoeft niet beter te zijn, hij moet er zijn — en de volgende '
@@ -457,7 +600,7 @@ export function bijsturing({ currentDate = todayLocal(), dagen = [], logs = {},
         + 'tempo. Je circuit van acht minuten blijft daarnaast gewoon staan.';
     } else {
       knop = 'niets';
-      kort = `Niets. Op ${doelHr} of lager, blok van ${blok ?? '—'} min, en klaar.`;
+      kort = `Niets. Alarm op ${doelHr}, blok van ${blok ?? '—'} min, en klaar.`;
     }
 
     const eerste = !uitgelegd.has(knop);
