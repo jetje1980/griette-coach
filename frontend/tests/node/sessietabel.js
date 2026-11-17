@@ -570,6 +570,23 @@ S('14 · De knopvolgorde begint bij het doel, niet bij het middel');
   console.log(`      vlak, geen basis (${tB.trend.richting}) → ${bB.items[0].knop}`);
   ok('zonder groei en zonder basis wordt verdeling de knop',
     bB.items[0].knop === 'verdeling', `${bB.items[0].knop} — ${bB.items[0].aanpassing}`);
+  // Maar alleen bij de eerste. Eén sessie per week onder VT1 is een
+  // verdeling; drie achter elkaar is "loop voortaan alles traag", en dat
+  // is iets anders dan wat er staat.
+  {
+    const drie = [TODAY, addDays(TODAY, 2), addDays(TODAY, 4)].map((date, i) => ({
+      date, dayShort: 'xx', role: 'easy',
+      run: { description: 'rustig', hr: 'Zet je alarm op 140', targetHr: 140,
+        paceMin: 10.2 - i * 0.1, blockMin: 12 } }));
+    const b3 = bijsturing({ currentDate: TODAY, dagen: drie, logs: logsB, tabel: tB });
+    console.log(`      drie sessies → ${b3.items.map(i => i.knop).join(', ')}`);
+    ok('alleen de eerste sessie krijgt de basisopdracht',
+      b3.items.filter(i => i.knop === 'verdeling').length === 1,
+      JSON.stringify(b3.items.map(i => i.knop)));
+    ok('en de uitleg zegt dat de andere gewoon op het alarm lopen',
+      /de andere lopen gewoon op je alarm/.test(b3.items[0].waarom || ''),
+      b3.items[0].waarom);
+  }
   ok('en de reden is het ontbrekende gebied, niet een verwijt',
     /waar de aerobe motor het hardst groeit/.test(bB.items[0].waarom || ''),
     bB.items[0].waarom);

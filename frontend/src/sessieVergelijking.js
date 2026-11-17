@@ -477,18 +477,22 @@ export function volledigeTabel({ currentDate = todayLocal(), logs = {},
 // sessie boven VT1 loopt, levert meer volume of meer kracht niets op —
 // dan stapelt ze alleen belasting op een prikkel die niet aanslaat.
 export function bijsturing({ currentDate = todayLocal(), dagen = [], logs = {},
-  workouts = null, hrCap = 145, targetSec = 2100, distanceKm = 5,
+  workouts = null, hrCap = null, targetSec = 2100, distanceKm = 5,
   terrain = 'trail', runDagenPerWeek = null, tabel: gegeven = null } = {}) {
   // Een race zonder streeftijd of zonder afstand heeft geen doelpad. Dan
   // staat er geen kader, in plaats van een som over ontbrekende getallen.
   const heeftDoel = Number.isFinite(targetSec) && Number.isFinite(distanceKm)
     && targetSec > 0 && distanceKm > 0;
+  // Het plafond komt uit haar instellingen en niet uit een getal in de
+  // code. Stond hier 145 terwijl haar plafond op 150 staat, dan rekent
+  // het kader met een grens die nergens meer geldt.
+  const plafondNu = hrCap ?? hrKader().plafond;
   // De tabel wordt bij voorkeur doorgegeven door het scherm dat hem al
   // toont, zodat de getallen in de bijsturing letterlijk uit de tabel
   // ernaast komen. Wordt hij niet gegeven, dan is het hetzelfde venster.
   const tabel = gegeven || sessieTabel({ currentDate, logs, workouts });
   const nodig = heeftDoel
-    ? benodigdeEfficientie({ targetSec, distanceKm, hrCap, terrain }) : null;
+    ? benodigdeEfficientie({ targetSec, distanceKm, hrCap: plafondNu, terrain }) : null;
   const terreinInfo = TERREIN[terrain] || TERREIN.trail;
 
   let kracht = null;
@@ -551,6 +555,11 @@ export function bijsturing({ currentDate = todayLocal(), dagen = [], logs = {},
     const groeit = tabel.trend?.known && tabel.trend.genoeg
       && tabel.trend.richting === 'beter';
     const geenBasis = (tabel.verdeling?.basis ?? 0) === 0 && tabel.bruikbaar >= 3;
+    // Eén sessie per week onder VT1, niet alle drie. Het advies gaat over
+    // de verdeling van de week; het bij elke training herhalen maakt er
+    // een opdracht van om voortaan alles traag te lopen, en dat is iets
+    // anders dan wat er staat.
+    const eersteVrije = komend[0]?.date;
 
     let knop, kort, waarom = null;
     if (groeit) {
@@ -569,7 +578,7 @@ export function bijsturing({ currentDate = todayLocal(), dagen = [], logs = {},
         + `boven ${tabel.kader.plafond}. Dat is geen rustige training meer maar `
         + 'wedstrijdinspanning, en drie of vier keer per week kost dat meer herstel dan '
         + 'het oplevert.';
-    } else if (geenBasis) {
+    } else if (geenBasis && d.date === eersteVrije) {
       knop = 'verdeling';
       kort = `Loop deze bewust onder ${tabel.kader.vt1}, ook al voelt dat traag — `
         + `reken op trager dan ${tempoTekst}.`;
@@ -577,7 +586,7 @@ export function bijsturing({ currentDate = todayLocal(), dagen = [], logs = {},
         + 'toegestaan en het is geen fout, maar het betekent dat je nooit traint in het '
         + 'gebied waar de aerobe motor het hardst groeit. Eén sessie per week daar is '
         + 'waarschijnlijk het verschil tussen een economie die stilstaat en een die '
-        + 'stijgt.';
+        + 'stijgt — déze sessie dus, en de andere lopen gewoon op je alarm.';
     } else if (frequentie < 3) {
       knop = 'frequentie';
       kort = 'Deze sessie hoeft niet beter te zijn, hij moet er zijn — en de volgende '
@@ -628,7 +637,7 @@ export function bijsturing({ currentDate = todayLocal(), dagen = [], logs = {},
       tempoVlak: nodig?.vlakTempo ?? null,
       benodigdeEf: nodig?.ef ?? null,
       onmogelijk: !!nodig?.onmogelijk,
-      hrCap,
+      hrCap: plafondNu,
       terrein: terreinInfo.label,
     },
     // De eerlijke zin erbij. Zonder deze zou de lijst suggereren dat deze
@@ -637,7 +646,7 @@ export function bijsturing({ currentDate = todayLocal(), dagen = [], logs = {},
     // precies dezelfde weg.
     kader: nodig?.ef
       ? `${fmtTijd(targetSec)} over ${distanceKm} km op ${terreinInfo.label} vraagt `
-        + `${fmtPace(nodig.vlakTempo)}/km op vlakke weg bij hartslag ${hrCap}, oftewel `
+        + `${fmtPace(nodig.vlakTempo)}/km op vlakke weg bij hartslag ${plafondNu}, oftewel `
         + `efficiëntie ${nodig.ef}. De aanpassingen hieronder brengen je niet naar dat `
         + 'getal op 12 december — ze brengen je naar de beste tijd die er wél in zit, en '
         + 'het zijn dezelfde aanpassingen die je er uiteindelijk wel brengen.'
