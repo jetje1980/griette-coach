@@ -337,7 +337,8 @@ function DagKaart({ dag, log, onSave, openDefault, buren, onRuil }) {
   );
 }
 
-export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), saveField }) {
+export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), saveField,
+  onWijzigTraining }) {
   const [alles, setAlles] = useState(false);
   const [tick, setTick] = useState(0);
 
@@ -780,7 +781,24 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
                         <td style={{ padding: '5px 5px 5px 0', whiteSpace: 'nowrap',
                           fontWeight: vandaag || r.isRace ? 800 : 400,
                           color: komt && !vandaag && !r.isRace ? 'var(--sub)' : undefined }}>
-                          {r.date.slice(8)}-{r.date.slice(5, 7)}
+                          {/* Dit is het scherm waar zij naar kijkt als haar
+                              iets opvalt. Dan hoort de weg naar de correctie
+                              daar te beginnen, en niet drie tabs verderop
+                              onder een kop die "verwijderen" heet. */}
+                          {onWijzigTraining && (r.status === 'gelopen' || r.status === 'onmeetbaar')
+                            ? (
+                              <button type="button" data-wijzig-training={r.date}
+                                onClick={() => onWijzigTraining(r.date)}
+                                title="Gegevens van deze training wijzigen"
+                                style={{ background: 'none', border: 'none', padding: 0,
+                                  font: 'inherit', color: 'inherit', cursor: 'pointer',
+                                  textDecoration: 'underline',
+                                  textDecorationStyle: 'dotted',
+                                  textUnderlineOffset: 3 }}>
+                                {r.date.slice(8)}-{r.date.slice(5, 7)}
+                              </button>
+                            )
+                            : <>{r.date.slice(8)}-{r.date.slice(5, 7)}</>}
                           {r.dayShort ? <span style={{ color: 'var(--ghost)', fontWeight: 400,
                             fontSize: 9.5, marginLeft: 3 }}>{r.dayShort}</span> : null}
                           {(() => {
@@ -864,7 +882,8 @@ export default function RacePlanScreen({ logs = {}, currentDate = todayLocal(), 
               met de gegevens van de dag ervóór. Blok is je langste aaneengesloten
               loopblok, niet de sessieduur; 5×2′ is een intervalsessie. Kracht komt uit
               al je bronnen samen: een zware sessie, een gewone, of het circuit van acht
-              minuten.
+              minuten. Klopt er iets niet aan een gelopen training? Tik op de datum — dan
+              kun je de gegevens daar aanpassen.
             </div>
           </div>
         </>

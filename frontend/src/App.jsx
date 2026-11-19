@@ -36,6 +36,11 @@ function dayNumber(date) {
 
 export default function App() {
   const [tab, setTab] = useState(0);
+  // Vanaf welke training is er "wijzig" geklikt? Dat gaat mee naar het
+  // lichaamsscherm, zodat de juiste dag openstaat en de juiste regel
+  // eruit springt. Zonder dit beland je op een dichtgeklapte lijst van
+  // dertig regels en zoek je zelf de training die je net aanwees.
+  const [wijzigTraining, setWijzigTraining] = useState(null);
   const [currentDate, setCurrentDate] = useState(today());
   const [log, setLog] = useState(null);
   const [logs, setLogs] = useState({});
@@ -230,7 +235,12 @@ export default function App() {
           vraag beantwoordt die zij elke dag stelt: wat moet ik vandaag doen
           en waarom — met de weken eromheen zichtbaar. */}
       {tab === 1 && (
-        <RacePlanScreen logs={logs} currentDate={currentDate} saveField={saveField} />
+        <RacePlanScreen logs={logs} currentDate={currentDate} saveField={saveField}
+          onWijzigTraining={(datum) => {
+            setCurrentDate(datum);
+            setWijzigTraining(datum);
+            setTab(3);
+          }} />
       )}
       {tab === 2 && <WeekScreen logs={logs} />}
       {tab === 3 && (
@@ -244,6 +254,7 @@ export default function App() {
           deleteLog={deleteLog}
           showFlash={showFlash}
           isFuture={isFuture}
+          openTrainingOp={wijzigTraining}
         />
       )}
       {tab === 4 && <LevenScreen logs={logs} />}

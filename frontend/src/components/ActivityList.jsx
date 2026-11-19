@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { activityList, retypeActivity, deleteActivity, ACTIVITY_TYPES } from '../activityEdit';
 import { fmtPace } from '../workouts';
 
@@ -16,8 +16,14 @@ const KIND = {
   other: { label: 'Anders', color: 'var(--ghost)' },
 };
 
-export default function ActivityList({ currentDate, onEdit, onChanged }) {
-  const [open, setOpen] = useState(false);
+export default function ActivityList({ currentDate, onEdit, onChanged,
+  openOp = null }) {
+  // `openOp` is een datum waar vandaan is doorgeklikt: dan staat de lijst
+  // open en springt die regel eruit. Zonder dat kwam je hier binnen op een
+  // dichtgeklapte kop en moest je zelf de juiste regel zoeken tussen
+  // dertig andere — terwijl je net op een specifieke training klikte.
+  const [open, setOpen] = useState(!!openOp);
+  useEffect(() => { if (openOp) setOpen(true); }, [openOp]);
   const [busy, setBusy] = useState(null);
   const [confirming, setConfirming] = useState(null);
   const [flash, setFlash] = useState(null);
@@ -54,17 +60,23 @@ export default function ActivityList({ currentDate, onEdit, onChanged }) {
         style={{ fontSize: 11, color: 'var(--muted)', cursor: 'pointer', padding: '10px 0',
           display: 'flex', justifyContent: 'space-between',
           borderTop: '1px solid var(--border)' }}>
-        <span>Activiteiten corrigeren of verwijderen ({rows.length})</span>
+        {/* De kop zei "corrigeren of verwijderen", en dat klinkt alsof dit
+            er is om een verkeerde import op te ruimen. Achter die knop zit
+            juist de plek waar je de gegevens van een training aanpast —
+            datum, duur, afstand, hartslag, hoe het ging. Zij vroeg daarom;
+            hij was er al, alleen niet te vinden onder deze naam. */}
+        <span>Gegevens van een training wijzigen ({rows.length})</span>
         <span>{open ? '▲' : '▼'}</span>
       </div>
 
       {open && (
         <div className="os-card" style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11.5, color: 'var(--sub)', lineHeight: 1.5, marginBottom: 10 }}>
-            Staat hier iets verkeerd? Zet het type om of verwijder de regel. Alles wat
-            eruit volgt — je hardloopkilometers, langst verdragen afstand, weekbelasting,
-            loopeconomie, hartslagkalibratie en race readiness — wordt meteen opnieuw
-            berekend.
+            Klopt er iets niet? Met <strong>wijzig</strong> pas je de gegevens van die
+            training aan — datum, duur, afstand, hartslag en hoe het ging. Je kunt ook
+            het type omzetten of de regel verwijderen. Alles wat eruit volgt — je
+            hardloopkilometers, langst verdragen afstand, weekbelasting, loopeconomie,
+            hartslagkalibratie en race readiness — wordt meteen opnieuw berekend.
           </div>
 
           {flash && (
@@ -81,7 +93,13 @@ export default function ActivityList({ currentDate, onEdit, onChanged }) {
           {rows.map(w => {
             const k = KIND[w.kind] || KIND.other;
             return (
-              <div key={w.id} style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+              <div key={w.id} data-activiteit={w.date}
+                style={{ padding: '10px 0', borderTop: '1px solid var(--border)',
+                  background: openOp === w.date ? 'var(--wash, rgba(0,0,0,0.04))' : undefined,
+                  marginLeft: openOp === w.date ? -8 : 0,
+                  marginRight: openOp === w.date ? -8 : 0,
+                  paddingLeft: openOp === w.date ? 8 : 0,
+                  paddingRight: openOp === w.date ? 8 : 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11.5,
                     color: 'var(--ghost)', minWidth: 44 }}>{w.date.slice(5)}</span>

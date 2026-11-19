@@ -879,8 +879,13 @@ function RunRoadmap({ logs, currentDate, nextSession }) {
 }
 
 // ── Main component ───────────────────────────────────────────────
-export default function LichaamScreen({ log, logs, currentDate, setDate, saveField, saveFields, deleteLog, showFlash, isFuture }) {
+export default function LichaamScreen({ log, logs, currentDate, setDate, saveField, saveFields, deleteLog, showFlash, isFuture, openTrainingOp = null }) {
+  // Komt zij hier binnen via "wijzig" bij een training elders in de app,
+  // dan hoort dit scherm meteen op de juiste subtab te staan. Anders landt
+  // ze op Training maar bij de bovenkant, en moet ze alsnog zoeken naar de
+  // lijst die ze net had aangeklikt.
   const [subTab, setSubTab] = useState(0);
+  useEffect(() => { if (openTrainingOp) setSubTab(0); }, [openTrainingOp]);
   const [weight, setWeight] = useState('');
   const [bpSys, setBpSys] = useState('');
   const [bpDia, setBpDia] = useState('');
@@ -1547,6 +1552,7 @@ export default function LichaamScreen({ log, logs, currentDate, setDate, saveFie
 
         {/* Elke activiteit corrigeerbaar, ook zonder schemakoppeling */}
         <ActivityList currentDate={currentDate}
+          openOp={openTrainingOp}
           onEdit={(w) => { setEditingWorkout(w); setShowWorkoutForm(true); }}
           onChanged={() => { setPlanRefresh(k => k + 1); saveFields?.({}); }} />
 
