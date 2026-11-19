@@ -61,6 +61,7 @@ import { todayLocal, addDays, daysBetween, dayOfWeek, NL_DAYS, NL_DAYS_SHORT }
   from './datetime';
 import { loadWorkouts } from './workouts';
 import { provenStructure, stridesFor } from './raceplan';
+import { ankerTempo, ankerSessie, ankerTrend } from './tempoAnker';
 import { sessionsAtLevel, sessionsUpTo, levelForBlock, PURPOSE_ID }
   from './data/sessionLibrary';
 import { cycleDayOf } from './bodyReview';
@@ -460,10 +461,42 @@ function niveauVoorWeek({ basis, weekIndex, fase }) {
 // eigen easy-sessie zodat de dosering bij haar belastbaarheid past; wat
 // verandert is de intensiteit van het blok en de lengte van de pauze.
 export const KWALITEIT_BLOK_MIN = 2;
-function kwaliteitsVorm({ basis, weekIndex }) {
-  // Vier blokken in de eerste opbouwweek, oplopend naar zes. Meer dan zes
-  // keer twee minuten is bij vijf weken tot de race geen opbouw meer maar
-  // een wedstrijd in de training.
+function kwaliteitsVorm({ basis, weekIndex, anker = null }) {
+  // ── Op tempo in plaats van op hartslag ────────────────────────
+  //
+  // Zij vroeg: "kan ik niet gewoon op dit tempo trainen, en dat elke x dan
+  // de hartslag wel omlaag gaat?" Dat kan, en het is als meting beter dan
+  // wat hier stond.
+  //
+  // Dit voorschrift was "zes keer twee minuten op werkhartslag". Dan is de
+  // hartslag de opdracht en het tempo de uitkomst, en moet zij onderweg
+  // sturen op een getal dat traag reageert. Bovendien bewegen tempo én
+  // hartslag dan allebei, en dan is geen enkele sessie met een andere te
+  // vergelijken.
+  //
+  // Met een vast tempo is de hartslag de enige variabele, en dat is precies
+  // het getal waarvan zij wil weten of het zakt. Zie tempoAnker.js.
+  const s = anker?.known ? ankerSessie({ anker, weekIndex }) : null;
+  if (s) {
+    return {
+      id: s.id,
+      purpose: PURPOSE_ID.QUALITY_LITE,
+      runMin: s.blokMin,
+      walkMin: s.pauzeMin,
+      reps: s.reps,
+      minutes: s.minutes,
+      duration: s.minutes,
+      label: `${s.label} / ${s.pauzeMin} min wandelen`,
+      ankerTempo: s.paceMin,
+      ankerHoe: s.how,
+      gebouwd: true,
+      basisVan: basis?.id || null,
+    };
+  }
+
+  // Zonder anker — zij heeft nog geen blok van vijf minuten gelopen dat
+  // als meetlat kan dienen — blijft het voorschrift op hartslag. Beter een
+  // sessie op hartslag dan een tempo dat uit niets is afgeleid.
   const reps = Math.min(6, 4 + Math.floor(weekIndex / 2));
   return {
     id: `kwaliteit_${reps}`,
@@ -479,10 +512,20 @@ function kwaliteitsVorm({ basis, weekIndex }) {
   };
 }
 
-function vormVoor({ niveau, rol, fase, weekIndex = 0 }) {
+function vormVoor({ niveau, rol, fase, weekIndex = 0, anker = null }) {
+  // Een dag die "sleutel" heet en een gewone easy-loop oplevert, is geen
+  // sleutelsessie maar een stille terugval — precies waar de toelichting
+  // bij kwaliteitsVorm over gaat. Dat gebeurde in de ritmefase: daar viel
+  // de sleuteldag terug op EASY_ECONOMY, en stond er twaalf minuten
+  // doorlopend op een dag die als enige kwaliteit moest dragen.
+  //
+  // De ankersessie is bovendien geen zware prikkel maar een meting: vier
+  // blokken van drie minuten op een tempo dat zij al liep, met wandelen
+  // ertussen. Die hoort ook in de ritmefase thuis, want zonder herhaling
+  // is er geen trend te meten — en herhaling is het hele punt.
   const doel = rol === 'lang' ? PURPOSE_ID.DURABILITY
     : rol === 'sleutel'
-      ? (fase === FASE.OPBOUW.id ? PURPOSE_ID.RACE_SPECIFIC : PURPOSE_ID.EASY_ECONOMY)
+      ? (fase === FASE.TAPER.id ? PURPOSE_ID.EASY_ECONOMY : PURPOSE_ID.RACE_SPECIFIC)
       : PURPOSE_ID.EASY_ECONOMY;
 
   const opNiveau = sessionsAtLevel(niveau, { purpose: doel });
@@ -497,7 +540,7 @@ function vormVoor({ niveau, rol, fase, weekIndex = 0 }) {
   // een easy-sessie geen geldige terugval: dan verdwijnt de enige harde
   // sessie van de week zonder dat iemand het ziet. Bouw hem.
   if (doel === PURPOSE_ID.RACE_SPECIFIC) {
-    return kwaliteitsVorm({ basis: terugval, weekIndex });
+    return kwaliteitsVorm({ basis: terugval, weekIndex, anker });
   }
   return terugval;
 }
@@ -791,6 +834,11 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
   // geplande donderdag zou alsnog niet doorgaan. Het anker hoort de
   // laatste dag te zijn waarop ze lóópt, en als dat vandaag is, dan
   // vandaag — dan volgt 13, 15, 17 in plaats van 12, 14, 16.
+  // Het ankertempo: het snelste tempo dat zij aantoonbaar een blok lang
+  // heeft vastgehouden. Eén keer berekend voor het hele plan, want een
+  // meetlat die per dag verschuift meet niets.
+  const anker = ankerTempo({ currentDate, workouts });
+
   const plafond = runDayCeiling();
   const laatsteGelopen = workouts
     .filter(w => w?.date && w.date <= currentDate
@@ -915,7 +963,7 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
 
     const niveau = niveauVoorWeek({ basis: basisNiveau, weekIndex, fase });
     const vorm = (kind === DAG.RUN || kind === DAG.RUN_KRACHT)
-      ? vormVoor({ niveau, rol, fase, weekIndex }) : null;
+      ? vormVoor({ niveau, rol, fase, weekIndex, anker }) : null;
 
     // ── De racedag is ook een loopdag ─────────────────────────
     //
@@ -1143,6 +1191,9 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
     weight: gewicht,
     fuel: brandstof,
     expectation: verwachting,
+    // Het vaste tempo waarop haar hartslag gevolgd wordt, en of die zakt.
+    anker,
+    ankerTrend: ankerTrend({ currentDate, workouts, anker }),
     // Waarom de volgende loop staat waar hij staat, en wat er verandert
     // als het weekplafond omhooggaat. Zij vroeg waarom er pas zondag weer
     // een run stond in plaats van vrijdag; dat antwoord hoort op het
@@ -1356,7 +1407,12 @@ function knoppen({ drift, proven, luteaal, dagen, currentDate, workouts, gewicht
   // zo nee, wat houdt het tegen. Dat oordeel komt uit frequencyVerdict —
   // twee weken schone tolerantie, geen PEM, genoeg verdragen sessies.
   {
-    const plafond = runDayCeiling();
+    // Het ankertempo: het snelste tempo dat zij aantoonbaar een blok lang
+  // heeft vastgehouden. Eén keer berekend voor het hele plan, want een
+  // meetlat die per dag verschuift meet niets.
+  const anker = ankerTempo({ currentDate, workouts });
+
+  const plafond = runDayCeiling();
     const freq = poort?.frequency
       || frequencyVerdict(trainingLoad(logs, currentDate), logs, currentDate);
     const mag = plafond < 4 && freq.canRaise;

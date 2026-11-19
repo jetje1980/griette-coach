@@ -157,8 +157,13 @@ S('3 · Het schema biedt de verdeling aan waarop zij wordt afgerekend');
   // trainingsdag en hoort niet in deze verdeling: anders telt driekwartier
   // racen mee als "rustig" en ziet 80/20 er beter uit dan het is.
   const loopdagen = pl.days.filter(d => d.run && !d.run.isRace);
-  const kwaliteit = loopdagen.filter(d => /werkhartslag/.test(d.run.description));
-  const rustigMin = loopdagen.filter(d => !/werkhartslag/.test(d.run.description))
+  // De kwaliteitssessie herkennen aan haar rol, niet aan een woord in de
+  // omschrijving. Die omschrijving veranderde van "op werkhartslag" naar
+  // "op 8:35/km" toen de sleutelsessie op tempo ging, en deze test zag
+  // toen ineens nul kwaliteitssessies — terwijl er niets aan het schema
+  // mankeerde. Een test die op tekst matcht, breekt bij elke herformulering.
+  const kwaliteit = loopdagen.filter(d => d.role === 'sleutel');
+  const rustigMin = loopdagen.filter(d => d.role !== 'sleutel')
     .reduce((a, d) => a + (d.run.minutes || 0), 0);
   const hardMin = kwaliteit.reduce((a, d) => a + (d.run.minutes || 0), 0);
   const deel = Math.round(rustigMin / (rustigMin + hardMin) * 100);
@@ -169,21 +174,19 @@ S('3 · Het schema biedt de verdeling aan waarop zij wordt afgerekend');
     String(kwaliteit.length));
   ok('het geplande aandeel rustig ligt rond de richtlijn van 80%',
     deel >= 78 && deel <= 95, `${deel}%`);
-  ok('de kwaliteitssessie krijgt ook een ander hartslagvoorschrift',
-    kwaliteit.every(d => /werkblokken/.test(d.run.hr || '')),
+  ok('de kwaliteitssessie krijgt een ander voorschrift dan een rustige dag',
+    kwaliteit.every(d => d.run.hr !== loopdagen.find(x => x.role !== 'sleutel')?.run.hr),
     JSON.stringify(kwaliteit.map(d => d.run.hr).slice(0, 1)));
   // De rustige dagen sturen op het alarm en niet op het plafond. Dat het
   // alarm boven VT1 ligt is geen versoepeling maar een erkenning: een doel
   // dat nooit gehaald wordt, is geen doel.
+  const rustig = loopdagen.filter(d => d.role !== 'sleutel');
   ok('de rustige dagen sturen op een alarm onder het plafond',
-    loopdagen.filter(d => !/werkhartslag/.test(d.run.description))
-      .every(d => /Zet je alarm op \d{3}/.test(d.run.hr || '')),
-    JSON.stringify(loopdagen[0]?.run.hr));
+    rustig.every(d => /Zet je alarm op \d{3}/.test(d.run.hr || '')),
+    JSON.stringify(rustig[0]?.run.hr));
   ok('en dat alarm is het getal waarop het doeltempo staat',
-    loopdagen.filter(d => !/werkhartslag/.test(d.run.description))
-      .every(d => d.run.targetHr > 0
-        && d.run.hr.includes(String(d.run.targetHr))),
-    JSON.stringify(loopdagen.map(d => [d.run.targetHr, d.run.hr]).slice(0, 2)));
+    rustig.every(d => d.run.targetHr > 0 && d.run.hr.includes(String(d.run.targetHr))),
+    JSON.stringify(rustig.map(d => [d.run.targetHr, d.run.hr]).slice(0, 2)));
 
   // De racedag staat er wél in als loopdag, met een eigen hartslag. Zou
   // die uit het easy-voorschrift komen, dan stond er 132 voor een
