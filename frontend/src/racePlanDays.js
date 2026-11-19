@@ -60,7 +60,7 @@
 import { todayLocal, addDays, daysBetween, dayOfWeek, NL_DAYS, NL_DAYS_SHORT }
   from './datetime';
 import { loadWorkouts } from './workouts';
-import { provenStructure } from './raceplan';
+import { provenStructure, stridesFor } from './raceplan';
 import { sessionsAtLevel, sessionsUpTo, levelForBlock, PURPOSE_ID }
   from './data/sessionLibrary';
 import { cycleDayOf } from './bodyReview';
@@ -1080,8 +1080,22 @@ export function racePlan({ currentDate = todayLocal(), logs = {}, raceDate = nul
         purpose: raceVorm ? raceVorm.purpose
           : (vanPlanner || isVrijdag) ? vandaagSessie.purpose : vorm?.purpose,
         isRace: !!raceVorm,
-        strides: (vanPlanner || isVrijdag) ? !!vandaagSessie.run.strides
-          : (rol === 'easy' || rol === 'kort'),
+        // ── Versnellingen: het hele voorschrift, niet een vinkje ──
+        //
+        // Hier stond een boolean, en het scherm maakte daar zelf "6 × 12
+        // sec versnelling erachter" van. Twee problemen. Het aantal stond
+        // hardgecodeerd, dus in de taper — waar het er vier zijn — klopte
+        // het niet. En het belangrijkste ontbrak: hoeveel rust er tussen
+        // die versnellingen zit. Zij vroeg precies dat, en het antwoord
+        // stond wel in stridesFor maar nergens op dit scherm.
+        //
+        // Nu komt het hele voorwerp mee uit stridesFor: dezelfde bron als
+        // de dagkaart, met aantal, duur, herstel en de uitleg erbij.
+        strides: (vanPlanner || isVrijdag)
+          ? (vandaagSessie.run.strides || null)
+          : ((rol === 'easy' || rol === 'kort')
+            ? stridesFor({ purpose: loopDoel, mayBuild: !opSlot })
+            : null),
         timeOnFeet: tijdOpBenen,
         timeOnFeetWhy: tijdOpBenen
           ? `Vul aan met wandelen tot ${tijdOpBenen} minuten op de benen. De race duurt `

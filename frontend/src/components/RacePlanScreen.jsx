@@ -180,9 +180,15 @@ function DagKaart({ dag, log, onSave, openDefault, buren, onRuil }) {
           {dag.run && (
             <div style={{ fontSize: 11.5, lineHeight: 1.55, marginBottom: 6 }}>
               <strong>Loop:</strong> {dag.run.description} ({dag.run.minutes} min, niveau {dag.run.level})
-              {dag.run.strides ? ' + 6 × 12 sec versnelling erachter' : ''}
+              {dag.run.strides ? ` + ${dag.run.strides.label} erachter` : ''}
               {/* Hoe hard en op welke hartslag — hetzelfde voorschrift als
                   op de dagkaart, niet een tweede berekening. */}
+              {dag.run.strides?.how && (
+                <div data-versnelling-hoe style={{ marginTop: 3, fontSize: 10.5,
+                  color: 'var(--sub)', lineHeight: 1.45 }}>
+                  {dag.run.strides.how}
+                </div>
+              )}
               {(dag.run.pace || dag.run.hr) && (
                 <div style={{ marginTop: 3 }} data-tempo={dag.run.paceMin || ''}>
                   {dag.run.pace && (

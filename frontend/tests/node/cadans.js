@@ -265,7 +265,60 @@ S('7 · Drie per week mag, twee niet — hoogstens één overslaan');
     r.wat);
 }
 
-S('8 · De uitlegfunctie staat op zichzelf');
+S('8 · Versnellingen: hoeveel, hoe lang, en hoeveel rust ertussen');
+{
+  // Zij vroeg: "wat bedoel je met 6x 12 sec? Hoeveel tijd moet er aan
+  // herstel zitten na die 12 sec versnellen?"
+  //
+  // Het antwoord stond in stridesFor — twee minuten wandelen — maar het
+  // plandagscherm maakte van een boolean zelf de tekst "6 × 12 sec
+  // versnelling erachter". Daardoor ontbrak het herstel, en stond er in
+  // de taper zes terwijl het er daar vier zijn.
+  const { STRIDES } = await import('../../src/raceplan.js');
+  const { plan } = planMet(4, false);
+  const metVersnelling = plan.days.filter(d => d.run?.strides);
+  console.log(`      ${metVersnelling.length} dagen met versnellingen`);
+  ok('er staan versnellingen in het plan', metVersnelling.length > 0, '');
+
+  // Geen vinkje maar het hele voorschrift, uit dezelfde bron als de
+  // dagkaart. Een scherm dat zelf tekst verzint, verzint vroeg of laat
+  // het verkeerde getal.
+  const s = metVersnelling[0].run.strides;
+  ok('elke dag draagt het hele voorschrift',
+    metVersnelling.every(d => d.run.strides.reps > 0
+      && d.run.strides.seconds > 0 && d.run.strides.recoveryMin > 0),
+    JSON.stringify(s));
+  ok('met het herstel als getal', s.recoveryMin === STRIDES.RECOVERY_MIN,
+    String(s.recoveryMin));
+  ok('en een uitleg die het herstel ook uitschrijft',
+    /twee minuten wandelen/.test(s.how), s.how);
+  ok('die zegt dat je wacht tot je rustig ademt',
+    /rustig ademt/.test(s.how), s.how);
+  ok('en dat het om vorm gaat, niet om sprinten',
+    /niet sprinten/.test(s.how), s.how);
+
+  // Het aantal volgt de fase. Dit was de fout: hardgecodeerde zes.
+  const taper = metVersnelling.filter(d => d.phase === 'TAPER');
+  const ervoor = metVersnelling.filter(d => d.phase !== 'TAPER');
+  if (taper.length) {
+    console.log(`      taper: ${taper[0].run.strides.reps}× · ervoor: ${ervoor[0]?.run.strides.reps}×`);
+    ok('in de taper zijn het er minder',
+      taper.every(d => d.run.strides.reps === STRIDES.TAPER_REPS),
+      JSON.stringify(taper.map(d => d.run.strides.reps)));
+    ok('en daarbuiten het volle aantal',
+      ervoor.every(d => d.run.strides.reps === STRIDES.REPS),
+      JSON.stringify(ervoor.map(d => d.run.strides.reps)));
+  }
+
+  // Niet op een sleutel- of lange dag: dan draagt één dag twee zware
+  // prikkels, en dat is bij een PEM-historie precies wat je niet wilt.
+  ok('niet op een sleutelsessie of lange loop',
+    metVersnelling.every(d => d.role !== 'sleutel' && d.role !== 'lang'),
+    JSON.stringify(metVersnelling.map(d => d.role)));
+  ok('en niet op de racedag', metVersnelling.every(d => !d.run.isRace), '');
+}
+
+S('9 · De uitlegfunctie staat op zichzelf');
 {
   // Zonder dagen, zonder oordeel: geen fout, geen verzonnen getallen.
   const leeg = cadansUitleg({ plafond: 3, verdict: null, dagen: [] });
