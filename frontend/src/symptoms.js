@@ -116,10 +116,38 @@ export const INFECTION_TYPES = [
 // Werkt met de nieuwe velden, en valt terug op de oude booleans zodat
 // bestaande data niet plotseling niets meer betekent.
 export function readSymptoms(log = {}) {
+  // ── Een vinkje is geen ernstscore ────────────────────────────
+  //
+  // Hier stond: `log.symptom_headache ? 2 : null`. Een aangevinkt vakje
+  // "hoofdpijn" werd dus ernst 2 — "duidelijk" — en dat is precies de
+  // drempel waarboven hoofdpijn in haar eentje genoeg is voor het oordeel
+  // "slecht verdragen". Een kruisje betekent "ik had hoofdpijn", niet "hij
+  // was duidelijk". Dat getal kwam uit de code, niet uit haar.
+  //
+  // Dat is wat er op 17 november gebeurde: één vinkje, en de run van die
+  // dag werd slecht verdragen genoemd terwijl zij de volgende ochtend
+  // ernst 0 invulde en "goed hersteld" aanklikte.
   const headache = log.headache_severity != null ? Number(log.headache_severity)
-    : log.symptom_headache ? 2 : null;
+    : log.symptom_headache ? 1 : null;
+
+  // ── Wat zij zelf als oorzaak aanwees ─────────────────────────
+  //
+  // Op het lichaamsscherm kiest ze waar een klacht vandaan komt, en
+  // daar staat bij: "Jouw lezing weegt zwaar mee — niet elke moeie dag
+  // is post-exertioneel." Die lezing werd hier niet gelezen. `migraine`
+  // kwam alleen uit een apart veld, dus een hoofdpijn die zij zelf aan
+  // migraine toeschreef telde gewoon mee als reactie op haar training.
+  //
+  // Dit is dezelfde fout als eerder met kracht: één bron lezen waar er
+  // meer zijn, en dan haar vertellen dat iets zo is terwijl zij het
+  // tegendeel heeft ingevuld.
+  const oorzaken = Array.isArray(log.feeling_causes) ? log.feeling_causes : [];
 
   return {
+    // Haar eigen duiding, zodat elke laag erbij kan in plaats van hem
+    // opnieuw uit de losse velden te moeten raden.
+    causes: oorzaken,
+    zelfPem: oorzaken.includes('pem') || !!log.symptom_pem,
     headache: {
       severity: headache,
       timing: log.headache_timing || null,
@@ -129,9 +157,11 @@ export function readSymptoms(log = {}) {
     // Een infectie: zelf gemeld, met een soort en of hij nog loopt.
     infection: {
       type: log.infection_type
-        || (log.infection === true || log.symptom_sick === true ? 'other' : 'none'),
+        || (log.infection === true || log.symptom_sick === true
+          || oorzaken.includes('ziek') ? 'other' : 'none'),
       present: !!(log.infection_type && log.infection_type !== 'none')
-        || log.infection === true || log.symptom_sick === true,
+        || log.infection === true || log.symptom_sick === true
+        || oorzaken.includes('ziek'),
       day: log.infection_day != null ? Number(log.infection_day) : null,
     },
     migraine: {
@@ -142,8 +172,11 @@ export function readSymptoms(log = {}) {
       // zónder migraine_type — en dan zag deze functie geen migraine, zodat
       // de hoofdpijn van die dag alsnog als post-exertioneel signaal kon
       // tellen. Precies wat niet de bedoeling is.
+      // En de oorzaak die zij op het lichaamsscherm aanwees. Dat veld
+      // werd nergens in dit oordeel gelezen; zie de toelichting boven.
       present: !!(log.migraine_type && log.migraine_type !== 'none')
-        || !!log.symptom_migraine || log.migraine === true,
+        || !!log.symptom_migraine || log.migraine === true
+        || oorzaken.includes('migraine'),
     },
     muscle: {
       type: log.muscle_type || (log.symptom_pain ? 'doms' : 'none'),
@@ -169,9 +202,20 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
   const window = [0, 1, 2].map(i => ({ offset: i, date: addDays(workoutDate, i),
     log: logs?.[addDays(workoutDate, i)] || null }));
 
+  // Wat telt als "ze heeft iets ingevuld". De oorzakenkiezer stond hier
+  // niet bij, dus een dag waarop zij alleen aanwees waar iets vandaan
+  // kwam, gold als niets ingevuld — terwijl dat juist de invoer is waar
+  // het scherm om vraagt en waar het oordeel het meest aan heeft.
   const answered = window.filter(w => w.log && (
     w.log.headache_severity != null || w.log.recovery_check ||
     w.log.training_recovery != null || w.log.muscle_type ||
+    w.log.symptom_headache ||
+    // Wel de oorzakenkiezer: dat is een antwoord op "hoe voelt het en
+    // waar komt het vandaan". Niet `energy`: dat is een algemeen
+    // dagveld dat ook wordt ingevuld zonder dat er naar de respons op
+    // een training is gekeken, en dan zou een sessie "verdragen" heten
+    // op grond van iets dat daar niets over zegt.
+    (Array.isArray(w.log.feeling_causes) && w.log.feeling_causes.length) ||
     POST_EXERTIONAL_SIGNS.some(s => w.log[`pe_${s.id}`])));
 
   const daysSince = daysBetween(workoutDate, currentDate);
@@ -303,6 +347,21 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
   // sessies als "verdragen" boeken waar het in 2024 misging.
   const headacheDecisive = worstHeadache >= 2;
 
+  // ── Haar eigen oordeel telt twee kanten op ───────────────────
+  //
+  // De migraineregel zegt: als zij een klacht aan migraine toeschrijft,
+  // telt hij niet als reactie op de training. Dat is haar lezing, en die
+  // weegt zwaar — zo staat het ook op het lichaamsscherm.
+  //
+  // Dan hoort het omgekeerde er ook te zijn. Vinkt zij "na-ijling van
+  // inspanning (PEM)" aan, dan is dat de sterkste uitspraak die ze kan
+  // doen over een sessie, en die verdween hier in een generiek signaal
+  // met gewicht 3 — onder de drempel van 6, dus in haar eentje niet
+  // genoeg. Een regel die haar duiding alleen aanneemt wanneer die
+  // gunstig uitvalt, is geen regel maar een voorkeur.
+  const zelfPemGemeld = window.some(w => w.log && !infectieDagen.has(w.offset)
+    && readSymptoms(w.log).zelfPem);
+
   const parts = [];
   if (worstHeadache > 0) {
     parts.push(`hoofdpijn ${HEADACHE_SEVERITY[worstHeadache].label.toLowerCase()}` +
@@ -334,15 +393,56 @@ export function exertionalResponse({ workoutDate, logs = {}, currentDate = today
       + 'triggers en zegt niets over je belastbaarheid.'
     : null;
 
-  if (total >= 6 || headacheDecisive) {
+  // ── Waar komt dit oordeel vandaan, en waar pas je het aan ────
+  //
+  // Zij vroeg: "waarom staat er dat mn loop slecht werd verdragen? Dat is
+  // helemaal niet zo, waar kan ik dat aanpassen?" Daar was geen antwoord
+  // op te vinden. Het oordeel noemde wél de klacht ("hoofdpijn duidelijk")
+  // maar niet op wélke dag die was aangevinkt, en al helemaal niet dat het
+  // uit haar eigen invoer kwam en dus daar te corrigeren is.
+  //
+  // Een oordeel dat je niet kunt natrekken, kun je ook niet weerleggen.
+  const herkomst = [];
+  for (const w of window) {
+    if (!w.log) continue;
+    const sym = readSymptoms(w.log);
+    if (!infectieDagen.has(w.offset) && !migraineDagen.has(w.offset)
+      && sym.headache.severity > 0) {
+      herkomst.push({ date: w.date, veld: 'hoofdpijn',
+        wat: `hoofdpijn ${HEADACHE_SEVERITY[sym.headache.severity].label.toLowerCase()}`
+          + (w.log.headache_severity == null ? ' (alleen aangevinkt, geen ernst ingevuld)' : '') });
+    }
+    if (sym.muscle.type === 'diffuse') {
+      herkomst.push({ date: w.date, veld: 'spierpijn', wat: 'diffuse spierpijn' });
+    }
+    for (const sign of sym.signs) {
+      if (infectieDagen.has(w.offset) && ZIEKTE_SIGNALEN.has(sign.id)) continue;
+      herkomst.push({ date: w.date, veld: sign.id, wat: sign.label.toLowerCase() });
+    }
+  }
+  const waarAanTePassen = herkomst.length
+    ? 'Dit komt uit wat je zelf hebt ingevuld op '
+      + [...new Set(herkomst.map(h => h.date.slice(8) + '-' + h.date.slice(5, 7)))].join(' en ')
+      + '. Klopt het niet, pas het daar aan bij Lichaam → hoe voelt het: zet de ernst '
+      + 'op nul, of kies de oorzaak (migraine, cyclus, ziek) — dan telt het niet meer '
+      + 'als reactie op je training.'
+    : null;
+
+  if (total >= 6 || headacheDecisive || zelfPemGemeld) {
     return {
       status: 'poor', level: 'AMBER',
+      herkomst, waarAanTePassen,
       headache: worstHeadache, headacheTiming: headacheWhen, diffuse, otherSigns,
       migraine: migraine || null, migraineCountsAsPem: !!migraineExertional,
       migraineNote: migraineNoot,
       infection: infectieSoort || null, infectionNote: infectieNoot,
-      reason: `Duidelijke post-exertionele respons: ${parts.join(', ')}.`
-        + (migraineNoot ? ` ${migraineNoot}` : ''),
+      reason: (zelfPemGemeld && !headacheDecisive && total < 6
+        ? 'Je hebt deze zelf als na-ijling van inspanning aangemerkt'
+          + (parts.length ? `: ${parts.join(', ')}.` : '.')
+          + ' Jouw lezing is hier doorslaggevend.'
+        : `Duidelijke post-exertionele respons: ${parts.join(', ')}.`)
+        + (migraineNoot ? ` ${migraineNoot}` : '')
+        + (waarAanTePassen ? ` ${waarAanTePassen}` : ''),
       countsAsVolume: false, allowsBuild: false,
       advice: worstHeadache >= 2
         ? 'Post-exertionele hoofdpijn is bij jou de belangrijkste waarschuwing. Geen opbouw; herhaal het niveau of schaal terug.'
