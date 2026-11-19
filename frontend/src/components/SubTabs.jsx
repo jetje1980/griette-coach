@@ -14,6 +14,12 @@ export default function SubTabs({ tabs, active, onChange }) {
       {tabs.map((label, i) => (
         <button
           key={i}
+          // Zonder dit is een subtab in een test alleen op zijn tekst te
+          // vinden, en die tekst staat vaak ook ergens anders op het
+          // scherm. Dan klikt een test net naast de knop en lijkt een
+          // scherm leeg terwijl het er gewoon is.
+          data-subtab={String(label).toLowerCase()}
+          data-subtab-actief={active === i ? '1' : '0'}
           onClick={() => onChange(i)}
           style={{
             flex: 'none',
