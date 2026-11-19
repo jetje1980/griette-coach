@@ -604,7 +604,52 @@ S('14 · De knopvolgorde begint bij het doel, niet bij het middel');
     /\d:\d\d\/km/.test(bC.items[0].aanpassing), bC.items[0].aanpassing);
 }
 
-S('15 · Een leeg dossier verzint niets');
+S('15 · Een training zonder ronden is niet "niet te meten"');
+{
+  // Strava levert een activiteit soms zonder ronden. Dan is er geen blok
+  // van vijf minuten te lezen, en stond er alleen "niet te meten" met
+  // lege vakjes — terwijl zij in Strava gewoon ziet dat ze 3,78 km liep
+  // op hartslag 163. Een app die van een bestaande training niets weet te
+  // zeggen, lijkt stuk.
+  const W = [-26, -22, -18, -14, -10].map(n => run(addDays(TODAY, n), 0.74, 142));
+  const zonderRonden = { id: 'z', date: addDays(TODAY, -2), activityType: 'run',
+    source: 'strava', duration: 30, distance: 3.78, averageHR: 163, maxHR: 201, laps: [] };
+  const logs = wereld([...W, zonderRonden]);
+  const r = sessieRij(zonderRonden, { logs, workouts: [...W, zonderRonden] });
+  console.log(`      ${r.oordeel}: ${String(r.uitleg).slice(0, 80)}…`);
+
+  ok('de training staat er met cijfers', r.known === true, JSON.stringify(r.known));
+  ok('met de hartslag die erin stond', r.echteHr === 163, String(r.echteHr));
+  ok('en het tempo over de hele sessie',
+    Math.abs(r.echtTempo - 30 / 3.78) < 0.01, String(r.echtTempo));
+  ok('en de maximale hartslag blijft bewaard', r.maxHr === 201, String(r.maxHr));
+  ok('het oordeel over de hartslag klopt gewoon',
+    r.teHard === true && r.oordeel === OORDEEL.TE_HARD, r.oordeel);
+
+  // Maar het is geen vergelijkbare meting, en dat hoort erbij te staan.
+  ok('hij staat gemerkt als heel-sessiegemiddelde', r.heleSessie === true, '');
+  ok('zonder gemeten efficientie', r.ef == null, String(r.ef));
+  ok('en de uitleg zegt waarom hij niet meetelt',
+    /zonder ronden/.test(r.uitleg) && /loopeconomie/.test(r.uitleg), r.uitleg);
+
+  // Hij mag het patroon niet verstoren: een gemiddelde met stops erin is
+  // niet te vergelijken met een gemeten blok.
+  const t = sessieTabel({ currentDate: TODAY, logs });
+  ok('hij telt niet mee in het patroon', t.bruikbaar === W.length,
+    `${t.bruikbaar} van ${t.rows.length}`);
+  ok('en niet in de verdeling',
+    Object.values(t.verdeling).reduce((a, b) => a + b, 0) === W.length,
+    JSON.stringify(t.verdeling));
+  ok('maar hij staat wel in de tabel',
+    t.rows.some(x => x.date === zonderRonden.date), '');
+
+  // En zonder totalen blijft het eerlijk onmeetbaar.
+  const leeg = { id: 'l', date: addDays(TODAY, -3), activityType: 'run', laps: [] };
+  ok('een training zonder enig getal blijft onmeetbaar',
+    sessieRij(leeg, { logs, workouts: W }).known === false, '');
+}
+
+S('16 · Een leeg dossier verzint niets');
 {
   wereld([]);
   const t = sessieTabel({ currentDate: TODAY, logs: {} });

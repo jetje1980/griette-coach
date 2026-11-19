@@ -125,10 +125,52 @@ export const TABEL_AANTAL = 10;
 export function sessieRij(workout, { logs = {}, workouts = null } = {}) {
   const gemeten = steadyEfficiency(workout);
   if (!gemeten) {
+    // ── Een gelopen training met lege kolommen is geen antwoord ──
+    //
+    // Strava levert een activiteit soms zonder ronden aan. Dan is er geen
+    // blok van vijf minuten te lezen en stond hier alleen "niet te meten",
+    // met lege vakjes bij hartslag en tempo — terwijl zij in Strava gewoon
+    // ziet dat ze 3,78 km liep op hartslag 163. Een app die van een
+    // bestaande training niets weet te zeggen, lijkt stuk.
+    //
+    // Dus: als de sessie totalen heeft, staan die er. Wél apart gemerkt,
+    // want een gemiddelde over de hele sessie is iets anders dan een
+    // gemeten loopblok — er zitten stops, wandelstukken en de opstart in,
+    // en daarom telt het niet mee in de loopeconomie.
+    const km = Number(workout.distance) || null;
+    const min = Number(workout.duration) || null;
+    const hr = Number(workout.averageHR ?? workout.average_heartrate) || null;
+    if (!km || !min || !hr) {
+      return {
+        date: workout.date, known: false,
+        why: 'Geen loopblok van vijf minuten of langer — geen betrouwbaar tempo bij '
+          + 'hartslag uit te lezen.',
+      };
+    }
+    const kaderL = hrKader();
+    const oordeelL = oordeelOverHr(hr, kaderL);
     return {
-      date: workout.date, known: false,
-      why: 'Geen loopblok van vijf minuten of langer — geen betrouwbaar tempo bij '
-        + 'hartslag uit te lezen.',
+      date: workout.date,
+      known: true,
+      heleSessie: true,
+      kader: kaderL,
+      doelHr: kaderL.alarm,
+      doelTempo: null,
+      echteHr: hr,
+      echtTempo: +(min / km).toFixed(2),
+      hrDelta: Math.round(hr - kaderL.alarm),
+      maxHr: Number(workout.maxHR ?? workout.max_heartrate) || null,
+      zone: zoneOf(hr, { vt1Hr: kaderL.vt1, vt2Hr: kaderL.vt2 })?.id || null,
+      zoneLabel: zoneOf(hr, { vt1Hr: kaderL.vt1, vt2Hr: kaderL.vt2 })?.label || null,
+      bovenVt1: hr > kaderL.vt1,
+      teHard: oordeelL === OORDEEL.TE_HARD,
+      oordeel: oordeelL,
+      blokMin: null, langsteBlokMin: null, blokken: 0, ef: null,
+      uitleg: `Gemiddelde over de hele sessie: ${min / km < 100 ? fmtPace(min / km) : '—'}/km `
+        + `bij hartslag ${hr}. Deze training kwam binnen zonder ronden, dus er is geen `
+        + 'los loopblok uit te lezen. Daarom telt hij niet mee in je loopeconomie: een '
+        + 'gemiddelde met stops en wandelstukken erin is niet te vergelijken met een '
+        + 'gemeten blok.',
     };
   }
 
@@ -246,7 +288,11 @@ export function sessieTabel({ currentDate = todayLocal(), logs = {}, workouts = 
         + 'conclusie over je vorm aan kunt hangen.',
     };
   });
-  const bruikbaar = rows.filter(r => r.known && !r.hrSuspect && !r.uitbijter);
+  // Sessies zonder gemeten blok tellen niet mee in het patroon: hun
+  // hartslag klopt wel, maar hun tempo is een gemiddelde met stops erin
+  // en dus niet te vergelijken met de rest.
+  const bruikbaar = rows.filter(r => r.known && !r.hrSuspect && !r.uitbijter
+    && !r.heleSessie);
   const teHard = bruikbaar.filter(r => r.teHard);
   const patroon = bruikbaar.length >= 3
     && teHard.length >= bruikbaar.length * PATROON_DEEL;
